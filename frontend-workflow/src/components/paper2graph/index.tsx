@@ -61,7 +61,7 @@ const Paper2FigurePage = () => {
   const [llmApiUrl, setLlmApiUrl] = useState(import.meta.env.VITE_DEFAULT_LLM_API_URL || 'https://api.apiyi.com/v1');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('gemini-3-pro-image-preview');
-  // const [model, setModel] = useState('gpt-4o');
+  // const [model, setModel] = useState('gpt-5.1');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -591,7 +591,7 @@ const Paper2FigurePage = () => {
       // Step 0: Verify LLM Connection first
       setIsValidating(true);
       setError(null);
-      await verifyLlmConnection(llmApiUrl, apiKey, import.meta.env.VITE_DEFAULT_LLM_MODEL || "gpt-4o");
+      await verifyLlmConnection(llmApiUrl, apiKey, import.meta.env.VITE_DEFAULT_LLM_MODEL || "deepseek-v3.2");
       setIsValidating(false);
 
       setIsLoading(true);

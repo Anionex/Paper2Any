@@ -426,6 +426,7 @@ class KBPodcastRequest(MainRequest):
     """
     files: List[str] = field(default_factory=list)  # 文件路径列表
     podcast_mode: str = "monologue"  # monologue | dialog
+    podcast_length: str = "standard"  # brief | standard | long
     tts_model: str = "gemini-2.5-pro-preview-tts"
     voice_name: str = "Kore"
     voice_name_b: str = "Puck"

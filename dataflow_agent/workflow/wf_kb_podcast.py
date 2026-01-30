@@ -15,7 +15,9 @@ import re
 import wave
 from dataflow_agent.toolkits.multimodaltool.req_tts import (
     generate_speech_bytes_async,
-    split_tts_text
+    split_tts_text,
+    split_tts_sentences,
+    split_tts_text_by_bytes
 )
 
 log = get_logger(__name__)
@@ -178,10 +180,35 @@ def create_kb_podcast_graph() -> GenericGraphBuilder:
         # Podcast script prompt
         language = state.request.language
         mode = getattr(state.request, "podcast_mode", "monologue")
+        length_pref = str(getattr(state.request, "podcast_length", "standard")).lower()
+        length_alias = {
+            "brief": "brief",
+            "short": "brief",
+            "精炼": "brief",
+            "精简": "brief",
+            "简短": "brief",
+            "standard": "standard",
+            "normal": "standard",
+            "默认": "standard",
+            "long": "long",
+            "详细": "long",
+            "扩展": "long",
+            "加长": "long",
+        }
+        length_pref = length_alias.get(length_pref, "standard")
+        if length_pref == "brief":
+            length_hint_zh = "时长约2-4分钟，内容精炼，删去铺垫与重复。"
+            length_hint_en = "Target 2–4 minutes, concise and no padding."
+        elif length_pref == "long":
+            length_hint_zh = "时长约10-15分钟，内容更完整，可加入适量例子与细节。"
+            length_hint_en = "Target 10–15 minutes, more detail with examples."
+        else:
+            length_hint_zh = "时长约5-10分钟，内容完整但不过度铺垫。"
+            length_hint_en = "Target 5–10 minutes, complete but not verbose."
         if mode == "dialog":
             speaker_a = "主持人" if language == "zh" else "Host"
             speaker_b = "嘉宾" if language == "zh" else "Guest"
-            prompt = f"""你是一位专业的知识播客制作人。基于以下资料，生成一段5-10分钟的双人对话播客脚本。
+            prompt = f"""你是一位专业的知识播客制作人。基于以下资料，生成一段双人对话播客脚本。
 
 要求：
 1. 口语化、生动有趣，避免书面语
@@ -189,16 +216,19 @@ def create_kb_podcast_graph() -> GenericGraphBuilder:
 3. 使用类比和例子帮助理解
 4. 适当加入互动性语言（"你可能会想..."）
 5. 使用{language}语言
-6. 严格使用如下格式逐行输出（每行一个角色）：
+6. {length_hint_zh if language == "zh" else length_hint_en}
+7. 严格使用如下格式逐行输出（每行一个角色）：
 {speaker_a}: ...
 {speaker_b}: ...
 
 资料内容：
 {contents_str}
 
-请生成播客脚本："""
+请生成播客脚本：
+输出要求：（speaker后面不要有任何md格式内容，直接纯文本）
+"""
         else:
-            prompt = f"""你是一位专业的知识播客主播。基于以下资料，生成一段5-10分钟的知识播客脚本。
+            prompt = f"""你是一位专业的知识播客主播。基于以下资料，生成一段知识播客脚本。
 
 要求：
 1. 口语化、生动有趣，避免书面语
@@ -206,11 +236,14 @@ def create_kb_podcast_graph() -> GenericGraphBuilder:
 3. 使用类比和例子帮助理解
 4. 适当加入互动性语言（"你可能会想..."）
 5. 使用{language}语言
+6. {length_hint_zh if language == "zh" else length_hint_en}
 
 资料内容：
 {contents_str}
 
-请生成播客脚本："""
+请生成播客脚本：
+输出要求：（不要有任何md格式内容，直接纯文本返回！）
+"""
 
         try:
             agent = create_agent(
@@ -249,8 +282,30 @@ def create_kb_podcast_graph() -> GenericGraphBuilder:
         try:
             audio_path = str(Path(state.result_path) / "podcast.wav")
             mode = getattr(state.request, "podcast_mode", "monologue")
-            max_chars = 1500
-            concurrency = 4
+            tts_model = getattr(state.request, "tts_model", "")
+            tts_model_l = str(tts_model).lower()
+            is_openai_tts = tts_model_l.startswith("gpt-4o-mini-tts") or tts_model_l.startswith("tts-1")
+            is_gemini_tts = "gemini" in tts_model_l and "tts" in tts_model_l
+
+            max_chars: int | None = None
+            max_bytes: int | None = None
+            if is_openai_tts:
+                max_chars = 3800  # OpenAI TTS input limit is 4096 chars
+            elif is_gemini_tts:
+                max_bytes = 4000  # Gemini TTS: reduced byte limit to avoid truncation
+            else:
+                max_chars = 3000
+
+            if mode == "dialog":
+                if max_chars:
+                    max_chars = min(max_chars, 1200)
+                if max_bytes:
+                    max_bytes = min(max_bytes, 4000)
+                concurrency = 1
+            else:
+                concurrency = 2
+            if is_gemini_tts:
+                concurrency = 1
 
             segments = []
             if mode == "dialog":
@@ -293,15 +348,36 @@ def create_kb_podcast_graph() -> GenericGraphBuilder:
 
                 expanded = []
                 for seg in segments:
-                    for chunk in split_tts_text(seg["text"], max_chars):
-                        expanded.append({
-                            "speaker": seg["speaker"],
-                            "text": chunk
-                        })
+                    sentences = split_tts_sentences(seg["text"])
+                    if not sentences:
+                        continue
+                    if max_bytes:
+                        for chunk in split_tts_text_by_bytes(" ".join(sentences), max_bytes):
+                            expanded.append({
+                                "speaker": seg["speaker"],
+                                "text": chunk
+                            })
+                    else:
+                        for sent in sentences:
+                            if max_chars and len(sent) <= max_chars:
+                                expanded.append({
+                                    "speaker": seg["speaker"],
+                                    "text": sent
+                                })
+                            else:
+                                for chunk in split_tts_text(sent, max_chars or 1500):
+                                    expanded.append({
+                                        "speaker": seg["speaker"],
+                                        "text": chunk
+                                    })
                 segments = expanded
             else:
-                for chunk in split_tts_text(state.podcast_script, max_chars):
-                    segments.append({"speaker": "A", "text": chunk})
+                if max_bytes:
+                    for chunk in split_tts_text_by_bytes(state.podcast_script, max_bytes):
+                        segments.append({"speaker": "A", "text": chunk})
+                else:
+                    for chunk in split_tts_text(state.podcast_script, max_chars or 1500):
+                        segments.append({"speaker": "A", "text": chunk})
 
             if not segments:
                 raise RuntimeError("No valid TTS segments generated from script")
@@ -343,8 +419,13 @@ def create_kb_podcast_graph() -> GenericGraphBuilder:
                         continue
                 raise last_err
 
-            tasks = [asyncio.create_task(_run_with_retry(seg, attempts=2, use_sem=True)) for seg in segments]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            if concurrency <= 1:
+                results = []
+                for seg in segments:
+                    results.append(await _run_with_retry(seg, attempts=2, use_sem=False))
+            else:
+                tasks = [asyncio.create_task(_run_with_retry(seg, attempts=2, use_sem=True)) for seg in segments]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
             failed_indices = [i for i, r in enumerate(results) if isinstance(r, Exception)]
             if failed_indices:

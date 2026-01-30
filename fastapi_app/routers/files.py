@@ -5,17 +5,20 @@ Handles file uploads and history retrieval with JWT authentication.
 """
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterator
 from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Request, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
+import mimetypes
 
 from fastapi_app.dependencies import get_current_user, get_optional_user, AuthUser
 from dataflow_agent.utils import get_project_root
+from fastapi_app.utils import _from_outputs_url
 
 
 router = APIRouter(prefix="/files", tags=["files"])
 PROJECT_ROOT = get_project_root()
+OUTPUTS_ROOT = (PROJECT_ROOT / "outputs").resolve()
 
 
 def _to_outputs_url(abs_path: str, request: Request) -> str:
@@ -25,6 +28,78 @@ def _to_outputs_url(abs_path: str, request: Request) -> str:
         return f"{request.url.scheme}://{request.url.netloc}/{rel.as_posix()}"
     except ValueError:
         return abs_path
+
+
+def _iter_file_range(path: Path, start: int, end: int, chunk_size: int = 1024 * 1024) -> Iterator[bytes]:
+    with open(path, "rb") as f:
+        f.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            data = f.read(min(chunk_size, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
+@router.get("/stream")
+async def stream_file(url: str, request: Request):
+    """
+    Stream a file with HTTP Range support (for large audio/video playback).
+    """
+    abs_path = Path(_from_outputs_url(url)).resolve()
+    try:
+        abs_path.relative_to(OUTPUTS_ROOT)
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid file path")
+
+    if not abs_path.exists() or not abs_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_size = abs_path.stat().st_size
+    range_header = request.headers.get("range")
+    media_type, _ = mimetypes.guess_type(str(abs_path))
+    if not media_type:
+        media_type = "application/octet-stream"
+
+    if range_header:
+        # Format: "bytes=start-end"
+        try:
+            range_value = range_header.strip().lower()
+            if not range_value.startswith("bytes="):
+                raise ValueError("Invalid range header")
+            range_value = range_value.replace("bytes=", "")
+            start_str, end_str = range_value.split("-", 1)
+            start = int(start_str) if start_str else 0
+            end = int(end_str) if end_str else file_size - 1
+        except Exception:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{file_size}"})
+
+        if start >= file_size:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{file_size}"})
+
+        end = min(end, file_size - 1)
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(end - start + 1),
+        }
+        return StreamingResponse(
+            _iter_file_range(abs_path, start, end),
+            status_code=206,
+            headers=headers,
+            media_type=media_type,
+        )
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+    }
+    return StreamingResponse(
+        _iter_file_range(abs_path, 0, file_size - 1),
+        headers=headers,
+        media_type=media_type,
+    )
 
 
 @router.post("/upload")

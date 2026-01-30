@@ -447,7 +447,7 @@ const KnowledgeBase = () => {
                         controls
                         autoPlay
                         preload="metadata"
-                        src={previewFile.url}
+                        src={`/api/v1/files/stream?url=${encodeURIComponent(previewFile.url)}`}
                       />
                     </div>
                   </div>

@@ -30,6 +30,7 @@ EXCLUDED_PATHS = {
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/api/v1/files/stream",
 }
 
 # Path prefixes that don't require API key

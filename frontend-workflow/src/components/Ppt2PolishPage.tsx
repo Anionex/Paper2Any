@@ -1374,14 +1374,24 @@ const Ppt2PolishPage = () => {
           
           <div>
             <label className="block text-sm text-gray-300 mb-2">{t('upload.config.model')}</label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
-            >
-              <option value="gpt-4o">gpt-4o</option>
-              <option value="gpt-5.1">gpt-5.1</option>
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="gpt-5.1">gpt-5.1</option>
+                <option value="gpt-5.2">gpt-5.2</option>
+                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+              </select>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="自定义模型"
+                className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
           </div>
           
           <div>

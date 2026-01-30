@@ -8,6 +8,8 @@ interface OutputViewProps {
 }
 
 export const OutputView = ({ files, onGoToTool, onPreview }: OutputViewProps) => {
+  const getStreamUrl = (url: string) => `/api/v1/files/stream?url=${encodeURIComponent(url)}`;
+
   const getFileIcon = (type: string) => {
     switch (type) {
       case 'audio':
@@ -70,7 +72,7 @@ export const OutputView = ({ files, onGoToTool, onPreview }: OutputViewProps) =>
                   className="w-full"
                   controls
                   preload="metadata"
-                  src={file.url}
+                  src={getStreamUrl(file.url)}
                 />
               </div>
             )}

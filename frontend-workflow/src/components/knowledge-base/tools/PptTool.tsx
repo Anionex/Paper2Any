@@ -219,19 +219,27 @@ export const PptTool = ({ files, selectedIds, onGenerateSuccess }: PptToolProps)
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-             <div className="space-y-2">
+          <div className="space-y-4">
+            <div className="space-y-2">
               <label className="text-sm font-medium text-gray-300">Model</label>
-              <select 
-                value={pptParams.model} 
-                onChange={e => setPptParams({...pptParams, model: e.target.value})}
-                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-purple-500"
-              >
-                <option value="gpt-4o">gpt-4o</option>
-                <option value="gpt-5.1">gpt-5.1</option>
-                <option value="gpt-5.2">gpt-5.2</option>
-                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <select 
+                  value={pptParams.model} 
+                  onChange={e => setPptParams({...pptParams, model: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-purple-500"
+                >
+                  <option value="gpt-5.1">gpt-5.1</option>
+                  <option value="gpt-5.2">gpt-5.2</option>
+                  <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                </select>
+                <input
+                  type="text"
+                  value={pptParams.model} 
+                  onChange={e => setPptParams({...pptParams, model: e.target.value})}
+                  placeholder="自定义模型"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-purple-500"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-300">Image Model</label>

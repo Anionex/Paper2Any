@@ -415,7 +415,7 @@ async def generate_ppt_from_kb(
 
         # Run PPT generation with injected pagecontent
         state_pc.pagecontent = pagecontent
-        state_pp = await run_workflow("paper2ppt_parallel", state_pc)
+        state_pp = await run_workflow("paper2ppt_parallel_consistent_style", state_pc)
 
         # Extract output paths
         pdf_path = ""
@@ -450,6 +450,7 @@ async def generate_podcast_from_kb(
     voice_name: str = Body("Kore", embed=True),
     voice_name_b: str = Body("Puck", embed=True),
     podcast_mode: str = Body("monologue", embed=True),
+    podcast_length: str = Body("standard", embed=True),
     language: str = Body("zh", embed=True),
 ):
     """
@@ -502,6 +503,7 @@ async def generate_podcast_from_kb(
             voice_name=voice_name,
             voice_name_b=voice_name_b,
             podcast_mode=podcast_mode,
+            podcast_length=podcast_length,
             language=language
         )
         podcast_req.email = email

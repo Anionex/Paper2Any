@@ -5,6 +5,72 @@ import { KnowledgeFile } from '../types';
 import { getApiSettings } from '../../../services/apiSettingsService';
 import { useAuthStore } from '../../../stores/authStore';
 
+const GEMINI_TTS_VOICES = [
+  'Kore',
+  'Aoede',
+  'Charon',
+  'Fenrir',
+  'Puck',
+  'Orbit',
+  'Orus',
+  'Trochilidae',
+  'Zephyr'
+];
+
+const OPENAI_TTS_VOICES = [
+  'alloy',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'shimmer',
+  'coral',
+  'verse',
+  'ballad',
+  'ash',
+  'sage',
+  'marin',
+  'cedar',
+  'amuch',
+  'aster',
+  'brook',
+  'clover',
+  'dan',
+  'elan',
+  'marilyn',
+  'meadow',
+  'jazz',
+  'rio',
+  'breeze',
+  'cove',
+  'ember',
+  'fathom',
+  'glimmer',
+  'harp',
+  'juniper',
+  'maple',
+  'orbit',
+  'vale',
+  'megan-wetherall',
+  'jade-hardy',
+  'megan-wetherall-2025-03-07',
+  'jade-hardy-2025-03-07'
+];
+
+const isOpenAITtsModel = (model: string) => {
+  const lowered = model.toLowerCase();
+  return lowered.includes('gpt-4o-mini-tts') || lowered.startsWith('tts-1');
+};
+
+const normalizeVoice = (voice: string, options: string[]) => {
+  if (!voice) return options[0];
+  const exact = options.find(v => v === voice);
+  if (exact) return exact;
+  const lower = voice.toLowerCase();
+  const matchInsensitive = options.find(v => v.toLowerCase() === lower);
+  return matchInsensitive || options[0];
+};
+
 interface PodcastToolProps {
   files: KnowledgeFile[];
   selectedIds: Set<string>;
@@ -17,13 +83,16 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
   const [podcastParams, setPodcastParams] = useState({
     api_key: '',
     api_url: 'https://api.apiyi.com/v1',
-    model: 'gpt-4o',
+    model: 'gpt-5.1',
     tts_model: 'gemini-2.5-pro-preview-tts',
     voice_name: 'Kore',
     voice_name_b: 'Puck',
     podcast_mode: 'monologue',
+    podcast_length: 'standard',
     language: 'zh'
   });
+  const isOpenAITts = isOpenAITtsModel(podcastParams.tts_model);
+  const voiceOptions = isOpenAITts ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
 
   useEffect(() => {
     const settings = getApiSettings(user?.id || null);
@@ -35,6 +104,19 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
       }));
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    const nextOptions = isOpenAITts ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
+    const nextVoice = normalizeVoice(podcastParams.voice_name, nextOptions);
+    const nextVoiceB = normalizeVoice(podcastParams.voice_name_b, nextOptions);
+    if (nextVoice !== podcastParams.voice_name || nextVoiceB !== podcastParams.voice_name_b) {
+      setPodcastParams(prev => ({
+        ...prev,
+        voice_name: nextVoice,
+        voice_name_b: nextVoiceB
+      }));
+    }
+  }, [isOpenAITts, podcastParams.voice_name, podcastParams.voice_name_b, podcastParams.tts_model]);
 
   const handleGeneratePodcast = async () => {
     if (!user?.id || !user?.email) {
@@ -80,6 +162,7 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
           voice_name: podcastParams.voice_name,
           voice_name_b: podcastParams.voice_name_b,
           podcast_mode: podcastParams.podcast_mode,
+          podcast_length: podcastParams.podcast_length,
           language: podcastParams.language
         })
       });
@@ -170,26 +253,45 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-300">LLM Model</label>
-            <select
-              value={podcastParams.model}
-              onChange={e => setPodcastParams({...podcastParams, model: e.target.value})}
-              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
-            >
-              <option value="gpt-4o">gpt-4o</option>
-              <option value="gpt-5.1">gpt-5.1</option>
-              <option value="gpt-5.2">gpt-5.2</option>
-              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={podcastParams.model}
+                onChange={e => setPodcastParams({...podcastParams, model: e.target.value})}
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
+              >
+                <option value="gpt-5.1">gpt-5.1</option>
+                <option value="gpt-5.2">gpt-5.2</option>
+                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+              </select>
+              <input
+                type="text"
+                value={podcastParams.model}
+                onChange={e => setPodcastParams({...podcastParams, model: e.target.value})}
+                placeholder="自定义模型"
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-300">TTS Model</label>
             <select
               value={podcastParams.tts_model}
-              onChange={e => setPodcastParams({...podcastParams, tts_model: e.target.value})}
+              onChange={e => {
+                const nextModel = e.target.value;
+                const nextIsOpenAI = isOpenAITtsModel(nextModel);
+                const nextOptions = nextIsOpenAI ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
+                setPodcastParams(prev => ({
+                  ...prev,
+                  tts_model: nextModel,
+                  voice_name: normalizeVoice(prev.voice_name, nextOptions),
+                  voice_name_b: normalizeVoice(prev.voice_name_b, nextOptions)
+                }));
+              }}
               className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
             >
               <option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS</option>
+              <option value="gpt-4o-mini-tts">gpt-4o-mini-tts</option>
             </select>
           </div>
 
@@ -200,15 +302,9 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
               onChange={e => setPodcastParams({...podcastParams, voice_name: e.target.value})}
               className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
             >
-              <option value="Kore">Kore</option>
-              <option value="Aoede">Aoede</option>
-              <option value="Charon">Charon</option>
-              <option value="Fenrir">Fenrir</option>
-              <option value="Puck">Puck</option>
-              <option value="Orbit">Orbit</option>
-              <option value="Orus">Orus</option>
-              <option value="Trochilidae">Trochilidae</option>
-              <option value="Zephyr">Zephyr</option>
+              {voiceOptions.map(voice => (
+                <option key={voice} value={voice}>{voice}</option>
+              ))}
             </select>
           </div>
 
@@ -238,6 +334,19 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-300">播客长度</label>
+            <select
+              value={podcastParams.podcast_length}
+              onChange={e => setPodcastParams({...podcastParams, podcast_length: e.target.value})}
+              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
+            >
+              <option value="brief">精炼（约2-4分钟）</option>
+              <option value="standard">标准（约5-10分钟）</option>
+              <option value="long">详细（约10-15分钟）</option>
+            </select>
+          </div>
+
           {podcastParams.podcast_mode === 'dialog' && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-300">第二位声音</label>
@@ -246,15 +355,9 @@ export const PodcastTool = ({ files = [], selectedIds, onGenerateSuccess }: Podc
                 onChange={e => setPodcastParams({...podcastParams, voice_name_b: e.target.value})}
                 className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-green-500"
               >
-                <option value="Kore">Kore</option>
-                <option value="Aoede">Aoede</option>
-                <option value="Charon">Charon</option>
-                <option value="Fenrir">Fenrir</option>
-                <option value="Puck">Puck</option>
-                <option value="Orbit">Orbit</option>
-                <option value="Orus">Orus</option>
-                <option value="Trochilidae">Trochilidae</option>
-                <option value="Zephyr">Zephyr</option>
+                {voiceOptions.map(voice => (
+                  <option key={voice} value={voice}>{voice}</option>
+                ))}
               </select>
             </div>
           )}

@@ -680,6 +680,62 @@ class OpenAIDalleProvider(AIProviderStrategy):
         raise RuntimeError("Failed to parse DALL-E response")
 
 
+class OpenAITTSProvider(AIProviderStrategy):
+    """
+    OpenAI TTS (/audio/speech)
+    """
+    _OPENAI_VOICES = {
+        "alloy", "echo", "fable", "onyx", "nova", "shimmer", "coral", "verse", "ballad",
+        "ash", "sage", "marin", "cedar", "amuch", "aster", "brook", "clover", "dan",
+        "elan", "marilyn", "meadow", "jazz", "rio", "breeze", "cove", "ember", "fathom",
+        "glimmer", "harp", "juniper", "maple", "orbit", "vale",
+        "megan-wetherall", "jade-hardy",
+        "megan-wetherall-2025-03-07", "jade-hardy-2025-03-07",
+    }
+    _FALLBACK_VOICE = "alloy"
+
+    def match(self, api_url: str, model: str) -> bool:
+        model_l = model.lower()
+        return model_l.startswith("gpt-4o-mini-tts") or model_l in {"tts-1", "tts-1-hd"}
+
+    def build_generation_request(self, api_url: str, model: str, prompt: str, **kwargs) -> Tuple[str, Dict[str, Any], bool]:
+        raise NotImplementedError("Generation not supported by OpenAITTSProvider")
+
+    def parse_generation_response(self, data: Dict[str, Any]) -> str:
+        raise NotImplementedError("Generation not supported by OpenAITTSProvider")
+
+    def build_tts_request(self, api_url: str, model: str, text: str, **kwargs) -> Tuple[str, Dict[str, Any], bool]:
+        url = f"{api_url.rstrip('/')}/audio/speech"
+        voice_raw = kwargs.get("voice_name") or kwargs.get("voice") or self._FALLBACK_VOICE
+        voice = str(voice_raw).strip().lower()
+        if voice not in self._OPENAI_VOICES:
+            log.warning(f"OpenAI TTS voice '{voice_raw}' not supported, fallback to '{self._FALLBACK_VOICE}'")
+            voice = self._FALLBACK_VOICE
+        response_format = kwargs.get("response_format", "pcm")
+        payload = {
+            "model": model,
+            "input": text,
+            "voice": voice,
+            "response_format": response_format,
+        }
+
+        # Optional OpenAI params
+        if "speed" in kwargs:
+            payload["speed"] = kwargs["speed"]
+        if "instructions" in kwargs:
+            payload["instructions"] = kwargs["instructions"]
+
+        payload["__response_type__"] = "binary"
+        return url, payload, False
+
+    def parse_tts_response(self, data: Any) -> bytes:
+        if isinstance(data, (bytes, bytearray)):
+            return bytes(data)
+        if isinstance(data, dict) and "error" in data:
+            raise RuntimeError(f"API Error: {data['error']}")
+        raise RuntimeError("Unexpected TTS response format")
+
+
 class OpenAICompatGeminiProvider(AIProviderStrategy):
     """
     通用 OpenAI 兼容格式
@@ -814,6 +870,7 @@ STRATEGIES = [
     ApiYiGPTImageProvider(),
     Local123GeminiProvider(),
     OpenAIDalleProvider(),
+    OpenAITTSProvider(),
     # Add GoogleNativeProvider() here if needed
     OpenAICompatGeminiProvider(), # Default Fallback
 ]

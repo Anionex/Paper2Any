@@ -20,7 +20,7 @@ export const MindMapTool = ({ files = [], selectedIds, onGenerateSuccess }: Mind
   const [mindmapParams, setMindmapParams] = useState({
     api_key: '',
     api_url: 'https://api.apiyi.com/v1',
-    model: 'gpt-4o',
+    model: 'gpt-5.1',
     mindmap_style: 'default',
     max_depth: 3,
     language: 'zh'
@@ -174,16 +174,24 @@ export const MindMapTool = ({ files = [], selectedIds, onGenerateSuccess }: Mind
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-300">LLM Model</label>
-            <select
-              value={mindmapParams.model}
-              onChange={e => setMindmapParams({...mindmapParams, model: e.target.value})}
-              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-cyan-500"
-            >
-              <option value="gpt-4o">gpt-4o</option>
-              <option value="gpt-5.1">gpt-5.1</option>
-              <option value="gpt-5.2">gpt-5.2</option>
-              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={mindmapParams.model}
+                onChange={e => setMindmapParams({...mindmapParams, model: e.target.value})}
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-cyan-500"
+              >
+                <option value="gpt-5.1">gpt-5.1</option>
+                <option value="gpt-5.2">gpt-5.2</option>
+                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+              </select>
+              <input
+                type="text"
+                value={mindmapParams.model}
+                onChange={e => setMindmapParams({...mindmapParams, model: e.target.value})}
+                placeholder="自定义模型"
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-cyan-500"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
