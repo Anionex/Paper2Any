@@ -1,0 +1,175 @@
+{
+  "header": {
+    "badge": "反驳信工作台",
+    "title": "Paper2Rebuttal",
+    "description": "AI 辅助学术论文反驳信生成工具"
+  },
+  "steps": {
+    "upload": "上传 / 输入",
+    "uploadDesc": "上传论文 PDF 与评审（文件或直接输入）",
+    "reviewCheck": "Review check",
+    "reviewCheckDesc": "解析并确认评审条目",
+    "analysis": "分析处理",
+    "analysisDesc": "提取问题并生成策略",
+    "generating": "生成中",
+    "generatingDesc": "正在生成最终反驳信",
+    "result": "最终反驳信",
+    "resultDesc": "生成最终反驳信"
+  },
+  "upload": {
+    "title": "上传文件",
+    "supportedFormats": "支持 PDF / TXT / MD",
+    "apiConfig": "API配置",
+    "apiUrl": "API URL",
+    "buyLink": "点击购买",
+    "model": "Model",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "输入API Key",
+    "paperPdf": "论文 PDF",
+    "reviewContent": "评审内容",
+    "uploadFile": "上传文件",
+    "directInput": "直接输入",
+    "reviewFormats": "PDF / TXT / MD",
+    "reviewPlaceholder": "粘贴评审意见全文（支持 Review 1 / Q1. / [q1] 等格式分段解析）",
+    "exampleHint": "点击示例可一键填入",
+    "clearInput": "清空输入",
+    "parseButton": "解析 / 预览评审（Review check）",
+    "parsing": "解析中...",
+    "examples": {
+      "example1Title": "示例 1 · Review 1/2",
+      "example2Title": "示例 2 · Q1/Q2 结构",
+      "example3Title": "示例 3 · Major/Minor"
+    }
+  },
+  "reviewCheck": {
+    "title": "评审预览（Review check）",
+    "description": "请确认下方解析出的评审条目无误后，点击「确认并开始分析」。",
+    "noResults": "暂无解析结果",
+    "backButton": "返回修改",
+    "confirmButton": "确认并开始分析",
+    "processing": "处理中..."
+  },
+  "processing": {
+    "title": "分析中...",
+    "initializing": "正在初始化分析流程...",
+    "logCount": "共 {{count}} 条进度信息"
+  },
+  "review": {
+    "questionList": "问题列表",
+    "questionTitle": "问题 {{current}} / {{total}}",
+    "revisionCount": "已修订 {{count}} 次",
+    "hidePapers": "隐藏论文",
+    "showPapers": "查看论文",
+    "reviewQuestion": "评审问题",
+    "strategy": "反驳策略",
+    "todoList": "待办事项列表",
+    "draftResponse": "草稿片段",
+    "relatedPapers": "相关论文",
+    "feedback": "反馈意见",
+    "feedbackPlaceholder": "输入您的反馈意见，AI将根据反馈调整策略...",
+    "regenerateStrategy": "重新生成策略",
+    "backToCurrent": "返回当前版本",
+    "previousQuestion": "上一个问题",
+    "nextQuestion": "下一个问题",
+    "generateFinal": "生成最终反驳信",
+    "questionCompleted": "已完成",
+    "questionProcessing": "处理中...",
+    "questionPending": "待处理"
+  },
+  "papers": {
+    "searched": "搜索到的论文",
+    "selected": "选中的论文",
+    "analyzed": "已分析论文（含摘要）",
+    "noTitle": "（无标题）",
+    "noPapers": "暂无论文",
+    "showAnalysis": "查看分析",
+    "hideAnalysis": "收起分析",
+    "viewAbstract": "查看摘要",
+    "downloadPdf": "下载PDF"
+  },
+  "todo": {
+    "noTodos": "暂无待办事项",
+    "relatedPapers": "相关论文:",
+    "types": {
+      "experiment": "experiment",
+      "analysis": "analysis",
+      "clarification": "clarification",
+      "comparison": "comparison",
+      "ablation": "ablation"
+    }
+  },
+  "generating": {
+    "title": "正在生成最终反驳信",
+    "message": "正在整合所有问题的策略和回复，生成完整的反驳信...",
+    "wait": "这可能需要几分钟时间，请稍候...",
+    "initializing": "正在初始化生成流程..."
+  },
+  "result": {
+    "title": "完成！",
+    "backToQuestions": "返回问题列表",
+    "finalRebuttal": "最终反驳信",
+    "generating": "生成中...",
+    "downloadReport": "下载完整报告 (MD)",
+    "downloadRebuttal": "下载反驳信",
+    "exportZip": "导出全部 (ZIP)",
+    "exporting": "打包中...",
+    "restart": "重新开始"
+  },
+  "errors": {
+    "uploadReview": "请上传评审文件（PDF/txt/md）或直接输入评审内容",
+    "parseReviewFailed": "解析评审失败",
+    "parseReviewEmpty": "解析评审失败：后端返回为空或非 JSON",
+    "needParsedReview": "请先点击「解析/预览评审」得到形式化 review 并确认后再开始分析，并配置 API",
+    "analysisFailed": "分析失败",
+    "fetchSessionFailed": "获取会话数据失败",
+    "noQuestionData": "未找到问题数据，请检查分析是否完成",
+    "revisionFailed": "修订失败",
+    "needFeedback": "请输入反馈意见",
+    "operationFailed": "操作失败",
+    "generateFailed": "生成失败",
+    "downloadReportFailed": "下载总结报告失败",
+    "exportFailed": "导出失败",
+    "dataLoadFailed": "数据加载失败",
+    "dataLoading": "数据加载中..."
+  },
+  "logs": {
+    "startAnalysis": "🚀 开始分析...",
+    "connectingProgress": "📡 正在连接进度流...",
+    "sseTimeout": "⚠️ SSE 超时，改用轮询等待全部问题处理完成...",
+    "connectionClosed": "⚠️ 连接已关闭，改用轮询等待全部问题处理完成...",
+    "cannotConnect": "⚠️ 无法连接进度流，将使用轮询方式获取进度...",
+    "analysisComplete": "✅ 分析完成！提取了 {{count}} 个问题",
+    "strategyRevised": "策略已修订 (第 {{count}} 次)",
+    "startGenerating": "🚀 开始生成最终反驳信...",
+    "integrating": "📝 正在整合所有问题的策略和回复...",
+    "generatingContent": "✨ 正在生成最终反驳信内容...",
+    "generateComplete": "✅ 最终反驳信生成完成！",
+    "error": "❌ 错误: {{message}}",
+    "retrying": "⏳ 数据仍在写入，{{seconds}} 秒后重试 ({{current}}/{{max}})...",
+    "partialProcessing": "⚠️ 部分问题可能仍在处理中，请稍后刷新查看最新数据"
+  },
+  "feishu": {
+    "title": "使用指南与更多案例（飞书文档）",
+    "link": "查看飞书文档"
+  },
+  "history": {
+    "title": "历史任务",
+    "refresh": "刷新",
+    "loading": "加载中...",
+    "empty": "暂无历史任务",
+    "load": "加载",
+    "statusProcessing": "处理中",
+    "statusReady": "待回复",
+    "statusCompleted": "已完成",
+    "questions": "问题 {{processed}} / {{total}}",
+    "updatedAt": "更新于 {{time}}"
+  },
+  "emptyState": {
+    "sessionId": "Session ID: {{id}}",
+    "questionCount": "问题数量: {{count}}",
+    "currentIndex": "当前问题索引: {{index}}",
+    "loading": "正在加载问题数据，请稍候...",
+    "reload": "重新加载",
+    "backToUpload": "返回上传"
+  }
+}

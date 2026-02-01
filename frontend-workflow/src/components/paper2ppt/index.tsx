@@ -1,7 +1,8 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { uploadAndSaveFile } from '../../services/fileService';
-import { API_KEY } from '../../config/api';
+import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
+import { DEFAULT_PAPER2PPT_GEN_FIG_MODEL, DEFAULT_PAPER2PPT_MODEL } from '../../config/models';
 import { checkQuota, recordUsage } from '../../services/quotaService';
 import { verifyLlmConnection } from '../../services/llmService';
 import { useAuthStore } from '../../stores/authStore';
@@ -67,10 +68,10 @@ const Paper2PptPage = () => {
   const [showBanner, setShowBanner] = useState(true);
 
   // API 配置状态 - 从环境变量读取默认值
-  const [llmApiUrl, setLlmApiUrl] = useState(import.meta.env.VITE_DEFAULT_LLM_API_URL || 'https://api.apiyi.com/v1');
+  const [llmApiUrl, setLlmApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('gpt-5.1');
-  const [genFigModel, setGenFigModel] = useState('gemini-3-pro-image-preview');
+  const [model, setModel] = useState(DEFAULT_PAPER2PPT_MODEL);
+  const [genFigModel, setGenFigModel] = useState(DEFAULT_PAPER2PPT_GEN_FIG_MODEL);
   const [language, setLanguage] = useState<'zh' | 'en'>('en');
   const [resultPath, setResultPath] = useState<string | null>(null);
 

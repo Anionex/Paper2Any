@@ -1,0 +1,175 @@
+{
+  "header": {
+    "badge": "Rebuttal Workbench",
+    "title": "Paper2Rebuttal",
+    "description": "AI-Assisted Academic Paper Rebuttal Letter Generator"
+  },
+  "steps": {
+    "upload": "Upload / Input",
+    "uploadDesc": "Upload paper PDF and review (file or direct input)",
+    "reviewCheck": "Review check",
+    "reviewCheckDesc": "Parse and confirm review items",
+    "analysis": "Analysis",
+    "analysisDesc": "Extract questions and generate strategies",
+    "generating": "Generating",
+    "generatingDesc": "Generating final rebuttal letter",
+    "result": "Final Rebuttal",
+    "resultDesc": "Generate final rebuttal letter"
+  },
+  "upload": {
+    "title": "Upload Files",
+    "supportedFormats": "Supports PDF / TXT / MD",
+    "apiConfig": "API Configuration",
+    "apiUrl": "API URL",
+    "buyLink": "Purchase",
+    "model": "Model",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Enter API Key",
+    "paperPdf": "Paper PDF",
+    "reviewContent": "Review Content",
+    "uploadFile": "Upload File",
+    "directInput": "Direct Input",
+    "reviewFormats": "PDF / TXT / MD",
+    "reviewPlaceholder": "Paste full review text (supports Review 1 / Q1. / [q1] format parsing)",
+    "exampleHint": "Click example to auto-fill",
+    "clearInput": "Clear Input",
+    "parseButton": "Parse / Preview Review (Review check)",
+    "parsing": "Parsing...",
+    "examples": {
+      "example1Title": "Example 1 · Review 1/2",
+      "example2Title": "Example 2 · Q1/Q2 Structure",
+      "example3Title": "Example 3 · Major/Minor"
+    }
+  },
+  "reviewCheck": {
+    "title": "Review Preview (Review check)",
+    "description": "Please confirm the parsed review items below, then click 'Confirm and Start Analysis'.",
+    "noResults": "No parsing results",
+    "backButton": "Back to Edit",
+    "confirmButton": "Confirm and Start Analysis",
+    "processing": "Processing..."
+  },
+  "processing": {
+    "title": "Analyzing...",
+    "initializing": "Initializing analysis process...",
+    "logCount": "Total {{count}} progress messages"
+  },
+  "review": {
+    "questionList": "Question List",
+    "questionTitle": "Question {{current}} / {{total}}",
+    "revisionCount": "Revised {{count}} times",
+    "hidePapers": "Hide Papers",
+    "showPapers": "View Papers",
+    "reviewQuestion": "Review Question",
+    "strategy": "Rebuttal Strategy",
+    "todoList": "Todo List",
+    "draftResponse": "Draft Response",
+    "relatedPapers": "Related Papers",
+    "feedback": "Feedback",
+    "feedbackPlaceholder": "Enter your feedback, AI will adjust strategy accordingly...",
+    "regenerateStrategy": "Regenerate Strategy",
+    "backToCurrent": "Back to Current Version",
+    "previousQuestion": "Previous Question",
+    "nextQuestion": "Next Question",
+    "generateFinal": "Generate Final Rebuttal",
+    "questionCompleted": "Completed",
+    "questionProcessing": "Processing...",
+    "questionPending": "Pending"
+  },
+  "papers": {
+    "searched": "Searched Papers",
+    "selected": "Selected Papers",
+    "analyzed": "Analyzed Papers (with Abstract)",
+    "noTitle": "(No Title)",
+    "noPapers": "No papers",
+    "showAnalysis": "Show Analysis",
+    "hideAnalysis": "Hide Analysis",
+    "viewAbstract": "View Abstract",
+    "downloadPdf": "Download PDF"
+  },
+  "todo": {
+    "noTodos": "No todos",
+    "relatedPapers": "Related Papers:",
+    "types": {
+      "experiment": "experiment",
+      "analysis": "analysis",
+      "clarification": "clarification",
+      "comparison": "comparison",
+      "ablation": "ablation"
+    }
+  },
+  "generating": {
+    "title": "Generating Final Rebuttal Letter",
+    "message": "Integrating all question strategies and responses to generate complete rebuttal letter...",
+    "wait": "This may take a few minutes, please wait...",
+    "initializing": "Initializing generation process..."
+  },
+  "result": {
+    "title": "Complete!",
+    "backToQuestions": "Back to Question List",
+    "finalRebuttal": "Final Rebuttal Letter",
+    "generating": "Generating...",
+    "downloadReport": "Download Full Report (MD)",
+    "downloadRebuttal": "Download Rebuttal",
+    "exportZip": "Export All (ZIP)",
+    "exporting": "Exporting...",
+    "restart": "Start Over"
+  },
+  "errors": {
+    "uploadReview": "Please upload review file (PDF/txt/md) or enter review content directly",
+    "parseReviewFailed": "Failed to parse review",
+    "parseReviewEmpty": "Failed to parse review: backend returned empty or non-JSON",
+    "needParsedReview": "Please click 'Parse/Preview Review' to get formatted review and confirm before starting analysis, and configure API",
+    "analysisFailed": "Analysis failed",
+    "fetchSessionFailed": "Failed to fetch session data",
+    "noQuestionData": "No question data found, please check if analysis is complete",
+    "revisionFailed": "Revision failed",
+    "needFeedback": "Please enter feedback",
+    "operationFailed": "Operation failed",
+    "generateFailed": "Generation failed",
+    "downloadReportFailed": "Failed to download summary report",
+    "exportFailed": "Export failed",
+    "dataLoadFailed": "Data load failed",
+    "dataLoading": "Loading data..."
+  },
+  "logs": {
+    "startAnalysis": "🚀 Starting analysis...",
+    "connectingProgress": "📡 Connecting to progress stream...",
+    "sseTimeout": "⚠️ SSE timeout, switching to polling to wait for all questions to be processed...",
+    "connectionClosed": "⚠️ Connection closed, switching to polling to wait for all questions to be processed...",
+    "cannotConnect": "⚠️ Cannot connect to progress stream, will use polling to get progress...",
+    "analysisComplete": "✅ Analysis complete! Extracted {{count}} questions",
+    "strategyRevised": "Strategy revised (revision {{count}})",
+    "startGenerating": "🚀 Starting to generate final rebuttal letter...",
+    "integrating": "📝 Integrating all question strategies and responses...",
+    "generatingContent": "✨ Generating final rebuttal letter content...",
+    "generateComplete": "✅ Final rebuttal letter generation complete!",
+    "error": "❌ Error: {{message}}",
+    "retrying": "⏳ Data still being written, retrying in {{seconds}} seconds ({{current}}/{{max}})...",
+    "partialProcessing": "⚠️ Some questions may still be processing, please refresh later to view latest data"
+  },
+  "feishu": {
+    "title": "User Guide and More Examples (Feishu Doc)",
+    "link": "View Feishu Doc"
+  },
+  "history": {
+    "title": "History",
+    "refresh": "Refresh",
+    "loading": "Loading...",
+    "empty": "No history yet",
+    "load": "Load",
+    "statusProcessing": "Processing",
+    "statusReady": "Ready",
+    "statusCompleted": "Completed",
+    "questions": "Questions {{processed}} / {{total}}",
+    "updatedAt": "Updated {{time}}"
+  },
+  "emptyState": {
+    "sessionId": "Session ID: {{id}}",
+    "questionCount": "Question Count: {{count}}",
+    "currentIndex": "Current Question Index: {{index}}",
+    "loading": "Loading question data, please wait...",
+    "reload": "Reload",
+    "backToUpload": "Back to Upload"
+  }
+}

@@ -205,33 +205,34 @@ async def get_file_history(
             # Only include specific file types
             suffix = p.suffix.lower()
             filename = p.name
-            
-            if suffix in {".pptx", ".pdf", ".png", ".svg"}:
-                # Filter logic:
-                # 1. All .pptx files
-                # 2. All files starting with "paper2ppt"
-                # 3. All fig_*.png and fig_*.svg files
+
+            # Infer workflow_type from path: outputs/{user_dir}/{workflow_type}/...
+            try:
+                rel = p.relative_to(base_dir)
+                wf_type = rel.parts[0] if len(rel.parts) > 0 else "unknown"
+                file_id = str(rel)  # Use relative path as unique ID
+            except Exception:
+                wf_type = "unknown"
+                file_id = str(p.name) + "_" + str(p.stat().st_mtime)
+
+            allowed_suffixes = {".pptx", ".pdf", ".png", ".svg"}
+            if wf_type == "paper2rebuttal":
+                allowed_suffixes = allowed_suffixes | {".md", ".txt", ".json", ".zip"}
+
+            if suffix in allowed_suffixes:
                 should_show = False
-                if suffix == ".pptx":
+                if wf_type == "paper2rebuttal":
+                    should_show = True
+                elif suffix == ".pptx":
                     should_show = True
                 elif filename.startswith("paper2ppt"):
                     should_show = True
                 elif filename.startswith("fig_") and suffix in {".png", ".svg"}:
                     should_show = True
-                
+
                 if should_show:
                     stat = p.stat()
                     url = _to_outputs_url(str(p), request)
-                    
-                    # Infer workflow_type from path: outputs/{user_dir}/{workflow_type}/...
-                    try:
-                        rel = p.relative_to(base_dir)
-                        wf_type = rel.parts[0] if len(rel.parts) > 0 else "unknown"
-                        file_id = str(rel)  # Use relative path as unique ID
-                    except Exception:
-                        wf_type = "unknown"
-                        file_id = str(p.name) + "_" + str(stat.st_mtime)
-                    
                     files_data.append({
                         "id": file_id,
                         "file_name": p.name,

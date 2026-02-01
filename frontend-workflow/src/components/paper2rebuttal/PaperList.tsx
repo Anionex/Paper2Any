@@ -1,5 +1,6 @@
 import { ExternalLink, FileText, Search, Filter, BookOpen } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface Paper {
   title?: string;
@@ -38,6 +39,7 @@ function normalizePapers(list: any[]): Paper[] {
 }
 
 const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = [] }: PaperListProps) => {
+  const { t } = useTranslation(['paper2rebuttal']);
   const searched = useMemo(() => normalizePapers(searchedPapers), [searchedPapers]);
   const selected = useMemo(() => normalizePapers(selectedPapers), [selectedPapers]);
   const analyzed = useMemo(() => normalizePapers(analyzedPapers), [analyzedPapers]);
@@ -50,9 +52,9 @@ const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = 
   const [expandedPaper, setExpandedPaper] = useState<string | null>(null);
 
   const tabs = [
-    { id: 'searched' as const, label: '搜索到的论文', count: searched.length, icon: Search },
-    { id: 'selected' as const, label: '选中的论文', count: selected.length, icon: Filter },
-    { id: 'analyzed' as const, label: '已分析论文（含摘要）', count: analyzed.length, icon: BookOpen },
+    { id: 'searched' as const, label: t('paper2rebuttal:papers.searched'), count: searched.length, icon: Search },
+    { id: 'selected' as const, label: t('paper2rebuttal:papers.selected'), count: selected.length, icon: Filter },
+    { id: 'analyzed' as const, label: t('paper2rebuttal:papers.analyzed'), count: analyzed.length, icon: BookOpen },
   ];
 
   const getCurrentPapers = (): Paper[] => {
@@ -105,13 +107,13 @@ const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = 
       <div className="space-y-3 max-h-96 overflow-y-auto">
         {papers.length === 0 ? (
           <div className="text-gray-400 text-sm py-8 text-center">
-            暂无论文
+            {t('paper2rebuttal:papers.noPapers')}
           </div>
         ) : (
           papers.map((paper, index) => {
             const paperId = `${activeTab}-${index}`;
             const isExpanded = expandedPaper === paperId;
-            
+
             return (
               <div
                 key={index}
@@ -120,7 +122,7 @@ const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = 
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-white mb-1 line-clamp-2">
-                      {paper.title || '（无标题）'}
+                      {paper.title || t('paper2rebuttal:papers.noTitle')}
                     </h4>
                     
                     {paper.authors && paper.authors.length > 0 && (
@@ -142,7 +144,7 @@ const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = 
                           onClick={() => setExpandedPaper(isExpanded ? null : paperId)}
                           className="text-sm text-blue-400 hover:text-blue-300"
                         >
-                          {isExpanded ? '收起分析' : '查看分析'}
+                          {isExpanded ? t('paper2rebuttal:papers.hideAnalysis') : t('paper2rebuttal:papers.showAnalysis')}
                         </button>
                         {isExpanded && (
                           <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-gray-300 whitespace-pre-wrap">
@@ -160,7 +162,7 @@ const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = 
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded transition-colors"
-                        title="查看摘要"
+                        title={t('paper2rebuttal:papers.viewAbstract')}
                       >
                         <FileText className="w-4 h-4 text-blue-300" />
                       </a>
@@ -171,7 +173,7 @@ const PaperList = ({ searchedPapers = [], selectedPapers = [], analyzedPapers = 
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-2 bg-green-500/20 hover:bg-green-500/30 rounded transition-colors"
-                        title="下载PDF"
+                        title={t('paper2rebuttal:papers.downloadPdf')}
                       >
                         <ExternalLink className="w-4 h-4 text-green-300" />
                       </a>

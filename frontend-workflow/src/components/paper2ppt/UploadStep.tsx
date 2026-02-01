@@ -1,6 +1,7 @@
 import React, { ChangeEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API_URL_OPTIONS } from '../../config/api';
+import { PAPER2PPT_GEN_FIG_MODELS, PAPER2PPT_MODELS, withModelOptions } from '../../config/models';
 import {
   UploadCloud, Settings2, Loader2, AlertCircle, Sparkles,
   ArrowRight, FileText, Key, Globe, Cpu, Type, Lightbulb,
@@ -84,6 +85,12 @@ const UploadStep: React.FC<UploadStepProps> = ({
   handleUploadAndParse
 }) => {
   const { t } = useTranslation(['paper2ppt', 'common']);
+  const modelOptions = withModelOptions(PAPER2PPT_MODELS, model);
+  const genFigModelOptions = withModelOptions(PAPER2PPT_GEN_FIG_MODELS, genFigModel);
+  const genFigModelLabels: Record<string, string> = {
+    'gemini-3-pro-image-preview': 'Gemini 3 Pro (中文必选)',
+    'gemini-2.5-flash-image': 'Gemini 2.5 (Flash Image)',
+  };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -250,9 +257,9 @@ const UploadStep: React.FC<UploadStepProps> = ({
                   onChange={e => setModel(e.target.value)}
                   className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="gpt-5.1">gpt-5.1</option>
-                  <option value="gpt-5.2">gpt-5.2</option>
-                  <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                  {modelOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
                 </select>
                 <input
                   type="text"
@@ -274,8 +281,9 @@ const UploadStep: React.FC<UploadStepProps> = ({
                 disabled={llmApiUrl.includes('123.129.219.111')}
                 className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option value="gemini-3-pro-image-preview">Gemini 3 Pro (中文必选)</option>
-                <option value="gemini-2.5-flash-image">Gemini 2.5 (Flash Image)</option>
+                {genFigModelOptions.map((option) => (
+                  <option key={option} value={option}>{genFigModelLabels[option] || option}</option>
+                ))}
               </select>
               {llmApiUrl.includes('123.129.219.111') && (
                  <p className="text-[10px] text-gray-500 mt-1">此源仅支持 gemini-3-pro</p>

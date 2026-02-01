@@ -9,8 +9,10 @@ import json
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import zipfile
+import time
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Body
 from fastapi.responses import StreamingResponse
 from fastapi_app.schemas import ErrorResponse
 from fastapi_app.services.rebuttal.rebuttal_service import (
@@ -20,8 +22,88 @@ from fastapi_app.services.rebuttal.rebuttal_service import (
     ProcessStatus,
 )
 from fastapi_app.services.rebuttal.tools import pdf_to_md
+from fastapi_app.dependencies import get_optional_user, AuthUser
+from fastapi_app.utils import _to_outputs_url
+from dataflow_agent.utils import get_project_root
 
 router = APIRouter(tags=["paper2rebuttal"])
+PROJECT_ROOT = get_project_root()
+OUTPUTS_ROOT = PROJECT_ROOT / "outputs"
+
+
+def _resolve_user_dir(user: Optional[AuthUser], email: Optional[str]) -> str:
+    if user:
+        return user.email or user.id
+    if email:
+        return email
+    return "default"
+
+
+def _get_session_dir(session_id: str) -> str:
+    session = rebuttal_service.get_session(session_id)
+    if not session:
+        session = rebuttal_service.restore_session_from_disk(session_id)
+    if session and session.session_dir:
+        return session.session_dir
+    return str(PROJECT_ROOT / "rebuttal_sessions" / session_id)
+
+
+def _write_session_meta(session_dir: str, user_dir: str, email: Optional[str]) -> None:
+    try:
+        meta_path = os.path.join(session_dir, "session_meta.json")
+        meta = {
+            "user_dir": user_dir,
+            "email": email or "",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _export_rebuttal_outputs(session_id: str, user_dir: str) -> Path:
+    session_dir = _get_session_dir(session_id)
+    output_dir = OUTPUTS_ROOT / user_dir / "paper2rebuttal" / session_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    candidates = [
+        (os.path.join(session_dir, "paper.pdf"), "paper.pdf"),
+        (os.path.join(session_dir, "paper.md"), "paper.md"),
+        (os.path.join(session_dir, "review.txt"), "review.txt"),
+        (os.path.join(session_dir, "session_meta.json"), "session_meta.json"),
+        (os.path.join(session_dir, "logs", "summary.md"), "summary.md"),
+        (os.path.join(session_dir, "logs", "session_summary.json"), "session_summary.json"),
+        (os.path.join(session_dir, "logs", "token_usage.json"), "token_usage.json"),
+    ]
+
+    for src, name in candidates:
+        if os.path.exists(src) and os.path.isfile(src):
+            dst = output_dir / name
+            try:
+                shutil.copy2(src, dst)
+            except Exception:
+                pass
+
+    final_txt = os.path.join(session_dir, "logs", "final_rebuttal.txt")
+    if os.path.exists(final_txt) and os.path.isfile(final_txt):
+        try:
+            with open(final_txt, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            with open(output_dir / "final_rebuttal.md", "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception:
+            pass
+
+    return output_dir
+
+
+def _safe_read_json(path: Path) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def read_file_content(file_obj) -> tuple[Optional[str], Optional[bytes]]:
@@ -412,6 +494,8 @@ async def start_analysis(
     chat_api_url: str = Form(...),
     api_key: str = Form(...),
     model: str = Form("gpt-5.1"),
+    email: Optional[str] = Form(None),
+    user: Optional[AuthUser] = Depends(get_optional_user),
 ):
     """Start rebuttal analysis. 评审可为：上传文件（PDF/txt/md）或直接文本 review_text。"""
     import threading
@@ -429,6 +513,8 @@ async def start_analysis(
             pdf_file, session_id, review_file=review_file, review_text=review_text
         )
         session = rebuttal_service.create_session(session_id, pdf_path, review_path)
+        user_dir = _resolve_user_dir(user, email)
+        _write_session_meta(session.session_dir, user_dir, email)
         
         # Run analysis in background thread
         def run_analysis():
@@ -451,6 +537,10 @@ async def start_analysis(
                 if session:
                     session.overall_status = ProcessStatus.WAITING_FEEDBACK
                     print(f"[LOG] Analysis completed, status set to WAITING_FEEDBACK")
+                try:
+                    _export_rebuttal_outputs(session_id, user_dir)
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"[ERROR] Background analysis failed: {e}")
                 import traceback
@@ -594,10 +684,13 @@ async def mark_question_satisfied(
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
 )
 async def generate_final_rebuttal(
+    request: Request,
     session_id: str = Form(...),
     chat_api_url: str = Form(...),
     api_key: str = Form(...),
     model: str = Form("gpt-5.1"),
+    email: Optional[str] = Form(None),
+    user: Optional[AuthUser] = Depends(get_optional_user),
 ):
     """Generate final rebuttal"""
     try:
@@ -621,10 +714,15 @@ async def generate_final_rebuttal(
         
         # Generate final rebuttal
         final_text = rebuttal_service.generate_final_rebuttal(session_id)
+
+        user_dir = _resolve_user_dir(user, email)
+        output_dir = _export_rebuttal_outputs(session_id, user_dir)
+        export_url = _to_outputs_url(str(output_dir), request) if request else str(output_dir)
         
         return {
             "status": "success",
             "final_rebuttal": final_text,
+            "export_dir": export_url,
         }
     except HTTPException:
         raise
@@ -647,6 +745,78 @@ async def list_sessions():
 
 
 @router.get(
+    "/paper2rebuttal/history",
+    response_model=Dict[str, Any],
+)
+async def list_rebuttal_history(
+    request: Request,
+    email: Optional[str] = None,
+    user: Optional[AuthUser] = Depends(get_optional_user),
+) -> Dict[str, Any]:
+    """List saved rebuttal sessions for the current user."""
+    user_dir = _resolve_user_dir(user, email)
+    base_dir = OUTPUTS_ROOT / user_dir / "paper2rebuttal"
+
+    if not base_dir.exists():
+        return {"success": True, "sessions": []}
+
+    sessions: List[Dict[str, Any]] = []
+    for session_dir in base_dir.iterdir():
+        if not session_dir.is_dir():
+            continue
+
+        session_id = session_dir.name
+        meta = _safe_read_json(session_dir / "session_meta.json")
+        summary = _safe_read_json(session_dir / "session_summary.json")
+
+        summary_path = session_dir / "session_summary.json"
+        updated_ts = summary_path.stat().st_mtime if summary_path.exists() else session_dir.stat().st_mtime
+        created_ts = session_dir.stat().st_mtime
+
+        created_at = meta.get("timestamp") or summary.get("timestamp")
+        if not created_at:
+            created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_ts))
+        updated_at = summary.get("timestamp") or meta.get("timestamp")
+        if not updated_at:
+            updated_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_ts))
+
+        questions = summary.get("questions") or []
+        total_questions = summary.get("total_questions") or len(questions)
+        processed_questions = sum(
+            1
+            for q in questions
+            if (q.get("final_strategy") or q.get("strategy_text") or q.get("draft_response"))
+        )
+        satisfied_questions = sum(1 for q in questions if q.get("is_satisfied"))
+
+        has_final = (session_dir / "final_rebuttal.md").exists()
+        status = "completed" if has_final else ("ready" if questions else "processing")
+
+        zip_files = list(session_dir.glob("*.zip"))
+        zip_url = _to_outputs_url(str(zip_files[0]), request) if zip_files else ""
+
+        sessions.append({
+            "session_id": session_id,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "status": status,
+            "total_questions": total_questions,
+            "processed_questions": processed_questions,
+            "satisfied_questions": satisfied_questions,
+            "has_final": has_final,
+            "export_dir": _to_outputs_url(str(session_dir), request),
+            "zip_url": zip_url,
+            "_updated_ts": updated_ts,
+        })
+
+    sessions.sort(key=lambda x: x.get("_updated_ts", 0), reverse=True)
+    for item in sessions:
+        item.pop("_updated_ts", None)
+
+    return {"success": True, "sessions": sessions}
+
+
+@router.get(
     "/paper2rebuttal/summary/{session_id}",
     responses={404: {"model": ErrorResponse}},
 )
@@ -665,3 +835,56 @@ async def get_summary_markdown(session_id: str):
         "session_id": session_id,
         "markdown": markdown,
     }
+
+
+@router.post(
+    "/paper2rebuttal/export-zip",
+    response_model=Dict[str, Any],
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def export_rebuttal_zip(
+    request: Request,
+    session_id: str = Body(..., embed=True),
+    email: Optional[str] = Body(None, embed=True),
+    include_root_dir: bool = Body(True, embed=True),
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
+    """Export a rebuttal session into a zip archive."""
+    try:
+        session_dir = _get_session_dir(session_id)
+        if not os.path.isdir(session_dir):
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        user_dir = _resolve_user_dir(user, email)
+        output_dir = _export_rebuttal_outputs(session_id, user_dir)
+
+        zip_name = f"paper2rebuttal_{session_id}.zip"
+        zip_path = output_dir / zip_name
+
+        count = 0
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for root, _, files in os.walk(session_dir):
+                for name in files:
+                    abs_path = os.path.join(root, name)
+                    rel_path = os.path.relpath(abs_path, session_dir)
+                    arcname = f"{session_id}/{rel_path}" if include_root_dir else rel_path
+                    try:
+                        zf.write(abs_path, arcname)
+                        count += 1
+                    except Exception:
+                        continue
+
+        if not zip_path.exists():
+            raise HTTPException(status_code=500, detail="Failed to create zip")
+
+        return {
+            "success": True,
+            "zip_path": _to_outputs_url(str(zip_path), request),
+            "count": count,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

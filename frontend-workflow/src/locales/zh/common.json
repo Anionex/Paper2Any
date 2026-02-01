@@ -17,7 +17,7 @@
       "ppt2polish": "PPT润色优化",
       "knowledge": "知识库",
       "files": "我的历史文件",
-      "paper2rebuttal": "反驳信生成"
+      "paper2rebuttal": "反驳信生成(Rebuttal)"
     },
     "navTooltip": {
       "paper2figure": "根据文档内容生成科研绘图，包括模型架构图、技术路线图、实验数据图等可编辑的PPTX格式图表",

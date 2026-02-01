@@ -2,7 +2,14 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Wand2, Upload, FileText, Send, Download } from 'lucide-react';
 import type { DiagramType, DiagramStyle, ChatMessage } from './types';
-import { API_KEY, API_URL_OPTIONS } from '../../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../../config/api';
+import {
+  DEFAULT_PAPER2DRAWIO_IMAGE_MODEL,
+  DEFAULT_PAPER2DRAWIO_MODEL,
+  PAPER2DRAWIO_IMAGE_MODELS,
+  PAPER2DRAWIO_MODELS,
+  withModelOptions,
+} from '../../config/models';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
 import { verifyLlmConnection } from '../../services/llmService';
@@ -50,12 +57,14 @@ export default function Paper2DrawioPage() {
   const [showBanner, setShowBanner] = useState(true);
 
   // API 配置
-  const [apiUrl, setApiUrl] = useState(import.meta.env.VITE_DEFAULT_LLM_API_URL || 'https://api.apiyi.com/v1');
+  const [apiUrl, setApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-5-20250929');
+  const [model, setModel] = useState(DEFAULT_PAPER2DRAWIO_MODEL);
   const [drawioLanguage, setDrawioLanguage] = useState<'zh' | 'en'>('zh');
   const [enableVlmValidation, setEnableVlmValidation] = useState(false);
-  const [p2dImageModel, setP2dImageModel] = useState('gemini-3-pro-image-preview');
+  const [p2dImageModel, setP2dImageModel] = useState(DEFAULT_PAPER2DRAWIO_IMAGE_MODEL);
+  const modelOptions = withModelOptions(PAPER2DRAWIO_MODELS, model);
+  const p2dImageModelOptions = withModelOptions(PAPER2DRAWIO_IMAGE_MODELS, p2dImageModel);
   const [p2dLanguage, setP2dLanguage] = useState<'zh' | 'en'>('zh');
   const [p2dStyle, setP2dStyle] = useState<'cartoon' | 'realistic'>('cartoon');
   const [p2dFigureComplex, setP2dFigureComplex] = useState<'easy' | 'mid' | 'hard'>('easy');
@@ -801,13 +810,17 @@ export default function Paper2DrawioPage() {
                   onChange={e => setApiKey(e.target.value)}
                   className={inputClass}
                 />
-                <input
-                  type="text"
-                  placeholder={t('model')}
+                <select
                   value={model}
                   onChange={e => setModel(e.target.value)}
                   className={inputClass}
-                />
+                >
+                  {modelOptions.map((option) => (
+                    <option key={option} value={option} className="bg-slate-900">
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -883,8 +896,11 @@ export default function Paper2DrawioPage() {
                     onChange={e => setP2dImageModel(e.target.value)}
                     className={inputClass}
                   >
-                    <option value="gemini-3-pro-image-preview" className="bg-slate-900">gemini-3-pro-image-preview</option>
-                    <option value="gemini-2.5-flash-image-preview" className="bg-slate-900">gemini-2.5-flash-image-preview</option>
+                    {p2dImageModelOptions.map((option) => (
+                      <option key={option} value={option} className="bg-slate-900">
+                        {option}
+                      </option>
+                    ))}
                   </select>
                   <select
                     value={p2dLanguage}

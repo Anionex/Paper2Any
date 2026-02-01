@@ -5,6 +5,13 @@ import QRCodeTooltip from '../QRCodeTooltip';
 import { GraphType, Language, StyleType, FigureComplex } from './types';
 import { GENERATION_STAGES, TECH_ROUTE_PALETTES } from './constants';
 import { API_URL_OPTIONS } from '../../config/api';
+import {
+  DEFAULT_PAPER2FIGURE_MODELS,
+  PAPER2FIGURE_EXP_DATA_MODELS,
+  PAPER2FIGURE_MODEL_ARCH_MODELS,
+  PAPER2FIGURE_TECH_ROUTE_MODELS,
+  withModelOptions,
+} from '../../config/models';
 
 interface SettingsCardProps {
   showAdvanced: boolean;
@@ -87,6 +94,13 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
 }) => {
   const { t } = useTranslation('paper2graph');
   const selectedPalette = TECH_ROUTE_PALETTES.find(p => p.id === techRoutePalette) || TECH_ROUTE_PALETTES[0];
+  const defaultModelForType = DEFAULT_PAPER2FIGURE_MODELS[graphType] || DEFAULT_PAPER2FIGURE_MODELS.model_arch;
+  const baseModelOptions = graphType === 'tech_route'
+    ? PAPER2FIGURE_TECH_ROUTE_MODELS
+    : graphType === 'exp_data'
+      ? PAPER2FIGURE_EXP_DATA_MODELS
+      : PAPER2FIGURE_MODEL_ARCH_MODELS;
+  const modelOptions = withModelOptions(baseModelOptions, model);
 
   // 配色方案下拉框状态
   const [paletteDropdownOpen, setPaletteDropdownOpen] = useState(false);
@@ -177,15 +191,19 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
             >
               {graphType === 'tech_route' ? (
                 <>
-                  <option value="gpt-5.2-medium">gpt-5.2-medium（默认）</option>
-                  <option value="gemini-3-pro-preview">gemini-3-pro</option>
-                  <option value="claude-sonnet-4-5-20250929">claude-sonnet-4</option>
-                  <option value="claude-haiku-4-5-20251001">claude-haiku</option>
+                  {modelOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option === defaultModelForType ? `${option}（默认）` : option}
+                    </option>
+                  ))}
                 </>
               ) : (
                 <>
-                  <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
-                  <option value="gemini-2.5-flash-image-preview">gemini-2.5-flash-image-preview</option>
+                  {modelOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option === defaultModelForType ? `${option}（默认）` : option}
+                    </option>
+                  ))}
                 </>
               )}
             </select>

@@ -7,13 +7,19 @@ import {
   MessageSquare, Eye, RefreshCw, FileText, Image as ImageIcon, Copy, Info
 } from 'lucide-react';
 import { uploadAndSaveFile } from '../services/fileService';
-import { API_KEY } from '../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../config/api';
+import {
+  DEFAULT_PPT2POLISH_GEN_FIG_MODEL,
+  DEFAULT_PPT2POLISH_MODEL,
+  PPT2POLISH_GEN_FIG_MODELS,
+  PPT2POLISH_MODELS,
+  withModelOptions,
+} from '../config/models';
 import { checkQuota, recordUsage } from '../services/quotaService';
 import { verifyLlmConnection } from '../services/llmService';
 import { useAuthStore } from '../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../services/apiSettingsService';
 import QRCodeTooltip from './QRCodeTooltip';
-import { API_URL_OPTIONS } from '../config/api';
 import VersionHistory from './paper2ppt/VersionHistory';
 
 // ============== 类型定义 ==============
@@ -196,10 +202,10 @@ const Ppt2PolishPage = () => {
   const [showBanner, setShowBanner] = useState(true);
 
   // API 配置状态
-  const [llmApiUrl, setLlmApiUrl] = useState('https://api.apiyi.com/v1');
+  const [llmApiUrl, setLlmApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('gpt-5.1');
-  const [genFigModel, setGenFigModel] = useState('gemini-3-pro-image-preview');
+  const [model, setModel] = useState(DEFAULT_PPT2POLISH_MODEL);
+  const [genFigModel, setGenFigModel] = useState(DEFAULT_PPT2POLISH_GEN_FIG_MODEL);
   const [language, setLanguage] = useState<'zh' | 'en'>('en');
   const [resultPath, setResultPath] = useState<string | null>(null);
 
@@ -220,6 +226,9 @@ const Ppt2PolishPage = () => {
 
 转发本文案+截图，联系微信群管理员即可获取免费Key！🎁
 #AI工具 #PPT制作 #科研效率 #开源项目`;
+
+  const modelOptions = withModelOptions(PPT2POLISH_MODELS, model);
+  const genFigModelOptions = withModelOptions(PPT2POLISH_GEN_FIG_MODELS, genFigModel);
 
   const handleCopyShareText = async () => {
     try {
@@ -1380,9 +1389,9 @@ const Ppt2PolishPage = () => {
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
               >
-                <option value="gpt-5.1">gpt-5.1</option>
-                <option value="gpt-5.2">gpt-5.2</option>
-                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                {modelOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
               </select>
               <input
                 type="text"
@@ -1402,7 +1411,9 @@ const Ppt2PolishPage = () => {
               disabled={llmApiUrl === 'http://123.129.219.111:3000/v1'}
               className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+              {genFigModelOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
             </select>
             {llmApiUrl === 'http://123.129.219.111:3000/v1' && (
                <p className="text-[10px] text-gray-500 mt-1">此源仅支持 gemini-3-pro</p>

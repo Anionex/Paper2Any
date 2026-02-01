@@ -21,6 +21,8 @@ import enPaper2graph from './locales/en/paper2graph.json';
 import zhPaper2graph from './locales/zh/paper2graph.json';
 import enPaper2drawio from './locales/en/paper2drawio.json';
 import zhPaper2drawio from './locales/zh/paper2drawio.json';
+import enPaper2rebuttal from './locales/en/paper2rebuttal.json';
+import zhPaper2rebuttal from './locales/zh/paper2rebuttal.json';
 
 i18n
   // 检测用户语言
@@ -46,7 +48,8 @@ i18n
         image2drawio: enImage2drawio,
         pptPolish: enPptPolish,
         paper2graph: enPaper2graph,
-        paper2drawio: enPaper2drawio
+        paper2drawio: enPaper2drawio,
+        paper2rebuttal: enPaper2rebuttal
       },
       zh: {
         common: zhCommon,
@@ -57,13 +60,14 @@ i18n
         image2drawio: zhImage2drawio,
         pptPolish: zhPptPolish,
         paper2graph: zhPaper2graph,
-        paper2drawio: zhPaper2drawio
+        paper2drawio: zhPaper2drawio,
+        paper2rebuttal: zhPaper2rebuttal
       }
     },
     // 默认命名空间
     defaultNS: 'common',
     // 命名空间
-    ns: ['common', 'login', 'paper2ppt', 'pdf2ppt', 'image2ppt', 'image2drawio', 'pptPolish', 'paper2graph', 'paper2drawio']
+    ns: ['common', 'login', 'paper2ppt', 'pdf2ppt', 'image2ppt', 'image2drawio', 'pptPolish', 'paper2graph', 'paper2drawio', 'paper2rebuttal']
   });
 
 export default i18n;

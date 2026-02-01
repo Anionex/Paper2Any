@@ -1,4 +1,5 @@
 import { CheckCircle, Circle, FlaskConical, BarChart3, FileText, GitCompare, TestTube } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface TodoItem {
   id: number;
@@ -31,10 +32,12 @@ const typeColors = {
 };
 
 const TodoList = ({ todos, onToggle }: TodoListProps) => {
+  const { t } = useTranslation(['paper2rebuttal']);
+
   if (!todos || todos.length === 0) {
     return (
       <div className="text-gray-400 text-sm py-4">
-        暂无待办事项
+        {t('paper2rebuttal:todo.noTodos')}
       </div>
     );
   }
@@ -87,7 +90,7 @@ const TodoList = ({ todos, onToggle }: TodoListProps) => {
                 
                 {todo.related_papers && todo.related_papers.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-white/10">
-                    <div className="text-xs text-gray-400 mb-1">相关论文:</div>
+                    <div className="text-xs text-gray-400 mb-1">{t('paper2rebuttal:todo.relatedPapers')}</div>
                     <div className="flex flex-wrap gap-1">
                       {todo.related_papers.map((paper, idx) => (
                         <span

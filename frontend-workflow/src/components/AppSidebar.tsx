@@ -48,6 +48,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       gradient: 'from-teal-500 to-cyan-500'
     },
     {
+      id: 'paper2rebuttal',
+      labelKey: t('app.nav.paper2rebuttal'),
+      tooltipKey: t('app.navTooltip.paper2rebuttal'),
+      icon: MessageSquare,
+      gradient: 'from-rose-500 to-pink-500'
+    },
+    {
       id: 'paper2ppt',
       labelKey: t('app.nav.paper2ppt'),
       tooltipKey: t('app.navTooltip.paper2ppt'),
@@ -95,13 +102,6 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navTooltip.files'),
       icon: FolderOpen,
       gradient: 'from-emerald-500 to-green-500'
-    },
-    {
-      id: 'paper2rebuttal',
-      labelKey: t('app.nav.paper2rebuttal'),
-      tooltipKey: t('app.navTooltip.paper2rebuttal'),
-      icon: MessageSquare,
-      gradient: 'from-rose-500 to-pink-500'
     }
   ];
 

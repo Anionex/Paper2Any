@@ -14,6 +14,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../config/api';
+import {
+  DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL,
+  DEFAULT_IMAGE2DRAWIO_VLM_MODEL,
+  IMAGE2DRAWIO_GEN_FIG_MODELS,
+  withModelOptions,
+} from '../config/models';
 import { useAuthStore } from '../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../services/apiSettingsService';
 import { checkQuota, recordUsage } from '../services/quotaService';
@@ -51,8 +57,9 @@ const Image2DrawioPage = () => {
 
   const [apiUrl, setApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
-  const [genFigModel, setGenFigModel] = useState('gemini-3-pro-image-preview');
-  const [vlmModel, setVlmModel] = useState('qwen-vl-ocr-2025-11-20');
+  const [genFigModel, setGenFigModel] = useState(DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL);
+  const [vlmModel, setVlmModel] = useState(DEFAULT_IMAGE2DRAWIO_VLM_MODEL);
+  const genFigModelOptions = withModelOptions(IMAGE2DRAWIO_GEN_FIG_MODELS, genFigModel);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastLoadedXmlRef = useRef('');
@@ -572,7 +579,9 @@ const Image2DrawioPage = () => {
                   onChange={(e) => setGenFigModel(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                  {genFigModelOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
                 </select>
               </div>
             </div>

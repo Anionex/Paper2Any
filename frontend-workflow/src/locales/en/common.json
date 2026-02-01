@@ -17,7 +17,7 @@
       "ppt2polish": "PPT Polish",
       "knowledge": "Knowledge Base",
       "files": "My History Files",
-      "paper2rebuttal": "Paper Rebuttal"
+      "paper2rebuttal": "Paper2Rebuttal"
     },
     "navTooltip": {
       "paper2figure": "Generate research figures from papers, including model architecture diagrams, technical roadmaps, and experimental data charts in editable PPTX format",

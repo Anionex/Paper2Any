@@ -2,7 +2,8 @@ import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { uploadAndSaveFile } from '../../services/fileService';
-import { API_KEY } from '../../config/api';
+import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
+import { DEFAULT_PAPER2FIGURE_MODELS } from '../../config/models';
 import { checkQuota, recordUsage } from '../../services/quotaService';
 import { verifyLlmConnection } from '../../services/llmService';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
@@ -59,9 +60,9 @@ const Paper2FigurePage = () => {
   const [figureComplex, setFigureComplex] = useState<FigureComplex>('easy');
   const [resolution, setResolution] = useState<'2K' | '4K'>('2K');
 
-  const [llmApiUrl, setLlmApiUrl] = useState(import.meta.env.VITE_DEFAULT_LLM_API_URL || 'https://api.apiyi.com/v1');
+  const [llmApiUrl, setLlmApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('gemini-3-pro-image-preview');
+  const [model, setModel] = useState(DEFAULT_PAPER2FIGURE_MODELS.model_arch);
   // const [model, setModel] = useState('gpt-5.1');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -108,11 +109,8 @@ const Paper2FigurePage = () => {
 
   // 当图类型变化时，自动切换为对应的默认模型
   useEffect(() => {
-    if (graphType === 'tech_route') {
-      setModel('gpt-5.2-medium');
-    } else {
-      setModel('gemini-3-pro-image-preview');
-    }
+    const nextModel = DEFAULT_PAPER2FIGURE_MODELS[graphType] || DEFAULT_PAPER2FIGURE_MODELS.model_arch;
+    setModel(nextModel);
   }, [graphType]);
 
   useEffect(() => {

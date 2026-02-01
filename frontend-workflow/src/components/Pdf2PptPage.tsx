@@ -5,7 +5,8 @@ import {
   AlertCircle, Github, Star, X, FileText, ArrowRight, Key, Globe, ToggleLeft, ToggleRight, Sparkles, Image, MessageSquare, Copy, Info
 } from 'lucide-react';
 import { uploadAndSaveFile } from '../services/fileService';
-import { API_KEY, API_URL_OPTIONS } from '../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../config/api';
+import { DEFAULT_PDF2PPT_GEN_FIG_MODEL, PDF2PPT_GEN_FIG_MODELS, withModelOptions } from '../config/models';
 import { checkQuota, recordUsage } from '../services/quotaService';
 import { verifyLlmConnection } from '../services/llmService';
 import { useAuthStore } from '../stores/authStore';
@@ -103,9 +104,10 @@ const Pdf2PptPage = () => {
   
   // 配置
   const [useAiEdit, setUseAiEdit] = useState(false);
-  const [llmApiUrl, setLlmApiUrl] = useState('https://api.apiyi.com/v1');
+  const [llmApiUrl, setLlmApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
-  const [genFigModel, setGenFigModel] = useState('gemini-3-pro-image-preview');
+  const [genFigModel, setGenFigModel] = useState(DEFAULT_PDF2PPT_GEN_FIG_MODEL);
+  const genFigModelOptions = withModelOptions(PDF2PPT_GEN_FIG_MODELS, genFigModel);
 
   // 从 localStorage 恢复配置
   useEffect(() => {
@@ -554,7 +556,11 @@ const Pdf2PptPage = () => {
                             onChange={e => setGenFigModel(e.target.value)}
                             className="w-full appearance-none rounded-lg border border-white/20 bg-black/40 px-3 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
                           >
-                            <option value="gemini-3-pro-image-preview">Gemini 3 Pro</option>
+                            {genFigModelOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option === 'gemini-3-pro-image-preview' ? 'Gemini 3 Pro' : option}
+                              </option>
+                            ))}
                           </select>
                           <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                             <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
