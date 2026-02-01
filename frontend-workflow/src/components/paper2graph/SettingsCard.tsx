@@ -22,6 +22,8 @@ interface SettingsCardProps {
   setLanguage: (lang: Language) => void;
   style: StyleType;
   setStyle: (style: StyleType) => void;
+  resolution: '2K' | '4K';
+  setResolution: (resolution: '2K' | '4K') => void;
   isLoading: boolean;
   handleSubmit: () => void;
   currentStage: number;
@@ -60,6 +62,8 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
   setLanguage,
   style,
   setStyle,
+  resolution,
+  setResolution,
   isLoading,
   handleSubmit,
   currentStage,
@@ -213,6 +217,17 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
                 >
                   <option value="zh">{t('advanced.language.zh')}</option>
                   <option value="en">{t('advanced.language.en')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('advanced.resolutionLabel')}</label>
+                <select
+                  value={resolution}
+                  onChange={e => setResolution(e.target.value as '2K' | '4K')}
+                  className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-gray-200 outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="2K">{t('advanced.resolution.2k')}</option>
+                  <option value="4K">{t('advanced.resolution.4k')}</option>
                 </select>
               </div>
             </>

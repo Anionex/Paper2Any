@@ -57,6 +57,7 @@ const Paper2FigurePage = () => {
   const [language, setLanguage] = useState<Language>('zh');
   const [style, setStyle] = useState<StyleType>('cartoon');
   const [figureComplex, setFigureComplex] = useState<FigureComplex>('easy');
+  const [resolution, setResolution] = useState<'2K' | '4K'>('2K');
 
   const [llmApiUrl, setLlmApiUrl] = useState(import.meta.env.VITE_DEFAULT_LLM_API_URL || 'https://api.apiyi.com/v1');
   const [apiKey, setApiKey] = useState('');
@@ -177,6 +178,7 @@ const Paper2FigurePage = () => {
           language?: Language;
           style?: StyleType;
           figureComplex?: FigureComplex;
+          resolution?: '2K' | '4K';
           llmApiUrl?: string;
           apiKey?: string;
           model?: string;
@@ -189,6 +191,7 @@ const Paper2FigurePage = () => {
         if (saved.language) setLanguage(saved.language);
         if (saved.style) setStyle(saved.style);
         if (saved.figureComplex) setFigureComplex(saved.figureComplex);
+        if (saved.resolution) setResolution(saved.resolution);
         if (saved.model) setModel(saved.model);
 
         // API settings: prioritize user-specific settings from apiSettingsService
@@ -218,6 +221,7 @@ const Paper2FigurePage = () => {
       language,
       style,
       figureComplex,
+      resolution,
       llmApiUrl,
       apiKey,
       model,
@@ -232,7 +236,7 @@ const Paper2FigurePage = () => {
     } catch (e) {
       console.error('Failed to persist paper2figure config', e);
     }
-  }, [uploadMode, textContent, graphType, language, style, figureComplex, llmApiUrl, apiKey, model, techRoutePalette, user?.id]);
+  }, [uploadMode, textContent, graphType, language, style, figureComplex, resolution, llmApiUrl, apiKey, model, techRoutePalette, user?.id]);
 
   // 新增：管理生成阶段的定时器
   useEffect(() => {
@@ -409,6 +413,7 @@ const Paper2FigurePage = () => {
       formData.append('style', style);
       formData.append('figure_complex', figureComplex);
       formData.append('language', language);
+      formData.append('resolution', resolution);
 
       if (uploadMode === 'file') {
         if (!selectedFile) {
@@ -557,6 +562,7 @@ const Paper2FigurePage = () => {
 
     // 其他图（tech_route / exp_data）：使用用户选择的语言配置
     formData.append('language', language);
+    formData.append('resolution', resolution);
 
     // 技术路线图：传递配色方案
     if (graphType === 'tech_route') {
@@ -772,6 +778,8 @@ const Paper2FigurePage = () => {
               setLanguage={setLanguage}
               style={style}
               setStyle={setStyle}
+              resolution={resolution}
+              setResolution={setResolution}
               isLoading={isLoading}
               handleSubmit={handleSubmit}
               currentStage={currentStage}

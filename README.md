@@ -216,6 +216,29 @@ Paper2Any currently includes the following sub-capabilities:
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![pip](https://img.shields.io/badge/pip-latest-3776AB?style=flat-square&logo=pypi&logoColor=white)
 
+### 🐳 Docker (Recommended)
+
+```bash
+# 1. Clone
+git clone https://github.com/OpenDCAI/Paper2Any.git
+cd Paper2Any
+
+# 2. Backend env (required for your API keys/models)
+cp fastapi_app/.env.example fastapi_app/.env
+
+# 3. Build + run
+docker compose up -d --build
+```
+
+Open:
+- Frontend: http://localhost:3000
+- Backend health: http://localhost:8000/health
+
+Notes:
+- The first build may take a while (system deps + Python deps).
+- Frontend env is baked at build time (compose build args). If you change it, rebuild with `docker compose up -d --build`.
+- Outputs/models are mounted to the host (`./outputs`, `./models`) for persistence.
+
 ### 🐧 Linux Installation
 
 > We recommend using Conda to create an isolated environment (Python 3.11).  

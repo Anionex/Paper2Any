@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { ToolType, KnowledgeFile } from './types';
+import { ToolType, KnowledgeBaseEntry, KnowledgeFile } from './types';
 import { ToolSelector } from './ToolSelector';
 import { ChatTool } from './tools/ChatTool';
 import { SearchTool } from './tools/SearchTool';
@@ -13,11 +13,12 @@ interface RightPanelProps {
   activeTool: ToolType;
   onToolChange: (tool: ToolType) => void;
   files: KnowledgeFile[];
+  knowledgeBases?: KnowledgeBaseEntry[];
   selectedIds: Set<string>;
   onGenerateSuccess: (file: KnowledgeFile) => void;
 }
 
-export const RightPanel = ({ activeTool, onToolChange, files, selectedIds, onGenerateSuccess }: RightPanelProps) => {
+export const RightPanel = ({ activeTool, onToolChange, files, knowledgeBases = [], selectedIds, onGenerateSuccess }: RightPanelProps) => {
   const [isToolsCollapsed, setIsToolsCollapsed] = useState(false);
   const toolLabels: Record<ToolType, string> = {
     chat: '智能问答',
@@ -59,7 +60,7 @@ export const RightPanel = ({ activeTool, onToolChange, files, selectedIds, onGen
           <ChatTool files={files} selectedIds={selectedIds} />
         </div>
         <div className={`absolute inset-0 transition-transform duration-300 ease-in-out ${activeTool === 'search' ? 'translate-x-0' : 'translate-x-full opacity-0 pointer-events-none'}`}>
-          <SearchTool files={files} selectedIds={selectedIds} />
+          <SearchTool files={files} selectedIds={selectedIds} knowledgeBases={knowledgeBases} />
         </div>
         <div className={`absolute inset-0 transition-transform duration-300 ease-in-out ${activeTool === 'ppt' ? 'translate-x-0' : 'translate-x-full opacity-0 pointer-events-none'}`}>
           <PptTool files={files} selectedIds={selectedIds} onGenerateSuccess={onGenerateSuccess} />

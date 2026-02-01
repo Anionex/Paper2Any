@@ -52,6 +52,11 @@
       "realistic": "Photorealistic",
       "lowPoly": "Low poly 3D",
       "lego": "LEGO-style"
+    },
+    "resolutionLabel": "Resolution",
+    "resolution": {
+      "2k": "2K",
+      "4k": "4K"
     }
   },
   "submit": {

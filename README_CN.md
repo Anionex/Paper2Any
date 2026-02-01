@@ -203,6 +203,29 @@ Paper2Any 当前包含以下几个子能力：
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![pip](https://img.shields.io/badge/pip-latest-3776AB?style=flat-square&logo=pypi&logoColor=white)
 
+### 🐳 Docker 快速启动（推荐）
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/OpenDCAI/Paper2Any.git
+cd Paper2Any
+
+# 2. 后端环境变量（用于 API Key/模型配置）
+cp fastapi_app/.env.example fastapi_app/.env
+
+# 3. 构建并启动
+docker compose up -d --build
+```
+
+访问地址：
+- 前端：http://localhost:3000
+- 后端健康检查：http://localhost:8000/health
+
+说明：
+- 首次构建会比较慢（系统依赖 + Python 依赖）。
+- 前端配置在构建期生效（compose build args），修改后需重新 `docker compose up -d --build`。
+- 输出和模型目录会挂载到宿主机（`./outputs`、`./models`），数据不会丢。
+
 ### 🐧 Linux 安装
 
 > 建议使用 Conda 创建隔离环境（推荐 Python 3.11）。  

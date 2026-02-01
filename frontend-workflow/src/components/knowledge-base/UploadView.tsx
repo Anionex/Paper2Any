@@ -1,10 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { UploadCloud, Link as LinkIcon, FileText, X, Loader2, Trash2, CheckCircle } from 'lucide-react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { UploadCloud, Link as LinkIcon, FileText, Loader2, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { supabase } from '../../lib/supabase';
+import { KnowledgeBaseEntry } from './types';
 
 interface UploadViewProps {
   onSuccess: () => void;
+  knowledgeBases?: KnowledgeBaseEntry[];
+  onRefreshKnowledgeBases?: () => Promise<void>;
+  onGoToLibrary?: () => void;
   onUploadFile?: (files: any[], type: any) => void; // Legacy support
   onProcessLinks?: (links: any[]) => void; // Legacy support
   isUploading?: boolean; // Legacy support
@@ -15,12 +19,14 @@ interface FileItem {
   description: string;
 }
 
-export const UploadView = ({ onSuccess }: UploadViewProps) => {
+export const UploadView = ({ onSuccess, knowledgeBases = [], onGoToLibrary }: UploadViewProps) => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'file' | 'link'>('file');
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [urls, setUrls] = useState('');
+
+  const [selectedKbId, setSelectedKbId] = useState<string>('');
   
   // New state for file selection
   const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
@@ -69,8 +75,16 @@ export const UploadView = ({ onSuccess }: UploadViewProps) => {
     });
   };
 
+  const kbOptions = useMemo(() => {
+    return knowledgeBases.slice().sort((a, b) => a.name.localeCompare(b.name));
+  }, [knowledgeBases]);
+
   const startUpload = async () => {
     if (!user || selectedFiles.length === 0) return;
+    if (!selectedKbId) {
+      alert('请先选择知识库');
+      return;
+    }
     setUploading(true);
     setUploadProgress({ current: 0, total: selectedFiles.length });
 
@@ -112,7 +126,8 @@ export const UploadView = ({ onSuccess }: UploadViewProps) => {
               file_size: data.file_size,
               storage_path: data.static_url,
               is_embedded: false,
-              description: item.description
+              description: item.description,
+              kb_id: selectedKbId
             });
 
             if (error) throw error;
@@ -175,6 +190,38 @@ export const UploadView = ({ onSuccess }: UploadViewProps) => {
 
       {activeTab === 'file' ? (
         <div className="flex flex-col gap-6">
+            {/* Knowledge Base Selector */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-sm font-medium text-white">知识库分类</div>
+                  <div className="text-xs text-gray-500">请先创建知识库，再上传文件</div>
+                </div>
+                {knowledgeBases.length === 0 && (
+                  <button
+                    onClick={onGoToLibrary}
+                    className="text-xs px-3 py-1 rounded-md bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                  >
+                    去创建知识库
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">选择知识库</label>
+                  <select
+                    value={selectedKbId}
+                    onChange={(e) => setSelectedKbId(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-purple-500/50"
+                  >
+                    <option value="" disabled>请选择知识库</option>
+                    {kbOptions.map(kb => (
+                      <option key={kb.id} value={kb.id}>{kb.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
             {/* Drop Zone */}
             <div
             className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center transition-all ${
@@ -263,9 +310,9 @@ export const UploadView = ({ onSuccess }: UploadViewProps) => {
                     <div className="flex justify-end">
                         <button
                             onClick={startUpload}
-                            disabled={uploading}
+                            disabled={uploading || !selectedKbId}
                             className={`px-8 py-3 bg-purple-600 text-white rounded-xl font-medium transition-all flex items-center gap-2 ${
-                                uploading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-purple-500 shadow-lg shadow-purple-900/20'
+                                uploading || !selectedKbId ? 'opacity-70 cursor-not-allowed' : 'hover:bg-purple-500 shadow-lg shadow-purple-900/20'
                             }`}
                         >
                             {uploading ? (

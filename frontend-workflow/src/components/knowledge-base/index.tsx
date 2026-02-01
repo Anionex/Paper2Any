@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MaterialType, KnowledgeFile, SectionType, ToolType } from './types';
+import { MaterialType, KnowledgeBaseEntry, KnowledgeFile, SectionType, ToolType } from './types';
 import { Sidebar } from './Sidebar';
 import { LibraryView } from './LibraryView';
 import { UploadView } from './UploadView';
@@ -24,6 +24,8 @@ const KnowledgeBase = () => {
 
   // Data
   const [files, setFiles] = useState<KnowledgeFile[]>([]);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseEntry[]>([]);
+  const [kbLoading, setKbLoading] = useState(false);
   const [outputFiles, setOutputFiles] = useState<KnowledgeFile[]>([]);
   const [outputsLoaded, setOutputsLoaded] = useState(false);
   const [mindmapDraft, setMindmapDraft] = useState('');
@@ -37,6 +39,7 @@ const KnowledgeBase = () => {
   useEffect(() => {
     if (user) {
       fetchLibraryFiles();
+      fetchKnowledgeBases();
     }
   }, [user]);
 
@@ -88,9 +91,11 @@ const KnowledgeBase = () => {
         name: row.file_name,
         type: mapFileType(row.file_type),
         size: formatSize(row.file_size),
+        sizeBytes: row.file_size,
         uploadTime: new Date(row.created_at).toLocaleString(),
         isEmbedded: row.is_embedded,
         kbFileId: row.kb_file_id,
+        kbId: row.kb_id ?? null,
         desc: row.description,
         url: row.storage_path.includes('/outputs') ? row.storage_path : `/outputs/kb_data/${user?.email}/${row.file_name}`
       }));
@@ -98,6 +103,32 @@ const KnowledgeBase = () => {
       setFiles(mappedFiles);
     } catch (err) {
       console.error('Failed to fetch files:', err);
+    }
+  };
+
+  const fetchKnowledgeBases = async () => {
+    if (!user?.id) return;
+    setKbLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('knowledge_bases')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      const mapped: KnowledgeBaseEntry[] = (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+      setKnowledgeBases(mapped);
+    } catch (err) {
+      console.error('Failed to fetch knowledge bases:', err);
+    } finally {
+      setKbLoading(false);
     }
   };
 
@@ -325,10 +356,13 @@ const KnowledgeBase = () => {
           {activeSection === 'library' && (
             <LibraryView
               files={files}
+              knowledgeBases={knowledgeBases}
+              kbLoading={kbLoading}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
               onGoToUpload={() => setActiveSection('upload')}
               onRefresh={fetchLibraryFiles}
+              onRefreshKnowledgeBases={fetchKnowledgeBases}
               onPreview={(file) => {
                 setPreviewFile(file);
                 setPreviewSource('library');
@@ -340,6 +374,9 @@ const KnowledgeBase = () => {
           {activeSection === 'upload' && (
             <UploadView 
               onSuccess={handleUploadSuccess}
+              knowledgeBases={knowledgeBases}
+              onRefreshKnowledgeBases={fetchKnowledgeBases}
+              onGoToLibrary={() => setActiveSection('library')}
             />
           )}
           {activeSection === 'output' && (
@@ -364,6 +401,7 @@ const KnowledgeBase = () => {
         onToolChange={setActiveTool}
         files={files}
         selectedIds={selectedIds}
+        knowledgeBases={knowledgeBases}
         onGenerateSuccess={handleGenerateSuccess}
       />
 
@@ -435,6 +473,30 @@ const KnowledgeBase = () => {
                   </div>
                 </div>
 
+                {previewFile.type === 'image' && previewFile.url && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+                      <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
+                      图片预览
+                    </h4>
+                    <div className="bg-white/5 rounded-xl overflow-hidden border border-white/10">
+                      <img
+                        src={previewFile.url}
+                        alt={previewFile.name}
+                        className="w-full h-auto object-contain max-h-[500px]"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div class="p-8 text-center"><p class="text-sm text-red-400">图片加载失败</p></div>';
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {previewFile.type === 'audio' && previewFile.url && (
                   <div>
                     <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
@@ -502,11 +564,46 @@ const KnowledgeBase = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="bg-white/5 rounded-xl p-8 text-center border border-dashed border-white/10">
-                        <FileText size={40} className="text-gray-600 mx-auto mb-3" />
-                        <p className="text-sm text-gray-500">文档预览暂不支持，请下载后查看</p>
-                      </div>
+                      <>
+                        {previewFile.name.toLowerCase().endsWith('.pdf') && previewFile.url ? (
+                          <div className="bg-white/5 rounded-xl overflow-hidden border border-white/10">
+                            <iframe
+                              src={previewFile.url}
+                              className="w-full h-[600px]"
+                              title="PDF Preview"
+                            />
+                          </div>
+                        ) : (
+                          <div className="bg-white/5 rounded-xl p-8 text-center border border-dashed border-white/10">
+                            <FileText size={40} className="text-gray-600 mx-auto mb-3" />
+                            <p className="text-sm text-gray-500">
+                              {previewFile.name.toLowerCase().match(/\.(docx?|pptx?)$/)
+                                ? 'Office文档预览暂不支持，请点击下方"打开文件"按钮查看'
+                                : '文档预览暂不支持，请下载后查看'}
+                            </p>
+                          </div>
+                        )}
+                      </>
                     )}
+                  </div>
+                )}
+
+                {previewFile.type === 'video' && previewFile.url && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+                      <div className="w-1 h-4 bg-pink-500 rounded-full"></div>
+                      视频预览
+                    </h4>
+                    <div className="bg-white/5 rounded-xl overflow-hidden border border-white/10">
+                      <video
+                        className="w-full"
+                        controls
+                        preload="metadata"
+                        src={previewFile.url}
+                      >
+                        您的浏览器不支持视频播放
+                      </video>
+                    </div>
                   </div>
                 )}
               </div>

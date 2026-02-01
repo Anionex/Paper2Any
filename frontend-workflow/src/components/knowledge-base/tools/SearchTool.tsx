@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Search, Loader2, FileText, Image as ImageIcon, Video as VideoIcon, ExternalLink } from 'lucide-react';
+import { Search, Loader2, FileText, Image as ImageIcon, Video as VideoIcon, ExternalLink, Folder } from 'lucide-react';
 import { API_KEY, API_URL_OPTIONS } from '../../../config/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { getApiSettings } from '../../../services/apiSettingsService';
+import { KnowledgeBaseEntry } from '../types';
 
 interface SearchResult {
   score: number;
@@ -24,15 +25,17 @@ interface SearchResult {
 interface SearchToolProps {
   files?: any[];
   selectedIds?: Set<string>;
+  knowledgeBases?: KnowledgeBaseEntry[];
 }
 
-export const SearchTool = ({ files = [], selectedIds = new Set() }: SearchToolProps) => {
+export const SearchTool = ({ files = [], selectedIds = new Set(), knowledgeBases = [] }: SearchToolProps) => {
   const { user } = useAuthStore();
   const [query, setQuery] = useState('');
   const [topK, setTopK] = useState(5);
   const [apiKey, setApiKey] = useState('');
   const [apiUrl, setApiUrl] = useState('https://api.apiyi.com/v1/embeddings');
   const [modelName, setModelName] = useState('text-embedding-3-small');
+  const [kbFilter, setKbFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [error, setError] = useState('');
@@ -59,13 +62,27 @@ export const SearchTool = ({ files = [], selectedIds = new Set() }: SearchToolPr
     setError('');
     setResults([]);
     try {
-      const selectedFileIds = files
-        .filter((f: any) => selectedIds.has(f.id))
+      let candidates = files;
+      if (kbFilter === 'uncategorized') {
+        candidates = candidates.filter((f: any) => !f.kbId);
+      } else if (kbFilter !== 'all') {
+        candidates = candidates.filter((f: any) => f.kbId === kbFilter);
+      }
+
+      if (selectedIds.size > 0) {
+        candidates = candidates.filter((f: any) => selectedIds.has(f.id));
+      }
+
+      const selectedFileIds = candidates
         .map((f: any) => f.kbFileId)
         .filter(Boolean);
 
-      if (selectedIds.size > 0 && selectedFileIds.length === 0) {
-        setError('所选文件尚未入库（kb_file_id 为空），请先向量入库后再检索。');
+      if ((selectedIds.size > 0 || kbFilter !== 'all') && selectedFileIds.length === 0) {
+        if (selectedIds.size > 0) {
+          setError('所选文件尚未入库（kb_file_id 为空），请先向量入库后再检索。');
+        } else {
+          setError('该知识库暂无已入库文件，请先向量入库后再检索。');
+        }
         setLoading(false);
         return;
       }
@@ -143,6 +160,24 @@ export const SearchTool = ({ files = [], selectedIds = new Set() }: SearchToolPr
               className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-blue-500"
             />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+            <Folder size={14} className="text-blue-300" />
+            知识库过滤
+          </label>
+          <select
+            value={kbFilter}
+            onChange={e => setKbFilter(e.target.value)}
+            className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-blue-500"
+          >
+            <option value="all">全部知识库</option>
+            <option value="uncategorized">未分类</option>
+            {knowledgeBases.map(kb => (
+              <option key={kb.id} value={kb.id}>{kb.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-2">

@@ -52,6 +52,11 @@
       "realistic": "写实",
       "lowPoly": "低多边形",
       "lego": "乐高风"
+    },
+    "resolutionLabel": "分辨率",
+    "resolution": {
+      "2k": "2K",
+      "4k": "4K"
     }
   },
   "submit": {

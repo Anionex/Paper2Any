@@ -47,6 +47,7 @@ DROP VIEW IF EXISTS public.points_balance CASCADE;
 
 DROP TABLE IF EXISTS public.usage_records CASCADE;
 DROP TABLE IF EXISTS public.user_files CASCADE;
+DROP TABLE IF EXISTS public.knowledge_bases CASCADE;
 DROP TABLE IF EXISTS public.knowledge_base_files CASCADE;
 DROP TABLE IF EXISTS public.referrals CASCADE;
 DROP TABLE IF EXISTS public.points_ledger CASCADE;
@@ -66,4 +67,3 @@ DELETE FROM storage.buckets WHERE id = 'user-files';
 -- Cleanup Complete!
 -- Now you can run 01_init_schema.sql to recreate everything fresh.
 -- ==============================================================================
-

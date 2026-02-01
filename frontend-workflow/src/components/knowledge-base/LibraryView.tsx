@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { KnowledgeFile, ToolType } from './types';
-import { FileText, Image, Video, Link as LinkIcon, Trash2, Search, Filter, X, Eye, Database, Loader2, CheckCircle, AlertCircle, Headphones } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { KnowledgeBaseEntry, KnowledgeFile, ToolType } from './types';
+import { FileText, Image, Video, Link as LinkIcon, Trash2, Search, Filter, X, Database, Loader2, AlertCircle, Folder, Download, PencilLine, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { API_KEY, API_URL_OPTIONS } from '../../config/api';
 import { useAuthStore } from '../../stores/authStore';
@@ -8,10 +8,13 @@ import { getApiSettings } from '../../services/apiSettingsService';
 
 interface LibraryViewProps {
   files: KnowledgeFile[];
+  knowledgeBases: KnowledgeBaseEntry[];
+  kbLoading?: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onGoToUpload: () => void;
   onRefresh: () => Promise<void>;
+  onRefreshKnowledgeBases?: () => Promise<void>;
   onPreview: (file: KnowledgeFile) => void;
   onDelete: (file: KnowledgeFile) => void;
   activeTool: ToolType;
@@ -46,9 +49,20 @@ const TOOL_HINTS: Record<ToolType, string> = {
   video: '视频生成支持文档、图片和视频素材。',
 };
 
-export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, onRefresh, onPreview, onDelete, activeTool }: LibraryViewProps) => {
+export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selectedIds, onToggleSelect, onGoToUpload, onRefresh, onRefreshKnowledgeBases, onPreview, onDelete, activeTool }: LibraryViewProps) => {
   const { user } = useAuthStore();
   const [filterType, setFilterType] = useState<'all' | 'embedded'>('all');
+  const [activeKbId, setActiveKbId] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [kbModalOpen, setKbModalOpen] = useState(false);
+  const [kbModalMode, setKbModalMode] = useState<'create' | 'rename'>('create');
+  const [kbEditing, setKbEditing] = useState<KnowledgeBaseEntry | null>(null);
+  const [kbNameInput, setKbNameInput] = useState('');
+  const [kbDescInput, setKbDescInput] = useState('');
+  const [kbSaving, setKbSaving] = useState(false);
+  const [kbDeleteTarget, setKbDeleteTarget] = useState<KnowledgeBaseEntry | null>(null);
+  const [kbDeleteFiles, setKbDeleteFiles] = useState(false);
+  const [kbActionLoading, setKbActionLoading] = useState(false);
   const [isEmbedding, setIsEmbedding] = useState(false);
   const [showManifest, setShowManifest] = useState(false);
   const [manifestLoading, setManifestLoading] = useState(false);
@@ -67,6 +81,14 @@ export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, 
     }
     const supportedTypes = TOOL_SUPPORTED_TYPES[activeTool];
     return supportedTypes.includes(file.type);
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
   // Embedding Config Modal
@@ -93,6 +115,23 @@ export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, 
       }));
     }
   }, [user?.id]);
+
+  const kbStats = useMemo(() => {
+    const stats: Record<string, { count: number; size: number }> = {};
+    files.forEach(file => {
+      const key = file.kbId || 'uncategorized';
+      if (!stats[key]) {
+        stats[key] = { count: 0, size: 0 };
+      }
+      stats[key].count += 1;
+      stats[key].size += file.sizeBytes || 0;
+    });
+    return stats;
+  }, [files]);
+
+  const sortedKnowledgeBases = useMemo(() => {
+    return knowledgeBases.slice().sort((a, b) => a.name.localeCompare(b.name));
+  }, [knowledgeBases]);
 
   const handleDelete = async (file: KnowledgeFile, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -129,6 +168,175 @@ export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, 
     } catch (err) {
       console.error('Bulk delete error:', err);
       alert('Delete failed');
+    }
+  };
+
+  const openCreateKb = () => {
+    setKbModalMode('create');
+    setKbEditing(null);
+    setKbNameInput('');
+    setKbDescInput('');
+    setKbModalOpen(true);
+  };
+
+  const openRenameKb = (kb: KnowledgeBaseEntry) => {
+    setKbModalMode('rename');
+    setKbEditing(kb);
+    setKbNameInput(kb.name || '');
+    setKbDescInput(kb.description || '');
+    setKbModalOpen(true);
+  };
+
+  const saveKnowledgeBase = async () => {
+    if (!user?.id || !kbNameInput.trim()) return;
+    setKbSaving(true);
+    try {
+      if (kbModalMode === 'create') {
+        const { error } = await supabase
+          .from('knowledge_bases')
+          .insert({
+            user_id: user.id,
+            name: kbNameInput.trim(),
+            description: kbDescInput.trim() || null
+          });
+        if (error) throw error;
+      } else if (kbEditing?.id) {
+        const { error } = await supabase
+          .from('knowledge_bases')
+          .update({
+            name: kbNameInput.trim(),
+            description: kbDescInput.trim() || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', kbEditing.id);
+        if (error) throw error;
+      }
+
+      if (onRefreshKnowledgeBases) {
+        await onRefreshKnowledgeBases();
+      }
+      setKbModalOpen(false);
+    } catch (err) {
+      console.error('Save knowledge base failed:', err);
+      alert('保存知识库失败');
+    } finally {
+      setKbSaving(false);
+    }
+  };
+
+  const confirmDeleteKb = (kb: KnowledgeBaseEntry) => {
+    setKbDeleteTarget(kb);
+    setKbDeleteFiles(false);
+  };
+
+  const deleteKnowledgeBase = async () => {
+    if (!user?.id || !kbDeleteTarget) return;
+    setKbActionLoading(true);
+    try {
+      const targetId = kbDeleteTarget.id;
+      const filesInKb = files.filter(f => f.kbId === targetId);
+
+      if (kbDeleteFiles && filesInKb.length > 0) {
+        const storagePaths = filesInKb.map(f => f.url).filter(Boolean);
+        if (storagePaths.length > 0) {
+          await fetch('/api/v1/kb/delete-batch', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': API_KEY
+            },
+            body: JSON.stringify({ storage_paths: storagePaths })
+          });
+        }
+
+        const { error: deleteFilesError } = await supabase
+          .from('knowledge_base_files')
+          .delete()
+          .in('id', filesInKb.map(f => f.id));
+        if (deleteFilesError) throw deleteFilesError;
+      } else if (filesInKb.length > 0) {
+        const { error: moveError } = await supabase
+          .from('knowledge_base_files')
+          .update({ kb_id: null })
+          .in('id', filesInKb.map(f => f.id));
+        if (moveError) throw moveError;
+      }
+
+      const { error } = await supabase
+        .from('knowledge_bases')
+        .delete()
+        .eq('id', targetId);
+      if (error) throw error;
+
+      if (onRefreshKnowledgeBases) {
+        await onRefreshKnowledgeBases();
+      }
+      await onRefresh();
+      if (activeKbId === targetId) {
+        setActiveKbId('all');
+      }
+    } catch (err) {
+      console.error('Delete knowledge base failed:', err);
+      alert('删除知识库失败');
+    } finally {
+      setKbActionLoading(false);
+      setKbDeleteTarget(null);
+    }
+  };
+
+  const moveSelectedToKb = async (kbId: string | null) => {
+    if (selectedIds.size === 0) return;
+    setKbActionLoading(true);
+    try {
+      const { error } = await supabase
+        .from('knowledge_base_files')
+        .update({ kb_id: kbId })
+        .in('id', Array.from(selectedIds));
+      if (error) throw error;
+      await onRefresh();
+    } catch (err) {
+      console.error('Move files failed:', err);
+      alert('移动文件失败');
+    } finally {
+      setKbActionLoading(false);
+    }
+  };
+
+  const exportKnowledgeBase = async (kb: KnowledgeBaseEntry) => {
+    const filesInKb = files.filter(f => f.kbId === kb.id);
+    if (filesInKb.length === 0) {
+      alert('该知识库暂无文件可导出');
+      return;
+    }
+    setKbActionLoading(true);
+    try {
+      const res = await fetch('/api/v1/kb/export-zip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY
+        },
+        body: JSON.stringify({
+          files: filesInKb.map(f => f.url),
+          email: user?.email || null,
+          kb_name: kb.name,
+          include_root_dir: true
+        })
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = await res.json();
+      if (data?.zip_path) {
+        window.open(data.zip_path, '_blank');
+      } else {
+        alert('导出完成，但未返回下载链接');
+      }
+    } catch (err) {
+      console.error('Export KB failed:', err);
+      alert('导出失败');
+    } finally {
+      setKbActionLoading(false);
     }
   };
 
@@ -224,7 +432,14 @@ export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, 
   };
 
   const filteredFiles = files.filter(file => {
-      if (filterType === 'embedded') return file.isEmbedded;
+      if (filterType === 'embedded' && !file.isEmbedded) return false;
+      if (activeKbId === 'uncategorized' && file.kbId) return false;
+      if (activeKbId !== 'all' && activeKbId !== 'uncategorized' && file.kbId !== activeKbId) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const hay = `${file.name || ''} ${file.desc || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
   });
 
@@ -262,105 +477,256 @@ export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, 
           </button>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4 flex-1">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search files..." 
-              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-200 outline-none focus:border-purple-500/50"
-            />
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+        {/* Knowledge Bases Panel */}
+        <div className="w-full lg:w-[320px] flex-shrink-0 bg-white/5 border border-white/10 rounded-xl p-4 h-fit lg:h-full overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm font-medium text-white flex items-center gap-2">
+              <Folder size={16} className="text-purple-400" />
+              知识库分类
+            </div>
+            <button
+              onClick={openCreateKb}
+              className="text-xs px-2 py-1 rounded-md bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 flex items-center gap-1"
+            >
+              <Plus size={12} /> 新建
+            </button>
           </div>
-          <button className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg border border-white/10">
-            <Filter size={18} />
-          </button>
-          <button
-            onClick={openManifest}
-            className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg border border-white/10"
-            title="结构化清单"
-          >
-            <Database size={18} />
-          </button>
-        </div>
-        <button 
-          onClick={onGoToUpload}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          + Upload
-        </button>
-      </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-20 flex-1">
-        {filteredFiles.map(file => {
-          const isSupported = isFileSupported(file);
-          return (
-          <div
-            key={file.id}
-            onClick={() => onPreview(file)}
-            className={`group relative p-4 rounded-xl border transition-all ${
-              !isSupported
-                ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5'
-                : selectedIds.has(file.id)
-                  ? 'bg-purple-500/10 border-purple-500/50 cursor-pointer'
-                  : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10 cursor-pointer'
-            }`}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2 bg-black/20 rounded-lg relative">
-                {getIcon(file.type)}
-                {file.isEmbedded && (
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#0a0a1a]" title="Embedded"></div>
-                )}
-                {!isSupported && (
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 rounded-full border border-[#0a0a1a] flex items-center justify-center" title="当前工具不支持此文件类型">
-                      <X size={10} className="text-white" />
-                    </div>
-                )}
+          <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+            <button
+              onClick={() => setActiveKbId('all')}
+              className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${
+                activeKbId === 'all'
+                  ? 'border-purple-500/50 bg-purple-500/10 text-white'
+                  : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">全部文件</span>
+                <span className="text-xs text-gray-500">{files.length}</span>
               </div>
+            </button>
+
+            <button
+              onClick={() => setActiveKbId('uncategorized')}
+              className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${
+                activeKbId === 'uncategorized'
+                  ? 'border-purple-500/50 bg-purple-500/10 text-white'
+                  : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">未分类</span>
+                <span className="text-xs text-gray-500">{kbStats.uncategorized?.count || 0}</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">大小：{formatBytes(kbStats.uncategorized?.size || 0)}</div>
+            </button>
+
+            {kbLoading && (
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <Loader2 className="animate-spin" size={12} /> 正在加载知识库...
+              </div>
+            )}
+
+            {sortedKnowledgeBases.map(kb => {
+              const stats = kbStats[kb.id] || { count: 0, size: 0 };
+              return (
+                <div
+                  key={kb.id}
+                  className={`w-full px-3 py-2 rounded-lg border transition-all ${
+                    activeKbId === kb.id
+                      ? 'border-purple-500/50 bg-purple-500/10 text-white'
+                      : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
+                  }`}
+                >
+                  <button onClick={() => setActiveKbId(kb.id)} className="w-full text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium truncate">{kb.name}</span>
+                      <span className="text-xs text-gray-500">{stats.count}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1 flex items-center justify-between">
+                      <span>大小：{formatBytes(stats.size)}</span>
+                      <span>{new Date(kb.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      onClick={() => exportKnowledgeBase(kb)}
+                      className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="导出 ZIP"
+                      disabled={kbActionLoading}
+                    >
+                      <Download size={12} /> 导出
+                    </button>
+                    <button
+                      onClick={() => openRenameKb(kb)}
+                      className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="重命名"
+                      disabled={kbActionLoading}
+                    >
+                      <PencilLine size={12} /> 重命名
+                    </button>
+                    <button
+                      onClick={() => confirmDeleteKb(kb)}
+                      className="text-xs px-2 py-1 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-300 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="删除知识库"
+                      disabled={kbActionLoading}
+                    >
+                      <Trash2 size={12} /> 删除
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Files Panel */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Search files..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-200 outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <button className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg border border-white/10">
+                <Filter size={18} />
+              </button>
+              <button
+                onClick={openManifest}
+                className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg border border-white/10"
+                title="结构化清单"
+              >
+                <Database size={18} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedIds.size > 0 && (
+                <>
+                  <div className="relative">
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') return;
+                        if (val === 'uncategorized') {
+                          moveSelectedToKb(null);
+                        } else {
+                          moveSelectedToKb(val);
+                        }
+                        e.target.value = '';
+                      }}
+                      className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-gray-200 outline-none"
+                      defaultValue=""
+                      disabled={kbActionLoading}
+                    >
+                      <option value="" disabled>批量移动到...</option>
+                      <option value="uncategorized">未分类</option>
+                      {sortedKnowledgeBases.map(kb => (
+                        <option key={kb.id} value={kb.id}>{kb.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleBulkDelete}
+                    className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={kbActionLoading}
+                  >
+                    批量删除
+                  </button>
+                </>
+              )}
+              <button 
+                onClick={onGoToUpload}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                + Upload
+              </button>
+            </div>
+          </div>
+
+          {/* Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-20 flex-1">
+            {filteredFiles.map(file => {
+              const isSupported = isFileSupported(file);
+              return (
               <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isSupported) {
-                    onToggleSelect(file.id);
-                  }
-                }}
-                className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                key={file.id}
+                onClick={() => onPreview(file)}
+                className={`group relative p-4 rounded-xl border transition-all ${
                   !isSupported
-                    ? 'cursor-not-allowed border-white/10 bg-white/5'
+                    ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5'
                     : selectedIds.has(file.id)
-                      ? 'bg-purple-500 border-purple-500 cursor-pointer'
-                      : 'border-white/20 cursor-pointer hover:border-purple-400'
+                      ? 'bg-purple-500/10 border-purple-500/50 cursor-pointer'
+                      : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10 cursor-pointer'
                 }`}
               >
-                {selectedIds.has(file.id) && <div className="w-2 h-2 bg-white rounded-full" />}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="p-2 bg-black/20 rounded-lg relative">
+                    {getIcon(file.type)}
+                    {file.isEmbedded && (
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#0a0a1a]" title="Embedded"></div>
+                    )}
+                    {!isSupported && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 rounded-full border border-[#0a0a1a] flex items-center justify-center" title="当前工具不支持此文件类型">
+                          <X size={10} className="text-white" />
+                        </div>
+                    )}
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isSupported) {
+                        onToggleSelect(file.id);
+                      }
+                    }}
+                    className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                      !isSupported
+                        ? 'cursor-not-allowed border-white/10 bg-white/5'
+                        : selectedIds.has(file.id)
+                          ? 'bg-purple-500 border-purple-500 cursor-pointer'
+                          : 'border-white/20 cursor-pointer hover:border-purple-400'
+                    }`}
+                  >
+                    {selectedIds.has(file.id) && <div className="w-2 h-2 bg-white rounded-full" />}
+                  </div>
+                </div>
+
+                <h3 className="text-sm font-medium text-gray-200 truncate mb-1" title={file.name}>
+                  {file.name}
+                </h3>
+                
+                <div className="text-xs text-gray-500 truncate">
+                  {file.kbId ? (knowledgeBases.find(kb => kb.id === file.kbId)?.name || '未命名知识库') : '未分类'}
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
+                  <span>{file.size}</span>
+                  <span>{file.uploadTime.split(' ')[0]}</span>
+                </div>
+
+                {/* Hover Actions */}
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                   <button
+                     onClick={(e) => handleDelete(file, e)}
+                     className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white shadow-lg"
+                     title="Delete file"
+                   >
+                     <Trash2 size={14} />
+                   </button>
+                </div>
               </div>
-            </div>
-
-            <h3 className="text-sm font-medium text-gray-200 truncate mb-1" title={file.name}>
-              {file.name}
-            </h3>
-            
-            <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-              <span>{file.size}</span>
-              <span>{file.uploadTime.split(' ')[0]}</span>
-            </div>
-
-            {/* Hover Actions */}
-            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-               <button
-                 onClick={(e) => handleDelete(file, e)}
-                 className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white shadow-lg"
-                 title="Delete file"
-               >
-                 <Trash2 size={14} />
-               </button>
-            </div>
+              );
+            })}
           </div>
-          );
-        })}
+        </div>
       </div>
       
       {/* Bottom Bar for Vector Embedding */}
@@ -469,6 +835,88 @@ export const LibraryView = ({ files, selectedIds, onToggleSelect, onGoToUpload, 
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* Knowledge Base Create/Rename Modal */}
+      {kbModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setKbModalOpen(false)}>
+          <div className="bg-[#0a0a1a] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-medium text-white mb-4">
+              {kbModalMode === 'create' ? '创建知识库' : '重命名知识库'}
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">名称</label>
+                <input
+                  type="text"
+                  value={kbNameInput}
+                  onChange={(e) => setKbNameInput(e.target.value)}
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">描述</label>
+                <input
+                  type="text"
+                  value={kbDescInput}
+                  onChange={(e) => setKbDescInput(e.target.value)}
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-purple-500/50"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setKbModalOpen(false)}
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={saveKnowledgeBase}
+                disabled={kbSaving || !kbNameInput.trim()}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {kbSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Knowledge Base Delete Modal */}
+      {kbDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setKbDeleteTarget(null)}>
+          <div className="bg-[#0a0a1a] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-medium text-white mb-3">删除知识库</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              确认删除 <span className="text-white font-medium">{kbDeleteTarget.name}</span> 吗？
+            </p>
+            <label className="flex items-center gap-2 text-sm text-gray-300 mb-4">
+              <input
+                type="checkbox"
+                checked={kbDeleteFiles}
+                onChange={(e) => setKbDeleteFiles(e.target.checked)}
+                className="accent-purple-500"
+              />
+              同时删除该知识库下的文件
+            </label>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setKbDeleteTarget(null)}
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={deleteKnowledgeBase}
+                disabled={kbActionLoading}
+                className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {kbActionLoading ? '处理中...' : '删除'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

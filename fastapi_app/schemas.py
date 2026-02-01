@@ -75,6 +75,9 @@ class Paper2FigureRequest(BaseModel):
     figure_complex: str = "easy"
     # 绘图难度：仅在 graph_type == "model_arch" 时生效，前端透传 easy/mid/hard
 
+    resolution: str = "2K"
+    # 图像分辨率：2K 或 4K，影响生成图像的质量和生成时间
+
     chat_api_key: str = "fill the key"
     # chat_api_url 对应的 API KEY；用于访问后端 LLM 服务
 

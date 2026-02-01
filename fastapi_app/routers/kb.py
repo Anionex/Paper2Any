@@ -1,7 +1,9 @@
 import os
+import re
 import shutil
 import subprocess
 import time
+import zipfile
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Body
 from typing import Optional, List, Dict, Any
@@ -31,6 +33,21 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg", ".mp4"}
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 DOC_EXTENSIONS = {".pdf", ".docx", ".doc", ".pptx", ".ppt"}
+
+
+def _safe_zip_stem(name: str) -> str:
+    if not name:
+        return "knowledge_base"
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", name.strip())
+    return cleaned.strip("_") or "knowledge_base"
+
+
+def _ensure_under_outputs(path: Path) -> None:
+    outputs_root = (get_project_root() / "outputs").resolve()
+    try:
+        path.resolve().relative_to(outputs_root)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file path")
 
 
 def _resolve_local_path(path_or_url: str) -> Path:
@@ -176,6 +193,98 @@ async def delete_kb_file(
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/delete-batch")
+async def delete_kb_files_batch(
+    storage_paths: List[str] = Body(..., embed=True),
+):
+    """
+    Delete multiple files from physical storage.
+    """
+    if not storage_paths:
+        raise HTTPException(status_code=400, detail="No storage paths provided")
+
+    deleted = 0
+    skipped: List[str] = []
+    errors: List[str] = []
+
+    for raw in storage_paths:
+        try:
+            local_path = Path(_from_outputs_url(raw)).resolve()
+            _ensure_under_outputs(local_path)
+            if local_path.exists() and local_path.is_file():
+                local_path.unlink()
+                deleted += 1
+            else:
+                skipped.append(raw)
+        except Exception as e:
+            errors.append(f"{raw}: {e}")
+
+    return {
+        "success": True,
+        "deleted": deleted,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
+@router.post("/export-zip")
+async def export_kb_zip(
+    files: List[str] = Body(..., embed=True),
+    email: Optional[str] = Body(None, embed=True),
+    kb_name: Optional[str] = Body(None, embed=True),
+    include_root_dir: bool = Body(True, embed=True),
+):
+    """
+    Export a list of KB files into a zip archive.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    project_root = get_project_root()
+    outputs_root = project_root / "outputs"
+    export_root = outputs_root / "kb_exports" / (email or "default")
+    export_root.mkdir(parents=True, exist_ok=True)
+
+    ts = int(time.time())
+    zip_stem = _safe_zip_stem(kb_name or "knowledge_base")
+    zip_path = export_root / f"{zip_stem}_{ts}.zip"
+
+    used_names: Dict[str, int] = {}
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for raw in files:
+            try:
+                if not raw:
+                    continue
+                local_path = Path(_from_outputs_url(raw)).resolve()
+                _ensure_under_outputs(local_path)
+                if not local_path.exists() or not local_path.is_file():
+                    continue
+                base_name = local_path.name
+                if base_name in used_names:
+                    used_names[base_name] += 1
+                    stem = local_path.stem
+                    suffix = local_path.suffix
+                    base_name = f"{stem}_{used_names[base_name]}{suffix}"
+                else:
+                    used_names[base_name] = 0
+
+                arcname = base_name
+                if include_root_dir:
+                    arcname = f"{zip_stem}/{base_name}"
+                zf.write(local_path, arcname)
+            except Exception:
+                continue
+
+    if not zip_path.exists():
+        raise HTTPException(status_code=500, detail="Failed to create zip")
+
+    return {
+        "success": True,
+        "zip_path": _to_outputs_url(str(zip_path)),
+        "count": len(files),
+    }
 
 @router.post("/chat")
 async def chat_with_kb(

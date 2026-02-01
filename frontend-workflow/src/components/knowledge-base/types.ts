@@ -8,9 +8,20 @@ export interface KnowledgeFile {
   file?: File;
   desc?: string;
   size?: string;
+  sizeBytes?: number;
   uploadTime: string;
   isEmbedded?: boolean;
   kbFileId?: string;
+  kbId?: string | null;
+  kbName?: string | null;
+}
+
+export interface KnowledgeBaseEntry {
+  id: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ChatMessage {

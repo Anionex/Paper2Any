@@ -174,7 +174,7 @@ def create_p2fig_image_only_graph() -> GenericGraphBuilder:
                 image_path=image_path,
                 use_edit=True if image_path else False,
                 timeout=60,
-                resolution='2K'
+                resolution=getattr(state.request, 'resolution', '2K')
             )
 
         ok = await _call_image_api_with_retry(_gen_image)
