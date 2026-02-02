@@ -47,10 +47,12 @@ class Paper2AnyService:
         else:
             target_url = f"{api_url}/chat/completions"
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {req.api_key}",
-        }
+        headers = {"Content-Type": "application/json"}
+        api_key = (req.api_key or "").strip()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        else:
+            log.warning("LLM Verification: api_key 为空，未附加 Authorization 头")
         
         payload = {
             "model": req.model,

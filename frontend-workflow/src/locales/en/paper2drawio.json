@@ -1,6 +1,16 @@
 {
   "title": "AI Diagram Generator",
   "subtitle": "Generate draw.io diagrams from papers or text descriptions",
+  "subpages": {
+    "ai": {
+      "badge": "AI → DRAWIO",
+      "title": "AI-driven DrawIO Diagram Generation",
+      "subtitle": "Input text or paper content to generate editable DrawIO diagrams.",
+      "hintTitle": "Usage / 使用说明",
+      "hintZh": "支持文本与 PDF 输入，适合流程图、架构图、时序图等。",
+      "hintEn": "Supports text and PDF. Best for flowcharts, architecture, and sequence diagrams."
+    }
+  },
   "apiConfig": "API Configuration",
   "apiUrl": "API URL",
   "apiKey": "API Key",

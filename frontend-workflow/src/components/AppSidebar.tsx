@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   X,
@@ -10,7 +11,9 @@ import {
   BookOpen,
   FolderOpen,
   Network,
-  MessageSquare
+  MessageSquare,
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 import NavTooltip from './NavTooltip';
 
@@ -31,6 +34,35 @@ interface AppSidebarProps {
 
 export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSidebarProps) => {
   const { t } = useTranslation('common');
+  const [menuView, setMenuView] = useState<'main' | 'paper2figure'>('main');
+
+  useEffect(() => {
+    if (!isOpen) setMenuView('main');
+  }, [isOpen]);
+
+  const paper2figureChildren = useMemo(() => ([
+    {
+      id: 'paper2figure-tech-exp',
+      labelKey: t('app.navSub.paper2figureTechExp'),
+      tooltipKey: t('app.navSubTooltip.paper2figureTechExp'),
+      icon: Sparkles,
+      gradient: 'from-sky-500 to-cyan-500'
+    },
+    {
+      id: 'paper2drawio-ai',
+      labelKey: t('app.navSub.paper2drawioAi'),
+      tooltipKey: t('app.navSubTooltip.paper2drawioAi'),
+      icon: Network,
+      gradient: 'from-violet-500 to-fuchsia-500'
+    },
+    {
+      id: 'paper2figure-model-drawio',
+      labelKey: t('app.navSub.paper2figureModelDrawio'),
+      tooltipKey: t('app.navSubTooltip.paper2figureModelDrawio'),
+      icon: Wand2,
+      gradient: 'from-emerald-500 to-teal-500'
+    }
+  ]), [t]);
 
   const navigationItems: NavigationItem[] = [
     {
@@ -39,13 +71,6 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navTooltip.paper2figure'),
       icon: Sparkles,
       gradient: 'from-primary-500 to-primary-600'
-    },
-    {
-      id: 'paper2drawio',
-      labelKey: t('app.nav.paper2drawio'),
-      tooltipKey: t('app.navTooltip.paper2drawio'),
-      icon: Network,
-      gradient: 'from-teal-500 to-cyan-500'
     },
     {
       id: 'image2drawio',
@@ -110,6 +135,8 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
     onClose();
   };
 
+  const paper2figureActive = paper2figureChildren.some(child => child.id === activePage);
+
   return (
     <>
       {/* Backdrop Overlay */}
@@ -121,12 +148,25 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       />
 
       {/* Sidebar Panel */}
-      <aside className={`fixed top-0 left-0 h-full w-[280px] glass-dark border-r border-white/10 z-40 transition-transform duration-300 ease-in-out ${
+      <aside className={`fixed top-0 left-0 h-full w-[280px] glass-dark border-r border-white/10 z-40 transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         {/* Header */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">{t('app.sidebar.navigation')}</h2>
+          <div className="flex items-center gap-2">
+            {menuView === 'paper2figure' && (
+              <button
+                onClick={() => setMenuView('main')}
+                className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                aria-label="Back"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            <h2 className="text-lg font-bold text-white">
+              {menuView === 'paper2figure' ? t('app.nav.paper2figure') : t('app.sidebar.navigation')}
+            </h2>
+          </div>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
@@ -137,25 +177,75 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 p-4 overflow-y-auto">
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavTooltip key={item.id} content={item.tooltipKey}>
-                <button
-                  onClick={() => handleNavigation(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 mb-2 ${
-                    activePage === item.id
-                      ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg shadow-${item.gradient.split('-')[1]}-500/30 border border-white/20 scale-[1.02]`
-                      : 'text-gray-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 hover:text-white hover:shadow-md hover:scale-[1.02]'
-                  }`}
-                >
-                  <Icon size={22} className={activePage === item.id ? 'drop-shadow-lg' : ''} />
-                  <span className="text-sm font-medium">{item.labelKey}</span>
-                </button>
-              </NavTooltip>
-            );
-          })}
+        <nav className="flex-1 overflow-hidden relative">
+          <div
+            className="absolute inset-0 p-4 overflow-y-auto overflow-x-hidden transition-transform duration-300"
+            style={{ transform: menuView === 'main' ? 'translateX(0)' : 'translateX(-100%)' }}
+          >
+              {navigationItems.map((item) => {
+                const Icon = item.icon;
+                const isPaper2Figure = item.id === 'paper2figure';
+                const isActive = isPaper2Figure ? paper2figureActive : activePage === item.id;
+
+                const button = (
+                  <button
+                    onClick={() => {
+                      if (isPaper2Figure) {
+                        setMenuView('paper2figure');
+                        return;
+                      }
+                      handleNavigation(item.id);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 mb-2 ${
+                      isActive
+                        ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg shadow-${item.gradient.split('-')[1]}-500/30 border border-white/20 scale-[1.02]`
+                        : 'text-gray-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 hover:text-white hover:shadow-md hover:scale-[1.02]'
+                    }`}
+                  >
+                    <Icon size={22} className={isActive ? 'drop-shadow-lg' : ''} />
+                    <span className="text-sm font-medium flex-1 text-left">{item.labelKey}</span>
+                    {isPaper2Figure && (
+                      <ChevronRight size={16} className="text-white/60 group-hover:text-white transition-colors" />
+                    )}
+                  </button>
+                );
+
+                return (
+                  <div key={item.id} className="relative">
+                    {isPaper2Figure ? button : (
+                      <NavTooltip content={item.tooltipKey}>
+                        {button}
+                      </NavTooltip>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+
+          <div
+            className="absolute inset-0 p-4 overflow-y-auto overflow-x-hidden transition-transform duration-300"
+            style={{ transform: menuView === 'main' ? 'translateX(100%)' : 'translateX(0)' }}
+          >
+            {paper2figureChildren.map((child) => {
+              const ChildIcon = child.icon;
+              const isChildActive = activePage === child.id;
+              return (
+                <NavTooltip key={child.id} content={child.tooltipKey}>
+                  <button
+                    onClick={() => handleNavigation(child.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all mb-2 ${
+                      isChildActive
+                        ? `bg-gradient-to-r ${child.gradient} text-white shadow-lg shadow-${child.gradient.split('-')[1]}-500/20`
+                        : 'text-slate-200 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <ChildIcon size={20} />
+                    <span className="text-sm font-semibold">{child.labelKey}</span>
+                  </button>
+                </NavTooltip>
+              );
+            })}
+          </div>
         </nav>
       </aside>
     </>

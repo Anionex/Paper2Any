@@ -25,13 +25,29 @@ const DRAWIO_ANIMATE_LARGE_BATCH = 5;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
-export default function Paper2DrawioPage() {
+interface Paper2DrawioPageProps {
+  initialMode?: 'ai' | 'paper2drawio';
+  lockMode?: boolean;
+  showModePanel?: boolean;
+  showHeader?: boolean;
+  showBanner?: boolean;
+  intro?: React.ReactNode;
+}
+
+export default function Paper2DrawioPage({
+  initialMode = 'ai',
+  lockMode = false,
+  showModePanel = true,
+  showHeader = true,
+  showBanner: showBannerProp = true,
+  intro,
+}: Paper2DrawioPageProps) {
   const { t } = useTranslation('paper2drawio');
   const { user } = useAuthStore();
 
   // 状态
-  const [generationMode, setGenerationMode] = useState<'ai' | 'paper2drawio'>('ai');
-  const [modePicked, setModePicked] = useState(false);
+  const [generationMode, setGenerationMode] = useState<'ai' | 'paper2drawio'>(initialMode);
+  const [modePicked, setModePicked] = useState(lockMode || !showModePanel);
   const [uploadMode, setUploadMode] = useState<'file' | 'text'>('text');
   const [textContent, setTextContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -56,7 +72,7 @@ export default function Paper2DrawioPage() {
     agent: null,
     dataflex: null,
   });
-  const [showBanner, setShowBanner] = useState(true);
+  const [showBanner, setShowBanner] = useState(showBannerProp);
 
   // API 配置
   const [apiUrl, setApiUrl] = useState(DEFAULT_LLM_API_URL);
@@ -70,6 +86,25 @@ export default function Paper2DrawioPage() {
   const [p2dLanguage, setP2dLanguage] = useState<'zh' | 'en'>('zh');
   const [p2dStyle, setP2dStyle] = useState<'cartoon' | 'realistic'>('cartoon');
   const [p2dFigureComplex, setP2dFigureComplex] = useState<'easy' | 'mid' | 'hard'>('easy');
+
+  useEffect(() => {
+    if (lockMode) {
+      setGenerationMode(initialMode);
+      setModePicked(true);
+    }
+  }, [initialMode, lockMode]);
+
+  useEffect(() => {
+    if (!showModePanel) {
+      setModePicked(true);
+    }
+  }, [showModePanel]);
+
+  useEffect(() => {
+    if (!showBannerProp) {
+      setShowBanner(false);
+    }
+  }, [showBannerProp]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
@@ -359,13 +394,14 @@ export default function Paper2DrawioPage() {
   ]);
 
   const handleSelectMode = useCallback((mode: 'ai' | 'paper2drawio') => {
+    if (lockMode) return;
     setGenerationMode(mode);
     setModePicked(true);
     if (mode !== 'paper2drawio') {
       setP2dPngUrl('');
       setShowP2dPng(false);
     }
-  }, []);
+  }, [lockMode]);
 
   const postToDrawio = useCallback((payload: Record<string, unknown>) => {
     const frame = iframeRef.current?.contentWindow;
@@ -699,100 +735,105 @@ export default function Paper2DrawioPage() {
 
   return (
     <div className="relative w-full h-full overflow-y-auto bg-[#0b0d12] text-slate-100">
-      <Banner show={showBanner} onClose={() => setShowBanner(false)} stars={stars} />
+      {showBannerProp && <Banner show={showBanner} onClose={() => setShowBanner(false)} stars={stars} />}
       <div className="pointer-events-none absolute -top-40 right-[-10%] h-72 w-72 rounded-full bg-sky-500/10 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-[-25%] left-[-5%] h-80 w-80 rounded-full bg-cyan-500/10 blur-[140px]" />
       <div className="relative mx-auto w-full max-w-[1400px] px-6 pt-8 pb-8">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between animate-fade-in shrink-0">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-              <span className={`h-1.5 w-1.5 rounded-full ${drawioReady ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-              paper2diagram
+        {showHeader && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between animate-fade-in shrink-0">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                <span className={`h-1.5 w-1.5 rounded-full ${drawioReady ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                paper2diagram
+              </div>
+              <h1 className="text-2xl font-semibold text-white">
+                {t('title')}
+              </h1>
+              <p className="text-sm text-slate-400">
+                {t('subtitle')}
+              </p>
             </div>
-            <h1 className="text-2xl font-semibold text-white">
-              {t('title')}
-            </h1>
-            <p className="text-sm text-slate-400">
-              {t('subtitle')}
-            </p>
           </div>
-        </div>
+        )}
+        {intro && <div className="mt-6">{intro}</div>}
 
         <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)] mt-6" style={{ minHeight: '720px' }}>
           {/* 左侧：输入区域 */}
           <div className="flex flex-col gap-4 animate-slide-in" style={{ animationDelay: '40ms' }}>
-            <div className={panelClass}>
-              <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                <Wand2 className="text-sky-300" size={18} />
-                选择功能
-              </h3>
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={() => handleSelectMode('ai')}
-                  className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                    modePicked && generationMode === 'ai' ? modeButtonActive : modeButtonIdle
-                  }`}
-                >
-                  AI 驱动 DrawIO
-                </button>
-                <button
-                  onClick={() => handleSelectMode('paper2drawio')}
-                  className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                    modePicked && generationMode === 'paper2drawio' ? modeButtonActive : modeButtonIdle
-                  }`}
-                >
-                  DrawIO 版本科研绘图生成
-                </button>
-              </div>
-              <div className="space-y-2 text-xs text-slate-400">
-                <div className="relative group rounded-xl border border-white/10 bg-white/5 p-3 hover:border-sky-400/40 hover:bg-white/10 transition-all cursor-pointer">
-                  <p className="text-slate-200 font-semibold mb-1">Demo · AI 驱动</p>
-                  <p>输入文本或论文 PDF，直接生成可编辑流程图、架构图等通用 DrawIO 图。</p>
-                  {/* Hover 预览框 - 显示在上方 */}
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none" style={{ zIndex: 9999 }}>
-                    <div className="rounded-lg border border-sky-400/60 bg-slate-900/98 backdrop-blur-xl shadow-2xl overflow-hidden">
-                      <div className="px-2.5 py-1.5 border-b border-white/10 flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-sky-300">AI 驱动演示</p>
-                        <span className="text-[9px] text-slate-400">悬停查看</span>
+            {showModePanel && (
+              <div className={panelClass}>
+                <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+                  <Wand2 className="text-sky-300" size={18} />
+                  选择功能
+                </h3>
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={() => handleSelectMode('ai')}
+                    className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                      modePicked && generationMode === 'ai' ? modeButtonActive : modeButtonIdle
+                    }`}
+                  >
+                    AI 驱动 DrawIO
+                  </button>
+                  <button
+                    onClick={() => handleSelectMode('paper2drawio')}
+                    className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                      modePicked && generationMode === 'paper2drawio' ? modeButtonActive : modeButtonIdle
+                    }`}
+                  >
+                    DrawIO 版本科研绘图生成
+                  </button>
+                </div>
+                <div className="space-y-2 text-xs text-slate-400">
+                  <div className="relative group rounded-xl border border-white/10 bg-white/5 p-3 hover:border-sky-400/40 hover:bg-white/10 transition-all cursor-pointer">
+                    <p className="text-slate-200 font-semibold mb-1">Demo · AI 驱动</p>
+                    <p>输入文本或论文 PDF，直接生成可编辑流程图、架构图等通用 DrawIO 图。</p>
+                    {/* Hover 预览框 - 显示在上方 */}
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none" style={{ zIndex: 9999 }}>
+                      <div className="rounded-lg border border-sky-400/60 bg-slate-900/98 backdrop-blur-xl shadow-2xl overflow-hidden">
+                        <div className="px-2.5 py-1.5 border-b border-white/10 flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-sky-300">AI 驱动演示</p>
+                          <span className="text-[9px] text-slate-400">悬停查看</span>
+                        </div>
+                        <div className="p-1.5">
+                          <img
+                            src="/demos/drawio-1.gif"
+                            alt="AI驱动DrawIO演示"
+                            className="w-full rounded"
+                            onError={(e) => {
+                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="213"%3E%3Crect width="320" height="213" fill="%23334155"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12"%3EGIF 加载中...%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="p-1.5">
-                        <img
-                          src="/demos/drawio-1.gif"
-                          alt="AI驱动DrawIO演示"
-                          className="w-full rounded"
-                          onError={(e) => {
-                            e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="213"%3E%3Crect width="320" height="213" fill="%23334155"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12"%3EGIF 加载中...%3C/text%3E%3C/svg%3E';
-                          }}
-                        />
+                    </div>
+                  </div>
+                  <div className="relative group rounded-xl border border-white/10 bg-white/5 p-3 hover:border-sky-400/40 hover:bg-white/10 transition-all cursor-pointer">
+                    <p className="text-slate-200 font-semibold mb-1">Demo · 科研绘图</p>
+                    <p>先生成模型结构图图片，再自动转为可编辑 DrawIO 图元。</p>
+                    {/* Hover 预览框 - 显示在中央 */}
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none" style={{ zIndex: 9999 }}>
+                      <div className="rounded-lg border border-sky-400/60 bg-slate-900/98 backdrop-blur-xl shadow-2xl overflow-hidden">
+                        <div className="px-2.5 py-1.5 border-b border-white/10 flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-sky-300">科研绘图演示</p>
+                          <span className="text-[9px] text-slate-400">悬停查看</span>
+                        </div>
+                        <div className="p-1.5">
+                          <img
+                            src="/demos/drawio-2.gif"
+                            alt="科研绘图DrawIO演示"
+                            className="w-full rounded"
+                            onError={(e) => {
+                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="213"%3E%3Crect width="320" height="213" fill="%23334155"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12"%3EGIF 加载中...%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="relative group rounded-xl border border-white/10 bg-white/5 p-3 hover:border-sky-400/40 hover:bg-white/10 transition-all cursor-pointer">
-                  <p className="text-slate-200 font-semibold mb-1">Demo · 科研绘图</p>
-                  <p>先生成模型结构图图片，再自动转为可编辑 DrawIO 图元。</p>
-                  {/* Hover 预览框 - 显示在中央 */}
-                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none" style={{ zIndex: 9999 }}>
-                    <div className="rounded-lg border border-sky-400/60 bg-slate-900/98 backdrop-blur-xl shadow-2xl overflow-hidden">
-                      <div className="px-2.5 py-1.5 border-b border-white/10 flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-sky-300">科研绘图演示</p>
-                        <span className="text-[9px] text-slate-400">悬停查看</span>
-                      </div>
-                      <div className="p-1.5">
-                        <img
-                          src="/demos/drawio-2.gif"
-                          alt="科研绘图DrawIO演示"
-                          className="w-full rounded"
-                          onError={(e) => {
-                            e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="213"%3E%3Crect width="320" height="213" fill="%23334155"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12"%3EGIF 加载中...%3C/text%3E%3C/svg%3E';
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
-            </div>
+            )}
 
             {modePicked && (
               <>

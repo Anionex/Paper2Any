@@ -4,6 +4,25 @@
     "title": "一键根据论文内容绘制（可编辑）科研绘图",
     "subtitle": "上传论文 PDF / 图片，或直接粘贴文字，一键生成可编辑的 科研绘图PPTX，方便你继续修改、增删和排版。"
   },
+  "subpages": {
+    "techExp": {
+      "badge": "TECH ROUTE + EXP DATA",
+      "title": "技术路线图 & 实验数据图",
+      "subtitle": "聚焦方法路线与实验结果，一页生成可编辑的技术路线图与实验数据图。",
+      "hintTitle": "使用说明 / Guide",
+      "hintZh": "支持 PDF 与文本输入，生成技术路线图或者美观的实验数据图。",
+      "hintEn": "Supports PDF and text. Generate the technical route first, then add experimental charts."
+    },
+    "modelDrawio": {
+      "badge": "MODEL → DRAWIO / PPT",
+      "title": "模型结构图 · DrawIO & PPT",
+      "subtitle": "先生成模型结构图，再一键转成可编辑 DrawIO 或 PPTX。",
+      "hintTitle": "使用说明 / Guide",
+      "hintZh": "流程：配置模型 → 生成图片 → 提示词微调 → 选择转 DrawIO 或 PPT。",
+      "hintEn": "Flow: configure → generate → prompt refine → convert to DrawIO or PPT.",
+      "drawioButton": "转成 DrawIO 在线编辑"
+    }
+  },
   "graphType": {
     "label": "绘图类型",
     "model_arch": "模型架构图",

@@ -4,6 +4,25 @@
     "title": "One-click scientific figures from your paper content",
     "subtitle": "Upload paper PDF / images, or paste text directly to generate editable scientific figure PPTX that you can further edit, add/remove content and adjust layout."
   },
+  "subpages": {
+    "techExp": {
+      "badge": "TECH ROUTE + EXP DATA",
+      "title": "Technical Route & Experimental Charts",
+      "subtitle": "Focus on methods and results: generate editable tech-route and experimental charts in one flow.",
+      "hintTitle": "Usage / 使用说明",
+      "hintZh": "支持 PDF 与文本输入，生成技术路线图或者美观的实验数据图。",
+      "hintEn": "Supports PDF and text. Generate the technical route first, then add experimental charts."
+    },
+    "modelDrawio": {
+      "badge": "MODEL → DRAWIO / PPT",
+      "title": "Model Diagram · DrawIO & PPT",
+      "subtitle": "Generate a model diagram, then convert it to editable DrawIO or PPTX.",
+      "hintTitle": "Usage / 使用说明",
+      "hintZh": "流程：配置模型 → 生成图片 → 提示词微调 → 选择转 DrawIO 或 PPT。",
+      "hintEn": "Flow: configure → generate → prompt refine → convert to DrawIO or PPT.",
+      "drawioButton": "Convert to DrawIO Editor"
+    }
+  },
   "graphType": {
     "label": "Figure Type",
     "model_arch": "Model architecture",

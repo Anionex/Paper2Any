@@ -1,6 +1,16 @@
 {
   "title": "AI 图表生成",
   "subtitle": "从论文或文本描述生成 draw.io 图表",
+  "subpages": {
+    "ai": {
+      "badge": "AI → DRAWIO",
+      "title": "AI 驱动 DrawIO 图表生成",
+      "subtitle": "输入文本或论文内容，直接生成可编辑的 DrawIO 图表。",
+      "hintTitle": "使用说明 / Guide",
+      "hintZh": "支持文本与 PDF 输入，适合流程图、架构图、时序图等。",
+      "hintEn": "Supports text and PDF. Best for flowcharts, architecture, and sequence diagrams."
+    }
+  },
   "apiConfig": "API 配置",
   "apiUrl": "API 地址",
   "apiKey": "API 密钥",

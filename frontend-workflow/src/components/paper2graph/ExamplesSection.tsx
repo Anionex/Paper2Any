@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { GraphType } from './types';
 
 interface DemoCardProps {
   title: string;
@@ -46,8 +47,66 @@ const DemoCard = ({ title, desc, inputImg, outputImg }: DemoCardProps) => {
   );
 };
 
-const ExamplesSection = () => {
+interface ExamplesSectionProps {
+  visibleTypes?: GraphType[];
+}
+
+const ExamplesSection: React.FC<ExamplesSectionProps> = ({ visibleTypes }) => {
   const { t } = useTranslation('paper2graph');
+  const allowed = visibleTypes && visibleTypes.length ? new Set(visibleTypes) : null;
+  const examples = [
+    {
+      type: 'model_arch' as GraphType,
+      title: t('examples.cards.paperPdfToFigureTitle'),
+      desc: t('examples.cards.paperPdfToFigureDesc'),
+      inputImg: '/p2f_paper_pdf_img.png',
+      outputImg: '/p2f_paper_pdf_img_2.png',
+    },
+    {
+      type: 'model_arch' as GraphType,
+      title: t('examples.cards.figureScreenshotToPptTitle'),
+      desc: t('examples.cards.figureScreenshotToPptDesc'),
+      inputImg: '/p2f_paper_model_img.png',
+      outputImg: '/p2f_paper_modle_img_2.png',
+    },
+    {
+      type: 'model_arch' as GraphType,
+      title: t('examples.cards.abstractTextToPptTitle'),
+      desc: t('examples.cards.abstractTextToPptDesc'),
+      inputImg: '/p2f_paper_content.png',
+      outputImg: '/p2f_paper_content_2.png',
+    },
+    {
+      type: 'tech_route' as GraphType,
+      title: t('examples.cards.pdfToTechRouteTitle'),
+      desc: t('examples.cards.pdfToTechRouteDesc'),
+      inputImg: '/p2t_paper_img.png',
+      outputImg: '/p2t_paper_img_2.png',
+    },
+    {
+      type: 'tech_route' as GraphType,
+      title: t('examples.cards.textToTechRouteTitle'),
+      desc: t('examples.cards.textToTechRouteDesc'),
+      inputImg: '/p2t_paper_text.png',
+      outputImg: '/p2t_paper_text_2.png',
+    },
+    {
+      type: 'exp_data' as GraphType,
+      title: t('examples.cards.pdfToExpDataTitle'),
+      desc: t('examples.cards.pdfToExpDataDesc'),
+      inputImg: '/p2e_paper_1.png',
+      outputImg: '/p2e_paper_2.png',
+    },
+    {
+      type: 'exp_data' as GraphType,
+      title: t('examples.cards.tableTextToExpDataTitle'),
+      desc: t('examples.cards.tableTextToExpDataDesc'),
+      inputImg: '/p2f_exp_content_1.png',
+      outputImg: '/p2f_exp_content_2.png',
+    },
+  ];
+
+  const visibleExamples = allowed ? examples.filter(example => allowed.has(example.type)) : examples;
 
   return (
     <div className="space-y-4 mb-2">
@@ -73,48 +132,15 @@ const ExamplesSection = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <DemoCard
-          title={t('examples.cards.paperPdfToFigureTitle')}
-          desc={t('examples.cards.paperPdfToFigureDesc')}
-          inputImg="/p2f_paper_pdf_img.png"
-          outputImg="/p2f_paper_pdf_img_2.png"
-        />
-        <DemoCard
-          title={t('examples.cards.figureScreenshotToPptTitle')}
-          desc={t('examples.cards.figureScreenshotToPptDesc')}
-          inputImg="/p2f_paper_model_img.png"
-          outputImg="/p2f_paper_modle_img_2.png"
-        />
-        <DemoCard
-          title={t('examples.cards.abstractTextToPptTitle')}
-          desc={t('examples.cards.abstractTextToPptDesc')}
-          inputImg="/p2f_paper_content.png"
-          outputImg="/p2f_paper_content_2.png"
-        />
-        <DemoCard
-          title={t('examples.cards.pdfToTechRouteTitle')}
-          desc={t('examples.cards.pdfToTechRouteDesc')}
-          inputImg="/p2t_paper_img.png"
-          outputImg="/p2t_paper_img_2.png"
-        />
-        <DemoCard
-          title={t('examples.cards.textToTechRouteTitle')}
-          desc={t('examples.cards.textToTechRouteDesc')}
-          inputImg="/p2t_paper_text.png"
-          outputImg="/p2t_paper_text_2.png"
-        />
-        <DemoCard
-          title={t('examples.cards.pdfToExpDataTitle')}
-          desc={t('examples.cards.pdfToExpDataDesc')}
-          inputImg="/p2e_paper_1.png"
-          outputImg="/p2e_paper_2.png"
-        />
-        <DemoCard
-          title={t('examples.cards.tableTextToExpDataTitle')}
-          desc={t('examples.cards.tableTextToExpDataDesc')}
-          inputImg="/p2f_exp_content_1.png"
-          outputImg="/p2f_exp_content_2.png"
-        />
+        {visibleExamples.map((example) => (
+          <DemoCard
+            key={`${example.type}-${example.title}`}
+            title={example.title}
+            desc={example.desc}
+            inputImg={example.inputImg}
+            outputImg={example.outputImg}
+          />
+        ))}
       </div>
     </div>
   );

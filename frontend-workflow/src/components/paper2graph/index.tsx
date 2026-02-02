@@ -1,9 +1,13 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { uploadAndSaveFile } from '../../services/fileService';
 import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
-import { DEFAULT_PAPER2FIGURE_MODELS } from '../../config/models';
+import {
+  DEFAULT_PAPER2FIGURE_MODELS,
+  DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL,
+  DEFAULT_IMAGE2DRAWIO_VLM_MODEL,
+} from '../../config/models';
 import { checkQuota, recordUsage } from '../../services/quotaService';
 import { verifyLlmConnection } from '../../services/llmService';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
@@ -32,6 +36,30 @@ import SettingsCard from './SettingsCard';
 import PreviewSection from './PreviewSection';
 import TechRoutePreviewSection from './TechRoutePreviewSection';
 import ExamplesSection from './ExamplesSection';
+import BilingualHint from '../BilingualHint';
+import DrawioInlineEditor from '../DrawioInlineEditor';
+
+interface Paper2FigurePageProps {
+  allowedGraphTypes?: GraphType[];
+  defaultGraphType?: GraphType;
+  header?: {
+    badge?: string;
+    title?: string;
+    subtitle?: string;
+    align?: 'center' | 'left';
+  };
+  hint?: {
+    title: string;
+    zh: string;
+    en: string;
+    tone?: 'sky' | 'violet' | 'emerald';
+  };
+  showExamples?: boolean;
+  exampleTypes?: GraphType[];
+  enableDrawio?: boolean;
+  drawioLabel?: string;
+  showDrawioEmpty?: boolean;
+}
 
 function detectFileKind(file: File): FileKind {
   const ext = file.name.split('.').pop()?.toLowerCase();
@@ -41,8 +69,18 @@ function detectFileKind(file: File): FileKind {
   return null;
 }
 
-const Paper2FigurePage = () => {
-  const { t, i18n } = useTranslation('paper2graph');
+const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
+  allowedGraphTypes,
+  defaultGraphType = 'model_arch',
+  header,
+  hint,
+  showExamples = true,
+  exampleTypes,
+  enableDrawio = false,
+  drawioLabel,
+  showDrawioEmpty = false,
+}) => {
+  const { t } = useTranslation('paper2graph');
   const { user, refreshQuota } = useAuthStore();
   
   // State from original file
@@ -54,7 +92,7 @@ const Paper2FigurePage = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileKind, setFileKind] = useState<FileKind>(null);
   const [textContent, setTextContent] = useState('');
-  const [graphType, setGraphType] = useState<GraphType>('model_arch');
+  const [graphType, setGraphType] = useState<GraphType>(defaultGraphType);
   const [language, setLanguage] = useState<Language>('zh');
   const [style, setStyle] = useState<StyleType>('cartoon');
   const [figureComplex, setFigureComplex] = useState<FigureComplex>('easy');
@@ -74,6 +112,12 @@ const Paper2FigurePage = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showBanner, setShowBanner] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const [drawioXml, setDrawioXml] = useState('');
+  const [drawioError, setDrawioError] = useState<string | null>(null);
+  const [drawioLoading, setDrawioLoading] = useState(false);
+  const emptyDrawioXml =
+    '<mxfile host="app.diagrams.net"><diagram id="blank" name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
 
   // 技术路线图 JSON 返回的资源路径
   const [pptPath, setPptPath] = useState<string | null>(null);
@@ -113,6 +157,34 @@ const Paper2FigurePage = () => {
     const nextModel = DEFAULT_PAPER2FIGURE_MODELS[graphType] || DEFAULT_PAPER2FIGURE_MODELS.model_arch;
     setModel(nextModel);
   }, [graphType]);
+
+  useEffect(() => {
+    if (graphType !== 'model_arch') {
+      setDrawioXml('');
+      setDrawioError(null);
+      return;
+    }
+    if (enableDrawio && showDrawioEmpty && !drawioXml) {
+      setDrawioXml(emptyDrawioXml);
+    }
+  }, [drawioXml, emptyDrawioXml, enableDrawio, graphType, showDrawioEmpty]);
+
+  useEffect(() => {
+    if (!enableDrawio) return;
+    setDrawioError(null);
+    if (showDrawioEmpty) {
+      setDrawioXml(emptyDrawioXml);
+    } else {
+      setDrawioXml('');
+    }
+  }, [enableDrawio, emptyDrawioXml, previewImgUrl, showDrawioEmpty]);
+
+  useEffect(() => {
+    if (!allowedGraphTypes?.length) return;
+    if (!allowedGraphTypes.includes(graphType)) {
+      setGraphType(allowedGraphTypes[0]);
+    }
+  }, [allowedGraphTypes, graphType]);
 
   useEffect(() => {
     const fetchStars = async () => {
@@ -187,7 +259,13 @@ const Paper2FigurePage = () => {
 
         if (saved.uploadMode) setUploadMode(saved.uploadMode);
         if (saved.textContent) setTextContent(saved.textContent);
-        if (saved.graphType) setGraphType(saved.graphType);
+        if (saved.graphType && (!allowedGraphTypes?.length || allowedGraphTypes.includes(saved.graphType))) {
+          setGraphType(saved.graphType);
+        } else if (allowedGraphTypes?.length) {
+          setGraphType(allowedGraphTypes[0]);
+        } else {
+          setGraphType(defaultGraphType);
+        }
         if (saved.language) setLanguage(saved.language);
         if (saved.style) setStyle(saved.style);
         if (saved.figureComplex) setFigureComplex(saved.figureComplex);
@@ -210,7 +288,7 @@ const Paper2FigurePage = () => {
     } catch (e) {
       console.error('Failed to restore paper2figure config', e);
     }
-  }, [user?.id]);
+  }, [allowedGraphTypes, defaultGraphType, user?.id]);
 
   // 将配置写入 localStorage
   useEffect(() => {
@@ -239,6 +317,74 @@ const Paper2FigurePage = () => {
       console.error('Failed to persist paper2figure config', e);
     }
   }, [uploadMode, textContent, graphType, language, style, figureComplex, resolution, llmApiUrl, apiKey, model, techRoutePalette, techRouteTemplate, user?.id]);
+
+  const handleConvertToDrawio = useCallback(async () => {
+    if (!previewImgUrl || drawioLoading) return;
+    if (!llmApiUrl.trim() || !apiKey.trim()) {
+      setDrawioError(t('errors.missingApiConfig'));
+      return;
+    }
+
+    const quota = await checkQuota(user?.id || null, user?.is_anonymous || false);
+    if (quota.remaining <= 0) {
+      setDrawioError(user?.is_anonymous ? t('errors.quotaGuestExhausted') : t('errors.quotaUserExhausted'));
+      return;
+    }
+
+    setDrawioLoading(true);
+    setDrawioError(null);
+
+    try {
+      let fetchUrl = previewImgUrl;
+      if (typeof window !== 'undefined' && window.location.protocol === 'https:' && fetchUrl.startsWith('http:')) {
+        fetchUrl = fetchUrl.replace(/^http:/, 'https:');
+      }
+
+      const imgRes = await fetch(fetchUrl);
+      if (!imgRes.ok) {
+        throw new Error('图片获取失败');
+      }
+      const blob = await imgRes.blob();
+      const file = new File([blob], 'model_arch.png', { type: blob.type || 'image/png' });
+
+      const formData = new FormData();
+      formData.append('image_file', file);
+      formData.append('chat_api_url', llmApiUrl.trim());
+      formData.append('api_key', apiKey.trim());
+      formData.append('gen_fig_model', DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL);
+      formData.append('vlm_model', DEFAULT_IMAGE2DRAWIO_VLM_MODEL);
+      formData.append('email', user?.id || user?.email || '');
+
+      const res = await fetch('/api/v1/image2drawio/generate', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data?.success || !data?.xml_content) {
+        throw new Error(data?.error || 'DrawIO 生成失败');
+      }
+
+      setDrawioXml(data.xml_content);
+      await recordUsage(user?.id || null, 'image2drawio');
+      refreshQuota();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'DrawIO 生成失败';
+      setDrawioError(message);
+    } finally {
+      setDrawioLoading(false);
+    }
+  }, [
+    apiKey,
+    drawioLoading,
+    llmApiUrl,
+    previewImgUrl,
+    refreshQuota,
+    t,
+    user?.email,
+    user?.id,
+    user?.is_anonymous,
+  ]);
 
   // 新增：管理生成阶段的定时器
   useEffect(() => {
@@ -746,12 +892,24 @@ const Paper2FigurePage = () => {
 
       <div className="flex-1 flex flex-col items-center justify-start px-6 pt-20 pb-10 overflow-auto">
         <div className="w-full max-w-5xl animate-fade-in">
-          <Header />
+          <Header
+            badge={header?.badge}
+            title={header?.title}
+            subtitle={header?.subtitle}
+            align={header?.align}
+          />
+
+          {hint && (
+            <div className="mb-8">
+              <BilingualHint title={hint.title} zh={hint.zh} en={hint.en} tone={hint.tone} />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-[2fr,minmax(260px,1fr)] gap-6 mb-10">
             <UploadCard
               graphType={graphType}
               setGraphType={setGraphType}
+              allowedGraphTypes={allowedGraphTypes}
               uploadMode={uploadMode}
               setUploadMode={setUploadMode}
               selectedFile={selectedFile}
@@ -827,7 +985,32 @@ const Paper2FigurePage = () => {
             email={user?.id || user?.email || ''}
             figureComplex={figureComplex}
             language={language}
+            showDrawioButton={enableDrawio && graphType === 'model_arch'}
+            drawioLoading={drawioLoading}
+            onConvertToDrawio={handleConvertToDrawio}
+            drawioLabel={drawioLabel}
+            onReset={() => {
+              setDrawioXml('');
+              setDrawioError(null);
+            }}
           />
+
+          {enableDrawio && drawioError && (
+            <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+              {drawioError}
+            </div>
+          )}
+
+          {enableDrawio && drawioXml && (
+            <div className="mb-10">
+              <DrawioInlineEditor
+                title="DrawIO 在线编辑 / Editor"
+                subtitle="可直接在下方编辑图形，支持复制或下载 .drawio / Edit below and download .drawio"
+                xmlContent={drawioXml}
+                onXmlChange={setDrawioXml}
+              />
+            </div>
+          )}
 
           <TechRoutePreviewSection
             graphType={graphType}
@@ -837,7 +1020,7 @@ const Paper2FigurePage = () => {
             svgColorPath={svgColorPath}
           />
 
-          <ExamplesSection />
+          {showExamples && <ExamplesSection visibleTypes={exampleTypes ?? allowedGraphTypes} />}
         </div>
       </div>
 

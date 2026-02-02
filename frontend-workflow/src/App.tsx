@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ParticleBackground from './components/ParticleBackground';
-import Paper2GraphPage from './components/Paper2GraphPage';
+import Paper2GraphTechExpPage from './components/Paper2GraphTechExpPage';
+import Paper2GraphDrawioPage from './components/Paper2GraphDrawioPage';
 import Paper2PptPage from './components/Paper2PptPage';
 import Pdf2PptPage from './components/Pdf2PptPage';
 import Image2PptPage from './components/Image2PptPage';
@@ -8,6 +9,7 @@ import Image2DrawioPage from './components/Image2DrawioPage';
 import Ppt2PolishPage from './components/Ppt2PolishPage';
 import KnowledgeBasePage from './components/KnowledgeBasePage';
 import { FilesPage } from './components/FilesPage';
+import Paper2DrawioAiPage from './components/Paper2DrawioAiPage';
 import Paper2DrawioPage from './components/paper2drawio';
 import Paper2RebuttalPage from './components/Paper2RebuttalPage';
 import { AccountPage } from './components/AccountPage';
@@ -20,7 +22,7 @@ import { AppSidebar } from './components/AppSidebar';
 
 function App() {
   const { t } = useTranslation('common');
-  const [activePage, setActivePage] = useState<'paper2figure' | 'paper2ppt' | 'pdf2ppt' | 'image2ppt' | 'image2drawio' | 'ppt2polish' | 'knowledge' | 'files' | 'paper2drawio' | 'paper2rebuttal'>('paper2figure');
+  const [activePage, setActivePage] = useState<'paper2figure-tech-exp' | 'paper2figure-model-drawio' | 'paper2drawio-ai' | 'paper2ppt' | 'pdf2ppt' | 'image2ppt' | 'image2drawio' | 'ppt2polish' | 'knowledge' | 'files' | 'paper2drawio' | 'paper2rebuttal'>('paper2figure-tech-exp');
   const [showFilesModal, setShowFilesModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -38,10 +40,15 @@ function App() {
             {/* Hamburger Menu Button */}
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-lg glass border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-all duration-200"
+              className="group flex items-center gap-2 px-3 py-2 rounded-xl glass border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.2)]"
               aria-label={t('app.sidebar.toggle')}
             >
-              <Menu size={20} />
+              <span className="relative">
+                <Menu size={20} />
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+              <span className="text-xs font-semibold tracking-wide">菜单 / Menu</span>
             </button>
             <div className="p-2 rounded-lg bg-primary-500/20">
               <Workflow className="text-primary-400" size={24} />
@@ -72,7 +79,9 @@ function App() {
       {/* 主内容区 */}
       <main className="absolute top-16 bottom-8 left-0 right-0 flex">
         <div className="flex-1">
-          {activePage === 'paper2figure' && <Paper2GraphPage />}
+          {activePage === 'paper2figure-tech-exp' && <Paper2GraphTechExpPage />}
+          {activePage === 'paper2figure-model-drawio' && <Paper2GraphDrawioPage />}
+          {activePage === 'paper2drawio-ai' && <Paper2DrawioAiPage />}
           {activePage === 'paper2ppt' && <Paper2PptPage />}
           {activePage === 'pdf2ppt' && <Pdf2PptPage />}
           {activePage === 'image2ppt' && <Image2PptPage />}

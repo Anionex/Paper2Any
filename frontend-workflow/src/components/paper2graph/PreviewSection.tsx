@@ -1,5 +1,5 @@
 import React from 'react';
-import { ImageIcon, MessageSquare, Loader2, RotateCcw, Download } from 'lucide-react';
+import { ImageIcon, MessageSquare, Loader2, RotateCcw, Download, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { GraphType, FigureComplex, Language } from './types';
 import { API_KEY } from '../../config/api';
@@ -24,6 +24,11 @@ interface PreviewSectionProps {
   email: string;
   figureComplex: FigureComplex;
   language: Language;
+  showDrawioButton?: boolean;
+  drawioLoading?: boolean;
+  onConvertToDrawio?: () => void;
+  drawioLabel?: string;
+  onReset?: () => void;
 }
 
 const PreviewSection: React.FC<PreviewSectionProps> = ({
@@ -45,6 +50,11 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
   email,
   figureComplex,
   language,
+  showDrawioButton,
+  drawioLoading,
+  onConvertToDrawio,
+  drawioLabel,
+  onReset,
 }) => {
   const [imgError, setImgError] = React.useState(false);
 
@@ -191,7 +201,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
           </div>
         </div>
         
-        <div className="flex gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap gap-3 w-full md:w-auto">
           <button
             type="button"
             onClick={() => {
@@ -199,12 +209,24 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
               setPreviewImgUrl(null);
               setPptUrl(null);
               setEditPrompt('');
+              onReset?.();
             }}
             className="px-5 py-3 rounded-xl border border-white/20 text-sm text-gray-300 hover:bg-white/10 flex items-center justify-center gap-2 transition-all"
           >
             <RotateCcw size={16} />
             放弃
           </button>
+          {showDrawioButton && (
+            <button
+              type="button"
+              onClick={onConvertToDrawio}
+              disabled={drawioLoading || isLoading}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed min-w-[200px]"
+            >
+              {drawioLoading ? <Loader2 size={18} className="animate-spin" /> : <ExternalLink size={18} />}
+              {drawioLabel || '转成 DrawIO 在线编辑'}
+            </button>
+          )}
           {graphStep === 'done' && pptUrl ? (
             <button
               type="button"

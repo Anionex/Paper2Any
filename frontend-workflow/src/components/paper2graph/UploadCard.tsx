@@ -7,6 +7,7 @@ import { IMAGE_EXTENSIONS } from './constants';
 interface UploadCardProps {
   graphType: GraphType;
   setGraphType: (type: GraphType) => void;
+  allowedGraphTypes?: GraphType[];
   uploadMode: UploadMode;
   setUploadMode: (mode: UploadMode) => void;
   selectedFile: File | null;
@@ -23,6 +24,7 @@ interface UploadCardProps {
 const UploadCard: React.FC<UploadCardProps> = ({
   graphType,
   setGraphType,
+  allowedGraphTypes,
   uploadMode,
   setUploadMode,
   selectedFile,
@@ -49,6 +51,15 @@ const UploadCard: React.FC<UploadCardProps> = ({
     { value: 'tech_route', label: t('graphType.tech_route'), icon: <GitBranch size={20} /> },
     { value: 'exp_data', label: t('graphType.exp_data'), icon: <BarChart3 size={20} /> },
   ];
+  const visibleGraphTypeOptions = allowedGraphTypes?.length
+    ? graphTypeOptions.filter(option => allowedGraphTypes.includes(option.value))
+    : graphTypeOptions;
+  const gridColsClass =
+    visibleGraphTypeOptions.length === 1
+      ? 'md:grid-cols-1'
+      : visibleGraphTypeOptions.length === 2
+        ? 'md:grid-cols-2'
+        : 'md:grid-cols-3';
 
   const getAcceptTypes = () => {
     if (graphType === 'exp_data') {
@@ -66,8 +77,8 @@ const UploadCard: React.FC<UploadCardProps> = ({
         {/* 绘图类型选择 (Dynamic Cards) */}
         <div className="mb-6">
           <label className="block text-xs font-medium text-gray-400 mb-2">{t('graphType.label')}</label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {graphTypeOptions.map((option) => (
+          <div className={`grid grid-cols-1 ${gridColsClass} gap-3`}>
+            {visibleGraphTypeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
