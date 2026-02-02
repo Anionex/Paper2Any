@@ -4,14 +4,15 @@
   "desc": "上传原始 PPT 文件，AI 智能分析内容结构，一键美化生成专业演示文稿。",
   "descHighlight": "通过左右对比，实时掌控美化效果！",
   "steps": {
-    "upload": "上传 PPT",
+    "upload": "上传文件",
     "beautify": "逐页美化",
     "complete": "完成下载"
   },
   "upload": {
-    "title": "上传 PPT",
-    "dragText": "拖拽 PPT 文件到此处",
-    "supportText": "支持 PPT / PPTX",
+    "title": "上传 PPT / PDF",
+    "dragText": "拖拽 PPT/PDF 文件到此处",
+    "supportText": "支持 PPT / PPTX / PDF（16:9 幻灯片）",
+    "fileTip": "请上传 PPT/PPTX 或每页为 16:9 幻灯片的 PDF。PDF 建议每页只有一张幻灯片图像。",
     "button": "选择文件",
     "fileInfo": "✓ {{name}}",
     "modeInfo": "🎨 美化模式：将优化原有 PPT 样式",
@@ -25,6 +26,14 @@
       "genModel": "图像生成模型",
       "language": "生成语言",
       "styleTitle": "风格配置",
+      "renderTitle": "渲染分辨率",
+      "renderTip": "分辨率越高越清晰，但耗时/内存更高（4K 建议小页数）",
+      "renderOptions": {
+        "auto": "自动（默认）",
+        "1080p": "1080p",
+        "2k": "2K（推荐）",
+        "4k": "4K（更慢）"
+      },
       "styleMode": {
         "preset": "预设风格",
         "reference": "参考图片"
@@ -38,6 +47,9 @@
       },
       "promptLabel": "风格提示词（必填）",
       "promptPlaceholder": "例如：使用紫色系配色，保持学术风格...",
+      "promptCardsTitle": "风格提示词卡片",
+      "promptCardsTip": "点击卡片自动填入",
+      "promptCardsUse": "点击使用该提示词",
       "referenceLabel": "上传参考风格图片",
       "referenceUploaded": "已上传参考图片",
       "referenceUpload": "点击上传参考图片",
@@ -48,7 +60,7 @@
   },
   "progress": {
     "init": "正在初始化...",
-    "uploading": "正在上传 PPT...",
+    "uploading": "正在上传文件...",
     "analyzing": "正在分析页面结构...",
     "extracting": "正在提取内容...",
     "identifying": "正在识别图片...",
@@ -115,9 +127,9 @@
     }
   },
   "errors": {
-    "format": "仅支持 PPT/PPTX 格式",
+    "format": "仅支持 PPT/PPTX/PDF 格式",
     "size": "文件大小超过 50MB 限制",
-    "selectFile": "请先选择 PPT 文件",
+    "selectFile": "请先选择 PPT/PPTX/PDF 文件",
     "config": "请先配置模型 API URL 和 API Key",
     "prompt": "请输入风格提示词",
     "reference": "请上传参考图片",

@@ -158,11 +158,13 @@ class Paper2PPTService:
         reference_img_path = await self._save_reference_image(input_dir, reference_img)
 
         # 根据 input_type 落地输入
+        pdf_as_slides = str(req.pdf_as_slides).lower() in ("true", "1", "yes")
         wf_input_type, wf_input_content = await self._prepare_input_for_pagecontent(
             input_dir=input_dir,
             input_type=req.input_type,
             file=file,
             text=req.text,
+            pdf_as_slides=pdf_as_slides,
         )
 
         # 组装老的 Paper2PPTRequest 以复用现有 workflow adapter
@@ -185,6 +187,7 @@ class Paper2PPTService:
             email=req.email or "",
             page_count=req.page_count,
             use_long_paper=use_long_paper_bool,
+            render_dpi=req.render_dpi,
         )
 
         resp_model = await run_paper2page_content_wf_api(p2ppt_req, result_path=run_dir)
@@ -307,6 +310,7 @@ class Paper2PPTService:
             ref_img=str(reference_img_path) if reference_img_path else "",
             email=req.email or "",
             all_edited_down=all_edited_down_bool,
+            image_resolution=req.image_resolution or "2K",
         )
 
         resp_model = await run_paper2ppt_wf_api(
@@ -442,6 +446,7 @@ class Paper2PPTService:
         input_type: str,
         file: UploadFile | None,
         text: Optional[str],
+        pdf_as_slides: bool,
     ) -> tuple[str, str]:
         """
         pagecontent-only 场景下的输入准备逻辑。
@@ -455,6 +460,8 @@ class Paper2PPTService:
                 raise HTTPException(status_code=400, detail="file is required when input_type is 'pdf'")
             input_path = (input_dir / "input.pdf").resolve()
             input_path.write_bytes(await file.read())
+            if pdf_as_slides:
+                return "PPT", str(input_path)
             return "PDF", str(input_path)
 
         if norm_input_type in ("ppt", "pptx"):

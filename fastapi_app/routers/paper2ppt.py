@@ -47,6 +47,10 @@ async def paper2ppt_pagecontent_json(
     gen_fig_model: str = Form(...),
     page_count: int = Form(...),
     use_long_paper: str = Form("false"),
+    # 当 input_type=pdf 时，按“幻灯片图片”模式解析
+    pdf_as_slides: str = Form("false"),
+    # PPT/PDF 转图片时的渲染 DPI（None 表示默认）
+    render_dpi: Optional[int] = Form(None),
     service: Paper2PPTService = Depends(get_service),
 ):
     """
@@ -65,6 +69,8 @@ async def paper2ppt_pagecontent_json(
         gen_fig_model=gen_fig_model,
         page_count=page_count,
         use_long_paper=use_long_paper,
+        pdf_as_slides=pdf_as_slides,
+        render_dpi=render_dpi,
     )
 
     data = await service.get_page_content(
@@ -93,6 +99,7 @@ async def paper2ppt_ppt_json(
     aspect_ratio: str = Form("16:9"),
     language: str = Form("en"),
     model: str = Form("gpt-5.1"),
+    image_resolution: Optional[str] = Form(None),
     # 关键：是否进入编辑，是否已经有了 nano 结果，现在要进入页面逐个页面编辑
     get_down: str = Form("false"),  # 字符串形式，需要手动转换
     # 关键： 是否编辑完毕，也就是是否需要重新生成完整的 PPT
@@ -128,6 +135,7 @@ async def paper2ppt_ppt_json(
         pagecontent=pagecontent,
         page_id=page_id,
         edit_prompt=edit_prompt,
+        image_resolution=image_resolution,
     )
 
     data = await service.generate_ppt(

@@ -4,14 +4,15 @@
   "desc": "Upload original PPT, AI analyzes structure and beautifies it into professional presentation.",
   "descHighlight": "Real-time comparison to control beautification effect!",
   "steps": {
-    "upload": "Upload PPT",
+    "upload": "Upload File",
     "beautify": "Beautify Pages",
     "complete": "Complete & Download"
   },
   "upload": {
-    "title": "Upload PPT",
-    "dragText": "Drag PPT file here",
-    "supportText": "Supports PPT / PPTX",
+    "title": "Upload PPT / PDF",
+    "dragText": "Drag PPT/PDF file here",
+    "supportText": "Supports PPT / PPTX / PDF (16:9 slides)",
+    "fileTip": "Upload PPT/PPTX or a PDF where each page is a 16:9 slide. We recommend one slide image per page.",
     "button": "Select File",
     "fileInfo": "✓ {{name}}",
     "modeInfo": "🎨 Beautify Mode: Optimizes original PPT style",
@@ -25,6 +26,14 @@
       "genModel": "Image Gen Model",
       "language": "Language",
       "styleTitle": "Style Config",
+      "renderTitle": "Render Resolution",
+      "renderTip": "Higher resolution is clearer but slower and heavier (4K for small decks).",
+      "renderOptions": {
+        "auto": "Auto (default)",
+        "1080p": "1080p",
+        "2k": "2K (recommended)",
+        "4k": "4K (slower)"
+      },
       "styleMode": {
         "preset": "Preset Style",
         "reference": "Reference Image"
@@ -38,6 +47,9 @@
       },
       "promptLabel": "Style Prompt (Required)",
       "promptPlaceholder": "e.g., Use purple color scheme, keep academic style...",
+      "promptCardsTitle": "Prompt Cards",
+      "promptCardsTip": "Click to autofill",
+      "promptCardsUse": "Click to use this prompt",
       "referenceLabel": "Upload Reference Image",
       "referenceUploaded": "Reference image uploaded",
       "referenceUpload": "Click to upload reference image",
@@ -48,7 +60,7 @@
   },
   "progress": {
     "init": "Initializing...",
-    "uploading": "Uploading PPT...",
+    "uploading": "Uploading file...",
     "analyzing": "Analyzing page structure...",
     "extracting": "Extracting content...",
     "identifying": "Identifying images...",
@@ -115,9 +127,9 @@
     }
   },
   "errors": {
-    "format": "Supports PPT/PPTX format only",
+    "format": "Supports PPT/PPTX/PDF formats only",
     "size": "File size exceeds 50MB limit",
-    "selectFile": "Please select PPT file first",
+    "selectFile": "Please select a PPT/PPTX/PDF file first",
     "config": "Please configure Model API URL and API Key first",
     "prompt": "Please enter style prompt",
     "reference": "Please upload reference image",

@@ -179,6 +179,10 @@ class PageContentRequest(BaseModel):
     gen_fig_model: str = Field(...)
     page_count: int = 5
     use_long_paper: str = "false"
+    # 当 input_type=pdf 时，是否按“幻灯片图片”模式解析（跳过 MinerU 解析）
+    pdf_as_slides: str = "false"
+    # PPT/PDF 转图片时的渲染 DPI（None 表示使用默认值）
+    render_dpi: Optional[int] = None
 
 
 class OutlineRefineRequest(BaseModel):
@@ -210,6 +214,8 @@ class PPTGenerationRequest(BaseModel):
     pagecontent: Optional[str] = None
     page_id: Optional[int] = None
     edit_prompt: Optional[str] = None
+    # 图像生成分辨率（1K/2K/4K 等）
+    image_resolution: Optional[str] = None
 
 
 class FullPipelineRequest(BaseModel):
@@ -260,11 +266,15 @@ class Paper2PPTRequest(BaseModel):
     # ---------------------- 输入类型设置 ----------------------
     input_type: Literal["PDF", "TEXT", "PPT", "TOPIC", "FIGURE"] = "PDF"
     input_content: str = ""
+    # PPT/PDF 转图片时的渲染 DPI（None 表示使用默认值）
+    render_dpi: Optional[int] = None
 
     # ---------------------- 输出图像比例设置 ----------------------
     aspect_ratio: Literal["1:1", "16:9", "9:16", "4:3", "3:4", "21:9"] = "16:9"
     style: str = " "
     use_long_paper: bool = False # 不使用 长文
+    # 图像生成分辨率（1K/2K/4K 等）
+    image_resolution: str = "2K"
 
     email: str = ""
     # 生成的ppt页数；

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wand2, Upload, FileText, Send, Download } from 'lucide-react';
+import { Wand2, Upload, FileText, Send, Download, Image as ImageIcon } from 'lucide-react';
 import type { DiagramType, DiagramStyle, ChatMessage } from './types';
 import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../../config/api';
 import {
@@ -44,6 +44,8 @@ export default function Paper2DrawioPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'drawio' | 'png' | 'svg'>('drawio');
   const [exportFilename, setExportFilename] = useState('diagram');
+  const [p2dPngUrl, setP2dPngUrl] = useState('');
+  const [showP2dPng, setShowP2dPng] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [drawioReady, setDrawioReady] = useState(false);
@@ -281,6 +283,19 @@ export default function Paper2DrawioPage() {
         });
 
         const data = await res.json();
+        const pickPngUrl = (payload: any): string => {
+          if (!payload) return '';
+          const direct = payload.svg_image_filename || payload.svg_color_image_filename;
+          if (direct) return direct;
+          const list = Array.isArray(payload.all_output_files) ? payload.all_output_files : [];
+          const png = list.find((item: string) => typeof item === 'string' && /\.png($|\?)/i.test(item));
+          return png || '';
+        };
+
+        const pngUrl = pickPngUrl(data);
+        setP2dPngUrl(pngUrl);
+        setShowP2dPng(false);
+
         if (data.success && data.drawio_filename) {
           let drawioUrl = data.drawio_filename as string;
           if (typeof window !== 'undefined' && window.location.protocol === 'https:' && drawioUrl.startsWith('http:')) {
@@ -346,6 +361,10 @@ export default function Paper2DrawioPage() {
   const handleSelectMode = useCallback((mode: 'ai' | 'paper2drawio') => {
     setGenerationMode(mode);
     setModePicked(true);
+    if (mode !== 'paper2drawio') {
+      setP2dPngUrl('');
+      setShowP2dPng(false);
+    }
   }, []);
 
   const postToDrawio = useCallback((payload: Record<string, unknown>) => {
@@ -1092,6 +1111,24 @@ export default function Paper2DrawioPage() {
               </h3>
               {xmlContent && (
                 <div className="flex flex-wrap items-center gap-2">
+                  {generationMode === 'paper2drawio' && p2dPngUrl && (
+                    <>
+                      <button
+                        onClick={() => setShowP2dPng(prev => !prev)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-all"
+                      >
+                        <ImageIcon size={14} />
+                        {showP2dPng ? '隐藏科研图PNG' : '查看科研图PNG'}
+                      </button>
+                      <button
+                        onClick={() => window.open(p2dPngUrl, '_blank', 'noopener')}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-all"
+                      >
+                        <Download size={14} />
+                        下载PNG
+                      </button>
+                    </>
+                  )}
                   <div className="flex items-center rounded-full bg-white/5 border border-white/10 p-1">
                     {(['drawio', 'svg', 'png'] as const).map(format => (
                       <button
@@ -1128,6 +1165,14 @@ export default function Paper2DrawioPage() {
                 </div>
               )}
             </div>
+            {generationMode === 'paper2drawio' && showP2dPng && p2dPngUrl && (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                <div className="text-xs text-slate-400 mb-2">科研绘图 PNG 预览</div>
+                <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
+                  <img src={p2dPngUrl} alt="paper2drawio png preview" className="w-full h-auto object-contain" />
+                </div>
+              </div>
+            )}
             <div className={`mt-4 flex-1 bg-[#0b0f17] rounded-2xl border border-white/10 min-h-[420px] lg:min-h-[720px] overflow-hidden ${xmlContent ? 'relative block' : 'flex items-center justify-center'}`}>
               {xmlContent ? (
                 <iframe

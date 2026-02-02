@@ -90,6 +90,7 @@ def _init_state_from_request(
     # 兼容样式等控制参数
     state.aspect_ratio = req.aspect_ratio
     state.style = req.style
+    state.render_dpi = getattr(req, "render_dpi", None)
 
     # 覆盖 pagecontent（主要用于只跑 paper2ppt 的场景）
     if override_pagecontent is not None:

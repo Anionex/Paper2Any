@@ -177,27 +177,30 @@ def create_paper2page_content_graph() -> GenericGraphBuilder:  # noqa: N802
         output_dir = Path(_ensure_result_path(state)) / "ppt_images"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # 策略：优先 soffice 转 pdf，再 pdf2image
-        pdf_path = output_dir / f"{ppt_path.stem}.pdf"
-        if not pdf_path.exists():
-            cmd = (
-                f'soffice --headless --convert-to pdf --outdir "{output_dir}" "{ppt_path}"'
-            )
-            # 这里不能用 execute_command 工具（在 workflow runtime 内执行），因此用 os.system 兜底；
-
-            ret = os.system(cmd)
-            if ret != 0:
-                log.error(
-                    f"[paper2page_content] soffice 转 pdf 失败(ret={ret}). "
-                    f"请确认部署机器安装了 libreoffice/soffice。cmd={cmd}"
+        # 策略：优先 soffice 转 pdf，再 pdf2image；若输入本身为 pdf，则直接使用
+        if ppt_path.suffix.lower() == ".pdf":
+            pdf_path = ppt_path
+        else:
+            pdf_path = output_dir / f"{ppt_path.stem}.pdf"
+            if not pdf_path.exists():
+                cmd = (
+                    f'soffice --headless --convert-to pdf --outdir "{output_dir}" "{ppt_path}"'
                 )
+                # 这里不能用 execute_command 工具（在 workflow runtime 内执行），因此用 os.system 兜底；
+
+                ret = os.system(cmd)
+                if ret != 0:
+                    log.error(
+                        f"[paper2page_content] soffice 转 pdf 失败(ret={ret}). "
+                        f"请确认部署机器安装了 libreoffice/soffice。cmd={cmd}"
+                    )
+                    state.pagecontent = []
+                    return state
+
+            if not pdf_path.exists():
+                log.error(f"[paper2page_content] soffice 转出的 pdf 不存在: {pdf_path}")
                 state.pagecontent = []
                 return state
-
-        if not pdf_path.exists():
-            log.error(f"[paper2page_content] soffice 转出的 pdf 不存在: {pdf_path}")
-            state.pagecontent = []
-            return state
 
         try:
             from pdf2image import convert_from_path
@@ -206,8 +209,20 @@ def create_paper2page_content_graph() -> GenericGraphBuilder:  # noqa: N802
             state.pagecontent = []
             return state
 
+        render_dpi = getattr(state, "render_dpi", None)
+        if render_dpi is None and getattr(state, "request", None) is not None:
+            render_dpi = getattr(state.request, "render_dpi", None)
+        convert_kwargs: Dict[str, Any] = {}
+        if render_dpi is not None:
+            try:
+                render_dpi = int(render_dpi)
+                if render_dpi > 0:
+                    convert_kwargs["dpi"] = render_dpi
+            except (TypeError, ValueError):
+                render_dpi = None
+
         try:
-            slide_imgs = convert_from_path(str(pdf_path))
+            slide_imgs = convert_from_path(str(pdf_path), **convert_kwargs)
         except Exception as e:
             log.error(f"[paper2page_content] pdf2image 转换失败: {e}")
             state.pagecontent = []

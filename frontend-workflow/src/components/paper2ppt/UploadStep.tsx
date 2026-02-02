@@ -84,13 +84,67 @@ const UploadStep: React.FC<UploadStepProps> = ({
   handleRemoveReferenceImage,
   handleUploadAndParse
 }) => {
-  const { t } = useTranslation(['paper2ppt', 'common']);
+  const { t, i18n } = useTranslation(['paper2ppt', 'common']);
   const modelOptions = withModelOptions(PAPER2PPT_MODELS, model);
   const genFigModelOptions = withModelOptions(PAPER2PPT_GEN_FIG_MODELS, genFigModel);
   const genFigModelLabels: Record<string, string> = {
     'gemini-3-pro-image-preview': 'Gemini 3 Pro (中文必选)',
     'gemini-2.5-flash-image': 'Gemini 2.5 (Flash Image)',
   };
+  const uiLang = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+  const stylePromptCards = uiLang === 'zh'
+    ? [
+        {
+          title: '手绘卡通信息图',
+          text: '手绘卡通风格的信息图。线条：素描感、粗糙笔触、卡通简化\n禁止写实、禁止照片级明暗、禁止 3D 渲染\n效果参考：涂鸦 / 蜡笔 / 马克笔 / 粉彩',
+        },
+        {
+          title: '极简专业商务',
+          text: '极简商务风格。大留白、清晰对比、2~3 色主辅配色\n强调对齐与网格、轻阴影、扁平图标\n禁止复杂纹理、禁止炫光、禁止杂乱背景',
+        },
+        {
+          title: '科技蓝紫渐变',
+          text: '科技感视觉：深蓝到青色渐变背景，发光线条/节点\n图表与关键数字高亮，模块卡片玻璃拟态\n禁止复古元素、禁止卡通元素',
+        },
+        {
+          title: '学术论文风',
+          text: '学术报告风格：白底、严谨排版、稳重配色（蓝/灰/黑）\n图表优先、标题清晰、关键结论加粗\n禁止花哨装饰、禁止大面积高饱和色',
+        },
+        {
+          title: '品牌宣传风',
+          text: '品牌宣传风格：高质感图片占比高，统一品牌色系\n标题大、层级分明，口号式短句\n禁止密集文字、禁止表格式排版',
+        },
+        {
+          title: '自然柔和插画',
+          text: '自然柔和插画风：米白背景、低饱和配色、柔和阴影\n插画/贴纸元素点缀，整体温暖亲和\n禁止强对比、禁止金属质感、禁止赛博霓虹',
+        },
+      ]
+    : [
+        {
+          title: 'Hand-drawn Infographic',
+          text: 'Hand-drawn cartoon infographic. Lines: sketchy, rough strokes, simplified shapes.\nNo realism, no photographic lighting, no 3D rendering.\nLook & feel: doodle / crayon / marker / pastel.',
+        },
+        {
+          title: 'Minimal Business',
+          text: 'Minimal business style. Spacious layout, strong contrast, 2–3 color palette.\nStrict alignment/grid, subtle shadows, flat icons.\nNo heavy textures, no glow effects, no busy backgrounds.',
+        },
+        {
+          title: 'Tech Gradient',
+          text: 'Futuristic tech look: deep blue to cyan gradients, glowing lines/nodes.\nHighlight charts and key numbers, glassmorphism cards.\nNo retro elements, no cartoon elements.',
+        },
+        {
+          title: 'Academic Report',
+          text: 'Academic report style: white background, rigorous layout, sober colors (blue/gray/black).\nChart-first, clear titles, bold key findings.\nNo fancy decorations, no highly saturated blocks.',
+        },
+        {
+          title: 'Brand Promo',
+          text: 'Brand promo style: high-quality visuals, consistent brand colors.\nBig titles, clear hierarchy, slogan-like short phrases.\nNo dense text, no table-like layouts.',
+        },
+        {
+          title: 'Soft Illustration',
+          text: 'Soft illustration style: off-white background, low-saturation palette, gentle shadows.\nLight stickers/illustrations as accents, warm and friendly tone.\nNo harsh contrast, no metallic textures, no cyber neon.',
+        },
+      ];
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -384,6 +438,33 @@ const UploadStep: React.FC<UploadStepProps> = ({
                     rows={2} 
                     className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500 resize-none" 
                   />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs text-gray-400">{t('upload.config.promptCardsTitle')}</label>
+                    <span className="text-[10px] text-gray-500">{t('upload.config.promptCardsTip')}</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {stylePromptCards.map((card) => (
+                      <button
+                        key={card.title}
+                        type="button"
+                        onClick={() => {
+                          setStyleMode('prompt');
+                          setGlobalPrompt(card.text);
+                        }}
+                        className="group text-left rounded-2xl border border-white/15 bg-white/5 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-purple-400/60 hover:bg-white/10"
+                      >
+                        <div className="text-sm font-semibold text-white mb-1">{card.title}</div>
+                        <div className="text-[11px] leading-relaxed text-gray-300 whitespace-pre-line line-clamp-4">
+                          {card.text}
+                        </div>
+                        <div className="mt-2 text-[10px] text-purple-300 opacity-0 transition-opacity group-hover:opacity-100">
+                          {t('upload.config.promptCardsUse')}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </>
             ) : (

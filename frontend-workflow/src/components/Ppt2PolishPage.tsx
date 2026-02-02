@@ -158,7 +158,7 @@ const STORAGE_KEY = 'pptpolish-storage';
 
 // ============== 主组件 ==============
 const Ppt2PolishPage = () => {
-  const { t } = useTranslation(['pptPolish', 'common']);
+  const { t, i18n } = useTranslation(['pptPolish', 'common']);
   const { user, refreshQuota } = useAuthStore();
   // 步骤状态
   const [currentStep, setCurrentStep] = useState<Step>('upload');
@@ -207,6 +207,7 @@ const Ppt2PolishPage = () => {
   const [model, setModel] = useState(DEFAULT_PPT2POLISH_MODEL);
   const [genFigModel, setGenFigModel] = useState(DEFAULT_PPT2POLISH_GEN_FIG_MODEL);
   const [language, setLanguage] = useState<'zh' | 'en'>('en');
+  const [renderResolution, setRenderResolution] = useState<'auto' | '1080p' | '2k' | '4k'>('2k');
   const [resultPath, setResultPath] = useState<string | null>(null);
 
   // GitHub Stars
@@ -229,6 +230,64 @@ const Ppt2PolishPage = () => {
 
   const modelOptions = withModelOptions(PPT2POLISH_MODELS, model);
   const genFigModelOptions = withModelOptions(PPT2POLISH_GEN_FIG_MODELS, genFigModel);
+  const renderDpiMap = { '1080p': 144, '2k': 192, '4k': 288 } as const;
+  const getRenderDpi = () => (renderResolution === 'auto' ? null : renderDpiMap[renderResolution]);
+  const imageResolutionMap = { '1080p': '1K', '2k': '2K', '4k': '4K' } as const;
+  const getImageResolution = () => (renderResolution === 'auto' ? null : imageResolutionMap[renderResolution]);
+  const uiLang = i18n.language?.startsWith('zh') ? 'zh' : 'en';
+  const stylePromptCards = uiLang === 'zh'
+    ? [
+        {
+          title: '手绘卡通信息图',
+          text: '手绘卡通风格的信息图。线条：素描感、粗糙笔触、卡通简化\n禁止写实、禁止照片级明暗、禁止 3D 渲染\n效果参考：涂鸦 / 蜡笔 / 马克笔 / 粉彩',
+        },
+        {
+          title: '极简专业商务',
+          text: '极简商务风格。大留白、清晰对比、2~3 色主辅配色\n强调对齐与网格、轻阴影、扁平图标\n禁止复杂纹理、禁止炫光、禁止杂乱背景',
+        },
+        {
+          title: '科技蓝紫渐变',
+          text: '科技感视觉：深蓝到青色渐变背景，发光线条/节点\n图表与关键数字高亮，模块卡片玻璃拟态\n禁止复古元素、禁止卡通元素',
+        },
+        {
+          title: '学术论文风',
+          text: '学术报告风格：白底、严谨排版、稳重配色（蓝/灰/黑）\n图表优先、标题清晰、关键结论加粗\n禁止花哨装饰、禁止大面积高饱和色',
+        },
+        {
+          title: '品牌宣传风',
+          text: '品牌宣传风格：高质感图片占比高，统一品牌色系\n标题大、层级分明，口号式短句\n禁止密集文字、禁止表格式排版',
+        },
+        {
+          title: '自然柔和插画',
+          text: '自然柔和插画风：米白背景、低饱和配色、柔和阴影\n插画/贴纸元素点缀，整体温暖亲和\n禁止强对比、禁止金属质感、禁止赛博霓虹',
+        },
+      ]
+    : [
+        {
+          title: 'Hand-drawn Infographic',
+          text: 'Hand-drawn cartoon infographic. Lines: sketchy, rough strokes, simplified shapes.\nNo realism, no photographic lighting, no 3D rendering.\nLook & feel: doodle / crayon / marker / pastel.',
+        },
+        {
+          title: 'Minimal Business',
+          text: 'Minimal business style. Spacious layout, strong contrast, 2–3 color palette.\nStrict alignment/grid, subtle shadows, flat icons.\nNo heavy textures, no glow effects, no busy backgrounds.',
+        },
+        {
+          title: 'Tech Gradient',
+          text: 'Futuristic tech look: deep blue to cyan gradients, glowing lines/nodes.\nHighlight charts and key numbers, glassmorphism cards.\nNo retro elements, no cartoon elements.',
+        },
+        {
+          title: 'Academic Report',
+          text: 'Academic report style: white background, rigorous layout, sober colors (blue/gray/black).\nChart-first, clear titles, bold key findings.\nNo fancy decorations, no highly saturated blocks.',
+        },
+        {
+          title: 'Brand Promo',
+          text: 'Brand promo style: high-quality visuals, consistent brand colors.\nBig titles, clear hierarchy, slogan-like short phrases.\nNo dense text, no table-like layouts.',
+        },
+        {
+          title: 'Soft Illustration',
+          text: 'Soft illustration style: off-white background, low-saturation palette, gentle shadows.\nLight stickers/illustrations as accents, warm and friendly tone.\nNo harsh contrast, no metallic textures, no cyber neon.',
+        },
+      ];
 
   const handleCopyShareText = async () => {
     try {
@@ -297,6 +356,7 @@ const Ppt2PolishPage = () => {
         if (saved.model) setModel(saved.model);
         if (saved.genFigModel) setGenFigModel(saved.genFigModel);
         if (saved.language) setLanguage(saved.language);
+        if (saved.renderResolution) setRenderResolution(saved.renderResolution);
 
         // API settings: prioritize user-specific settings from apiSettingsService
         const userApiSettings = getApiSettings(user?.id || null);
@@ -325,7 +385,8 @@ const Ppt2PolishPage = () => {
       apiKey,
       model,
       genFigModel,
-      language
+      language,
+      renderResolution
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -338,7 +399,7 @@ const Ppt2PolishPage = () => {
     }
   }, [
     styleMode, stylePreset, globalPrompt,
-    llmApiUrl, apiKey, model, genFigModel, language, user?.id
+    llmApiUrl, apiKey, model, genFigModel, language, renderResolution, user?.id
   ]);
 
   // 自动加载版本历史
@@ -357,7 +418,7 @@ const Ppt2PolishPage = () => {
   // ============== Step 1: 上传处理 ==============
   const validateDocFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'ppt' && ext !== 'pptx') {
+    if (ext !== 'ppt' && ext !== 'pptx' && ext !== 'pdf') {
       setError(t('errors.format'));
       return false;
     }
@@ -492,7 +553,16 @@ const Ppt2PolishPage = () => {
       formData.append('gen_fig_model', genFigModel);
       formData.append('page_count', '10'); // 默认值，后端可能会调整
       formData.append('email', user?.id || user?.email || '');
-      formData.append('input_type', 'pptx');
+      const ext = selectedFile.name.split('.').pop()?.toLowerCase();
+      const isPdf = ext === 'pdf';
+      formData.append('input_type', isPdf ? 'pdf' : 'pptx');
+      if (isPdf) {
+        formData.append('pdf_as_slides', 'true');
+      }
+      const renderDpi = getRenderDpi();
+      if (renderDpi) {
+        formData.append('render_dpi', String(renderDpi));
+      }
       formData.append('file', selectedFile);
       
       if (referenceImage) {
@@ -772,6 +842,10 @@ const Ppt2PolishPage = () => {
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
       formData.append('aspect_ratio', '16:9');
+      const imageResolution = getImageResolution();
+      if (imageResolution) {
+        formData.append('image_resolution', imageResolution);
+      }
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', currentPath);
       formData.append('get_down', 'false');
@@ -908,6 +982,10 @@ const Ppt2PolishPage = () => {
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
       formData.append('aspect_ratio', '16:9');
+      const imageResolution = getImageResolution();
+      if (imageResolution) {
+        formData.append('image_resolution', imageResolution);
+      }
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', currentPath);
       formData.append('get_down', 'true');
@@ -1111,6 +1189,10 @@ const Ppt2PolishPage = () => {
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
       formData.append('aspect_ratio', '16:9');
+      const imageResolution = getImageResolution();
+      if (imageResolution) {
+        formData.append('image_resolution', imageResolution);
+      }
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', resultPath);
       formData.append('get_down', 'false');
@@ -1308,10 +1390,14 @@ const Ppt2PolishPage = () => {
               <p className="text-white font-medium mb-1">{t('upload.dragText')}</p>
               <p className="text-sm text-gray-400">{t('upload.supportText')}</p>
             </div>
-            <label className="px-6 py-2.5 rounded-full bg-gradient-to-r from-cyan-600 to-teal-600 text-white text-sm font-medium cursor-pointer hover:from-cyan-700 hover:to-teal-700 transition-all">
+            <label className="group relative px-6 py-2.5 rounded-full bg-gradient-to-r from-cyan-600 to-teal-600 text-white text-sm font-medium cursor-pointer hover:from-cyan-700 hover:to-teal-700 transition-all">
               <Presentation size={16} className="inline mr-2" />
               {t('upload.button')}
-              <input type="file" accept=".ppt,.pptx" className="hidden" onChange={handleFileChange} />
+              <input type="file" accept=".ppt,.pptx,.pdf" className="hidden" onChange={handleFileChange} />
+              <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-72 -translate-x-1/2 rounded-xl border border-white/15 bg-black/70 px-3 py-2 text-[11px] text-gray-200 shadow-lg opacity-0 backdrop-blur transition-all duration-200 group-hover:opacity-100">
+                <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border border-white/15 bg-black/70"></div>
+                {t('upload.fileTip')}
+              </div>
             </label>
             {selectedFile && (
               <div className="px-4 py-2 bg-teal-500/20 border border-teal-500/40 rounded-lg">
@@ -1431,6 +1517,21 @@ const Ppt2PolishPage = () => {
               <option value="en">英文 (en)</option>
             </select>
           </div>
+
+          <div>
+            <label className="block text-sm text-gray-300 mb-2">{t('upload.config.renderTitle')}</label>
+            <select
+              value={renderResolution}
+              onChange={(e) => setRenderResolution(e.target.value as typeof renderResolution)}
+              className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="auto">{t('upload.config.renderOptions.auto')}</option>
+              <option value="1080p">{t('upload.config.renderOptions.1080p')}</option>
+              <option value="2k">{t('upload.config.renderOptions.2k')}</option>
+              <option value="4k">{t('upload.config.renderOptions.4k')}</option>
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">{t('upload.config.renderTip')}</p>
+          </div>
           
           <div className="border-t border-white/10 pt-4">
             <h4 className="text-sm text-gray-300 mb-3 font-medium">{t('upload.config.styleTitle')}</h4>
@@ -1456,6 +1557,33 @@ const Ppt2PolishPage = () => {
               <div>
                 <label className="block text-sm text-gray-300 mb-2">{t('upload.config.promptLabel')}</label>
                 <textarea value={globalPrompt} onChange={(e) => setGlobalPrompt(e.target.value)} placeholder={t('upload.config.promptPlaceholder')}  rows={3} className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500 placeholder:text-gray-500 resize-none" />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm text-gray-300">{t('upload.config.promptCardsTitle')}</label>
+                  <span className="text-[11px] text-gray-500">{t('upload.config.promptCardsTip')}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {stylePromptCards.map((card) => (
+                    <button
+                      key={card.title}
+                      type="button"
+                      onClick={() => {
+                        setStyleMode('preset');
+                        setGlobalPrompt(card.text);
+                      }}
+                      className="group text-left rounded-2xl border border-white/15 bg-white/5 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-teal-400/60 hover:bg-white/10"
+                    >
+                      <div className="text-sm font-semibold text-white mb-1">{card.title}</div>
+                      <div className="text-[11px] leading-relaxed text-gray-300 whitespace-pre-line line-clamp-4">
+                        {card.text}
+                      </div>
+                      <div className="mt-2 text-[10px] text-teal-300 opacity-0 transition-opacity group-hover:opacity-100">
+                        {t('upload.config.promptCardsUse')}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}
