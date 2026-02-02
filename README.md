@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="static/new_readme/logo图.png" alt="Paper2Any Logo" width="200"/>
+<img src="static/new_readme/branding/logo.png" alt="Paper2Any Logo" width="200"/>
 
 # Paper2Any
 
@@ -38,7 +38,7 @@ English | [中文](README_CN.md)
 <br>
 <br>
 
-<img src="static/new_readme/first.png" alt="Paper2Any Web Interface" width="80%"/>
+<img src="static/new_readme/ui/home.png" alt="Paper2Any Web Interface" width="80%"/>
 
 </div>
 
@@ -57,6 +57,10 @@ English | [中文](README_CN.md)
 ---
 
 ## 🔥 News
+
+> [!TIP]
+> 🆕 <strong>2026-02-02 · Paper2Rebuttal</strong><br>
+> Added rebuttal drafting support with structured response guidance and image-aware revision prompts.
 
 > [!TIP]
 > 🆕 <strong>2026-01-28 · Drawio Update</strong><br>
@@ -94,6 +98,7 @@ Paper2Any currently includes the following sub-capabilities:
 - **📊 Paper2Figure - Editable Scientific Figures**: Model architecture diagrams, technical roadmaps (PPT + SVG), and experimental plots with editable PPTX output.
 - **🧩 Paper2Diagram / Image2Drawio - Editable Diagrams**: Generate draw.io diagrams from paper/text or images, with drawio/png/svg export and chat-based edits.
 - **🎬 Paper2PPT - Editable Slide Decks**: Paper/text/topic to PPT, long-doc support, and built-in table/figure extraction.
+- **📝 Paper2Rebuttal**: Draft structured rebuttals and revision responses with claims-to-evidence grounding.
 - **🖼️ PDF2PPT - Layout-Preserving Conversion**: Accurate layout retention for PDF → editable PPTX.
 - **🖼️ Image2PPT - Image to Slides**: Convert images or screenshots into structured slides.
 - **🎨 PPTPolish - Smart Beautification**: AI-based layout optimization and style transfer.
@@ -110,19 +115,21 @@ Paper2Any currently includes the following sub-capabilities:
 <div align="center">
 
 <br>
-<img src="static/new_readme/2figure.gif" width="90%"/>
+<img src="static/new_readme/paper2figure/model-arch-demo.gif" width="90%"/>
 <br><sub>✨ Model Architecture Diagram Generation</sub>
 
 <br>
-<img src="static/new_readme/科研绘图-01.png" width="90%"/>
+<img src="static/new_readme/paper2figure/model-arch-1.png" width="90%"/>
 <br><sub>✨ Model Architecture Diagram Generation</sub>
 
 <br><br>
-<img src="static/new_readme/技术路线图.png" width="90%"/>
+<img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
+<br><br>
+<img src="static/new_readme/paper2figure/technical-roadmap-2.png" width="90%"/>
 <br><sub>✨ Technical Roadmap Generation</sub>
 
 <br><br>
-<img src="static/new_readme/实验数据图.png" width="90%"/>
+<img src="static/new_readme/paper2figure/experimental-plot.png" width="90%"/>
 <br><sub>✨ Experimental Plot Generation (Multiple Styles)</sub>
 
 </div>
@@ -134,27 +141,27 @@ Paper2Any currently includes the following sub-capabilities:
 <div align="center">
 
 <br>
-<img src="static/new_readme/paper2ppt操作.gif" width="85%"/>
+<img src="static/new_readme/paper2ppt/demo.gif" width="85%"/>
 <br><sub>✨ PPT Generation Demo</sub>
 
 <br>
-<img src="static/new_readme/paper2ppt案例-1.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/case-1.png" width="90%"/>
 <br><sub>✨ Paper / Text / Topic → PPT</sub>
 
 <br><br>
-<img src="static/new_readme/paper2ppt-长文长ppt.png" width="85%"/>
+<img src="static/new_readme/paper2ppt/long-doc.png" width="85%"/>
 <br><sub>✨ Long Document Support (40+ Slides)</sub>
 
 <br><br>
-<img src="static/new_readme/paper2ppt-表格提取功能.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/table-extraction.png" width="90%"/>
 <br><sub>✨ Intelligent Table Extraction & Insertion</sub>
 
 <br><br>
-<img src="static/new_readme/AI辅助编辑outline.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/outline-edit.png" width="90%"/>
 <br><sub>✨ AI-Assisted Outline Editing</sub>
 
 <br><br>
-<img src="static/new_readme/历史版本管理.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/version-history.png" width="90%"/>
 <br><sub>✨ Version History Management</sub>
 
 </div>
@@ -166,11 +173,11 @@ Paper2Any currently includes the following sub-capabilities:
 <div align="center">
 
 <br>
-<img src="static/new_readme/polish.gif" width="90%"/>
+<img src="static/new_readme/pptpolish/polish-demo.gif" width="90%"/>
 <br><sub>✨ AI-based Layout Optimization</sub>
 
 <br>
-<img src="static/new_readme/ppt美化-1.png" width="90%"/>
+<img src="static/new_readme/pptpolish/style-transfer-1.png" width="90%"/>
 <br><sub>✨ AI-based Layout Optimization & Style Transfer</sub>
 
 </div>
@@ -182,11 +189,11 @@ Paper2Any currently includes the following sub-capabilities:
 <div align="center">
 
 <br>
-<img src="static/new_readme/pdf2ppt抠图.png" width="90%"/>
+<img src="static/new_readme/pdf2ppt/cutout.png" width="90%"/>
 <br><sub>✨ Intelligent Cutout & Layout Preservation</sub>
 
 <br>
-<img src="static/new_readme/image2PPT.png" width="93%"/>
+<img src="static/new_readme/image2ppt/image2ppt.png" width="93%"/>
 <br><sub>✨ Image2PPT</sub>
 
 </div>
@@ -204,6 +211,22 @@ Paper2Any currently includes the following sub-capabilities:
 <br><br>
 <img src="static/new_readme/drawio/drawio-2.gif" width="90%"/>
 <br><sub>✨ Model diagrams from PDF or text (research figure generation)</sub>
+
+<br><br>
+<img src="static/new_readme/drawio/image-to-editable.png" width="90%"/>
+<br><sub>✨ Image to editable DrawIO diagram</sub>
+
+</div>
+
+---
+
+### 📝 Paper2Rebuttal: Rebuttal Drafting
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2rebuttal/rebuttal.png" width="90%"/>
+<br><sub>✨ Rebuttal drafting and revision support</sub>
 
 </div>
 

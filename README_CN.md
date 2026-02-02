@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="static/new_readme/logo图.png" alt="Paper2Any Logo" width="200"/>
+<img src="static/new_readme/branding/logo.png" alt="Paper2Any Logo" width="200"/>
 
 # Paper2Any
 
@@ -38,7 +38,7 @@
 <br>
 <br>
 
-<img src="static/new_readme/first.png" alt="Paper2Any Web Interface" width="80%"/>
+<img src="static/new_readme/ui/home.png" alt="Paper2Any Web Interface" width="80%"/>
 
 </div>
 
@@ -57,6 +57,10 @@
 ---
 
 ## 🔥 News
+
+> [!TIP]
+> 🆕 <strong>2026-02-02 · Paper2Rebuttal 更新</strong><br>
+> 新增反驳意见草拟与修改建议，支持结构化回复与图文要点对齐。
 
 > [!TIP]
 > 🆕 <strong>2026-01-28 · Drawio 更新</strong><br>
@@ -86,6 +90,7 @@ Paper2Any 当前包含以下几个子能力：
 - **📊 Paper2Figure - 可编辑科研绘图**：模型架构图、技术路线图（PPT + SVG）与实验数据图，输出可编辑 PPTX。
 - **🧩 Paper2Diagram / Image2Drawio - 可编辑流程图**：从论文/文本或图片生成 Drawio 图，支持 drawio/png/svg 导出与对话式编辑。
 - **🎬 Paper2PPT - 可编辑演示文稿**：论文/文本/主题一键生成，支持超长文档与表格/图表抽取。
+- **📝 Paper2Rebuttal**：自动生成结构化反驳草稿与修改建议，辅助审稿意见回复。
 - **🖼️ PDF2PPT - 版式保留转换**：精准保留版式的 PDF → 可编辑 PPTX。
 - **🖼️ Image2PPT - 图片转 PPT**：将图片或截图快速转换为结构化幻灯片。
 - **🎨 PPTPolish 智能美化**：基于 AI 的排版优化与风格迁移。
@@ -101,19 +106,21 @@ Paper2Any 当前包含以下几个子能力：
 <div align="center">
 
 <br>
-<img src="static/new_readme/2figure.gif" width="90%"/>
+<img src="static/new_readme/paper2figure/model-arch-demo.gif" width="90%"/>
 <br><sub>✨ 模型架构图生成</sub>
 
 <br>
-<img src="static/new_readme/科研绘图-01.png" width="90%"/>
+<img src="static/new_readme/paper2figure/model-arch-1.png" width="90%"/>
 <br><sub>✨ 模型架构图生成</sub>
 
 <br><br>
-<img src="static/new_readme/技术路线图.png" width="90%"/>
+<img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
+<br><br>
+<img src="static/new_readme/paper2figure/technical-roadmap-2.png" width="90%"/>
 <br><sub>✨ 技术路线图生成</sub>
 
 <br><br>
-<img src="static/new_readme/实验数据图.png" width="90%"/>
+<img src="static/new_readme/paper2figure/experimental-plot.png" width="90%"/>
 <br><sub>✨ 实验数据图生成 (多种风格)</sub>
 
 </div>
@@ -125,27 +132,27 @@ Paper2Any 当前包含以下几个子能力：
 <div align="center">
 
 <br>
-<img src="static/new_readme/paper2ppt操作.gif" width="85%"/>
+<img src="static/new_readme/paper2ppt/demo.gif" width="85%"/>
 <br><sub>✨ PPT生成案例</sub>
 
 <br>
-<img src="static/new_readme/paper2ppt案例-1.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/case-1.png" width="90%"/>
 <br><sub>✨ Paper / Text / Topic → PPT</sub>
 
 <br><br>
-<img src="static/new_readme/paper2ppt-长文长ppt.png" width="85%"/>
+<img src="static/new_readme/paper2ppt/long-doc.png" width="85%"/>
 <br><sub>✨ 超长文档支持 (40+ 页 PPT)</sub>
 
 <br><br>
-<img src="static/new_readme/paper2ppt-表格提取功能.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/table-extraction.png" width="90%"/>
 <br><sub>✨ 智能表格提取与插入</sub>
 
 <br><br>
-<img src="static/new_readme/AI辅助编辑outline.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/outline-edit.png" width="90%"/>
 <br><sub>✨ AI 辅助编辑大纲</sub>
 
 <br><br>
-<img src="static/new_readme/历史版本管理.png" width="90%"/>
+<img src="static/new_readme/paper2ppt/version-history.png" width="90%"/>
 <br><sub>✨ 历史版本管理</sub>
 
 </div>
@@ -157,11 +164,11 @@ Paper2Any 当前包含以下几个子能力：
 <div align="center">
 
 <br>
-<img src="static/new_readme/polish.gif" width="90%"/>
+<img src="static/new_readme/pptpolish/polish-demo.gif" width="90%"/>
 <br><sub>✨ 基于 AI 的排版优化</sub>
 
 <br>
-<img src="static/new_readme/ppt美化-1.png" width="90%"/>
+<img src="static/new_readme/pptpolish/style-transfer-1.png" width="90%"/>
 <br><sub>✨ 基于 AI 的排版优化与风格迁移</sub>
 
 </div>
@@ -173,8 +180,12 @@ Paper2Any 当前包含以下几个子能力：
 <div align="center">
 
 <br>
-<img src="static/new_readme/pdf2ppt抠图.png" width="90%"/>
+<img src="static/new_readme/pdf2ppt/cutout.png" width="90%"/>
 <br><sub>✨ 智能抠图 & 版式保留</sub>
+
+<br>
+<img src="static/new_readme/image2ppt/image2ppt.png" width="93%"/>
+<br><sub>✨ 图片转 PPT</sub>
 
 </div>
 
@@ -191,6 +202,22 @@ Paper2Any 当前包含以下几个子能力：
 <br><br>
 <img src="static/new_readme/drawio/drawio-2.gif" width="90%"/>
 <br><sub>✨ 模型图生成：上传 PDF 或输入文本，自动生成科研绘图</sub>
+
+<br><br>
+<img src="static/new_readme/drawio/image-to-editable.png" width="90%"/>
+<br><sub>✨ 图片转可编辑 DrawIO 图</sub>
+
+</div>
+
+---
+
+### 📝 Paper2Rebuttal：审稿回复
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2rebuttal/rebuttal.png" width="90%"/>
+<br><sub>✨ 审稿回复草拟与修改建议</sub>
 
 </div>
 
