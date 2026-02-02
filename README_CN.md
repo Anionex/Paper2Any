@@ -101,6 +101,38 @@ Paper2Any 当前包含以下几个子能力：
 
 ## 📸 功能展示
 
+### 🧩 Drawio
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/drawio/drawio-1.gif" width="90%"/>
+<br><sub>✨ Diagram 生成（思维导图 / 流程图 / ER 图 ......）</sub>
+
+<br><br>
+<img src="static/new_readme/drawio/drawio-2.gif" width="90%"/>
+<br><sub>✨ 模型图生成：上传 PDF 或输入文本，自动生成科研绘图</sub>
+
+<br><br>
+<img src="static/new_readme/drawio/image-to-editable.png" width="90%"/>
+<br><sub>✨ 图片转可编辑 DrawIO 图</sub>
+
+</div>
+
+---
+
+### 📝 Paper2Rebuttal：审稿回复
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2rebuttal/rebuttal.png" width="90%"/>
+<br><sub>✨ 审稿回复草拟与修改建议</sub>
+
+</div>
+
+---
+
 ### 📊 Paper2Figure: 科研绘图生成
 
 <div align="center">
@@ -186,38 +218,6 @@ Paper2Any 当前包含以下几个子能力：
 <br>
 <img src="static/new_readme/image2ppt/image2ppt.png" width="93%"/>
 <br><sub>✨ 图片转 PPT</sub>
-
-</div>
-
----
-
-### 🧩 Drawio
-
-<div align="center">
-
-<br>
-<img src="static/new_readme/drawio/drawio-1.gif" width="90%"/>
-<br><sub>✨ Diagram 生成（思维导图 / 流程图 / ER 图 ......）</sub>
-
-<br><br>
-<img src="static/new_readme/drawio/drawio-2.gif" width="90%"/>
-<br><sub>✨ 模型图生成：上传 PDF 或输入文本，自动生成科研绘图</sub>
-
-<br><br>
-<img src="static/new_readme/drawio/image-to-editable.png" width="90%"/>
-<br><sub>✨ 图片转可编辑 DrawIO 图</sub>
-
-</div>
-
----
-
-### 📝 Paper2Rebuttal：审稿回复
-
-<div align="center">
-
-<br>
-<img src="static/new_readme/paper2rebuttal/rebuttal.png" width="90%"/>
-<br><sub>✨ 审稿回复草拟与修改建议</sub>
 
 </div>
 

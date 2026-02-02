@@ -110,6 +110,38 @@ Paper2Any currently includes the following sub-capabilities:
 
 ## 📸 Showcase
 
+### 🧩 Drawio
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/drawio/drawio-1.gif" width="90%"/>
+<br><sub>✨ Diagram generation (mindmap / flowchart / ER ...)</sub>
+
+<br><br>
+<img src="static/new_readme/drawio/drawio-2.gif" width="90%"/>
+<br><sub>✨ Model diagrams from PDF or text (research figure generation)</sub>
+
+<br><br>
+<img src="static/new_readme/drawio/image-to-editable.png" width="90%"/>
+<br><sub>✨ Image to editable DrawIO diagram</sub>
+
+</div>
+
+---
+
+### 📝 Paper2Rebuttal: Rebuttal Drafting
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2rebuttal/rebuttal.png" width="95%"/>
+<br><sub>✨ Rebuttal drafting and revision support</sub>
+
+</div>
+
+---
+
 ### 📊 Paper2Figure: Scientific Figure Generation
 
 <div align="center">
@@ -125,7 +157,7 @@ Paper2Any currently includes the following sub-capabilities:
 <br><br>
 <img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
 <br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-2.png" width="90%"/>
+<img src="static/new_readme/paper2figure/technical-roadmap-3.png" width="80%"/>
 <br><sub>✨ Technical Roadmap Generation</sub>
 
 <br><br>
@@ -195,38 +227,6 @@ Paper2Any currently includes the following sub-capabilities:
 <br>
 <img src="static/new_readme/image2ppt/image2ppt.png" width="93%"/>
 <br><sub>✨ Image2PPT</sub>
-
-</div>
-
----
-
-### 🧩 Drawio
-
-<div align="center">
-
-<br>
-<img src="static/new_readme/drawio/drawio-1.gif" width="90%"/>
-<br><sub>✨ Diagram generation (mindmap / flowchart / ER ...)</sub>
-
-<br><br>
-<img src="static/new_readme/drawio/drawio-2.gif" width="90%"/>
-<br><sub>✨ Model diagrams from PDF or text (research figure generation)</sub>
-
-<br><br>
-<img src="static/new_readme/drawio/image-to-editable.png" width="90%"/>
-<br><sub>✨ Image to editable DrawIO diagram</sub>
-
-</div>
-
----
-
-### 📝 Paper2Rebuttal: Rebuttal Drafting
-
-<div align="center">
-
-<br>
-<img src="static/new_readme/paper2rebuttal/rebuttal.png" width="90%"/>
-<br><sub>✨ Rebuttal drafting and revision support</sub>
 
 </div>
 
