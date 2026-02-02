@@ -461,35 +461,35 @@ def local_tool_list_directory(
 if __name__ == "__main__":
     import json
     
-    print("=" * 60)
-    print("文件工具测试")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("文件工具测试")
+    log.info("=" * 60)
     
     # 测试1：读取文件
-    print("\n--- 测试1：读取 README.md ---")
+    log.info("--- 测试1：读取 README.md ---")
     result = read_file_content("README.md", end_line=10)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    log.info(json.dumps(result, ensure_ascii=False, indent=2))
     
     # 测试2：读取指定行范围
-    print("\n--- 测试2：读取文件指定行 ---")
+    log.info("--- 测试2：读取文件指定行 ---")
     result = read_file_content("dataflow_agent/utils.py", start_line=1, end_line=20)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    log.info(json.dumps(result, ensure_ascii=False, indent=2))
     
     # 测试3：列出目录
-    print("\n--- 测试3：列出项目根目录 ---")
+    log.info("--- 测试3：列出项目根目录 ---")
     result = list_directory_content(".")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    log.info(json.dumps(result, ensure_ascii=False, indent=2))
     
     # 测试4：递归列出目录
-    print("\n--- 测试4：递归列出 toolkits 目录 ---")
+    log.info("--- 测试4：递归列出 toolkits 目录 ---")
     result = list_directory_content("dataflow_agent/toolkits", recursive=True)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    log.info(json.dumps(result, ensure_ascii=False, indent=2))
     
     # 测试5：安全检查 - 尝试访问项目外的路径
-    print("\n--- 测试5：安全检查（访问项目外路径）---")
+    log.info("--- 测试5：安全检查（访问项目外路径）---")
     result = read_file_content("/etc/passwd")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    log.info(json.dumps(result, ensure_ascii=False, indent=2))
     
-    print("\n" + "=" * 60)
-    print("测试完成")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("测试完成")
+    log.info("=" * 60)

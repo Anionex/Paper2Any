@@ -26,6 +26,9 @@ import re
 import random
 from PIL import Image
 from mineru_vl_utils import MinerUClient
+from dataflow_agent.logger import get_logger
+
+log = get_logger(__name__)
 
 
 # ---------------------------------------
@@ -214,9 +217,9 @@ def run_mineru_pdf_extract(
     if available_devices:
         selected_device = random.choice(available_devices)
         env["CUDA_VISIBLE_DEVICES"] = selected_device
-        print(f"[MinerU] Assigned GPU: {selected_device} (from pool: {available_devices})")
+        log.info(f"[MinerU] Assigned GPU: {selected_device} (from pool: {available_devices})")
     else:
-        print("[MinerU] No GPU devices configured in MINERU_DEVICES, using system default.")
+        log.warning("[MinerU] No GPU devices configured in MINERU_DEVICES, using system default.")
 
     # 4. 执行命令
     subprocess.run(

@@ -620,7 +620,7 @@ def create_paper2expfigure_graph() -> GenericGraphBuilder:
             for table in tables
         ]
         
-        print(f"states: {states}")
+        log.debug(f"states: {states}")
         
         tasks = [task(s) for s in states]
         results = await asyncio.gather(*tasks)

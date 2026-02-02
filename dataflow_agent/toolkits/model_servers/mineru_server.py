@@ -4,8 +4,10 @@ import argparse
 import itertools
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, Response
+from dataflow_agent.logger import get_logger
 
 app = FastAPI(title="MinerU Load Balancer")
+log = get_logger(__name__)
 
 # Default backends (can be overridden by args)
 BACKEND_URLS = []
@@ -55,8 +57,7 @@ async def proxy(request: Request, path_name: str):
             )
         except Exception as e:
             # Simple error handling
-            import traceback
-            traceback.print_exc()
+            log.exception(f"Proxy Error: {e}")
             return Response(content=f"Proxy Error: {str(e)}", status_code=502)
 
 if __name__ == "__main__":
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     BACKEND_URLS = args.backends
     iterator = itertools.cycle(BACKEND_URLS)
     
-    print(f"Starting MinerU Load Balancer on {args.host}:{args.port}")
-    print(f"Balancing between backends: {BACKEND_URLS}")
+    log.info(f"Starting MinerU Load Balancer on {args.host}:{args.port}")
+    log.info(f"Balancing between backends: {BACKEND_URLS}")
     
     uvicorn.run(app, host=args.host, port=args.port)

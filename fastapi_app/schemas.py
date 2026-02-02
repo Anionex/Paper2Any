@@ -151,6 +151,7 @@ class Paper2FigureRequest(BaseModel):
 
 class Paper2FigureResponse(BaseModel):
     success: bool
+    error: Optional[str] = None
     ppt_filename: str = ""  # 生成PPT的路径
     drawio_filename: str = ""  # DrawIO 源文件路径（model_arch image2drawio 时有效）
     svg_filename: str = ""  # 技术路线 SVG 源文件路径（graph_type=tech_route 时有效）

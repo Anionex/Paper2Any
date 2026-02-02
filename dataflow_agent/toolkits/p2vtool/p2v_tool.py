@@ -21,7 +21,7 @@ def get_image_paths(directory_path: str) -> List[str]:
     base_path = Path(directory_path)
     if not base_path.is_dir():
         # 如果目录不存在，返回空列表并打印错误
-        print(f"Error: Directory not found at {directory_path}")
+        log.warning(f"Error: Directory not found at {directory_path}")
         return []
 
     found_image_paths: List[Path] = []

@@ -10,6 +10,9 @@ import subprocess
 from pathlib import Path
 import textwrap
 import sys
+from dataflow_agent.logger import get_logger
+
+log = get_logger(__name__)
 
 DEFAULT_REQS = """\
 pandas==2.2.2
@@ -35,7 +38,7 @@ ENTRYPOINT ["python"]
 """
 
 def run(cmd: list[str], **kw):
-    print(">>", " ".join(cmd))
+    log.info(">> " + " ".join(cmd))
     subprocess.run(cmd, check=True, **kw)
 
 def main():
@@ -54,12 +57,12 @@ def main():
 
     # 1. requirements.txt
     (docker_dir / "requirements.txt").write_text(DEFAULT_REQS, encoding="utf-8")
-    print("✓ requirements.txt written")
+    log.info("✓ requirements.txt written")
 
     # 2. Dockerfile
     dockerfile_str = DOCKERFILE_TMPL.format(py_version=opts.py_version)
     (docker_dir / "Dockerfile").write_text(dockerfile_str, encoding="utf-8")
-    print("✓ Dockerfile written")
+    log.info("✓ Dockerfile written")
 
     # 3. build
     run(["docker", "build", "-t", opts.image, str(docker_dir)])
@@ -68,7 +71,7 @@ def main():
     if opts.push:
         run(["docker", "push", opts.image])
 
-    print(f"\n 完成！请把 DOCKER_IMAGE 改为 '{opts.image}'\n")
+    log.info(f"完成！请把 DOCKER_IMAGE 改为 '{opts.image}'")
 
 if __name__ == "__main__":
     try:

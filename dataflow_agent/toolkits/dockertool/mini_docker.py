@@ -12,10 +12,12 @@ from typing import Any, Dict, Optional
 
 import docker  # pip install docker
 from docker.errors import DockerException, NotFound, APIError, ContainerError
+from dataflow_agent.logger import get_logger
 
 # 使用 build_docker.py 生成的自定义镜像
 DOCKER_IMAGE = "myorg/dataflow-py:3.11"
 RUN_TIMEOUT = 120  # s
+log = get_logger(__name__)
 
 
 def _run_in_container_sync(
@@ -407,7 +409,7 @@ def _cli_main(argv: list[str] | None = None) -> int:
         enable_network=args.enable_network,
         timeout=args.timeout,
     )
-    print(json.dumps(res, ensure_ascii=False, indent=2))
+    log.info(json.dumps(res, ensure_ascii=False, indent=2))
     return 0 if res.get("success") else 1
 
 

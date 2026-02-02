@@ -6,6 +6,7 @@ import base64
 import zlib
 import os
 import sys
+from dataflow_agent.logger import get_logger
 
 # Add project root to path to ensure imports work
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,18 +22,19 @@ except ImportError:
     torch = None
 
 app = FastAPI(title="SAM Model Server")
+log = get_logger(__name__)
 
 # Check CUDA device on startup
 @app.on_event("startup")
 async def startup_event():
-    print("SAM Server Startup Check:")
-    print(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'Not Set')}")
+    log.info("SAM Server Startup Check:")
+    log.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'Not Set')}")
     if torch and torch.cuda.is_available():
-        print(f"Torch CUDA available: {torch.cuda.is_available()}")
-        print(f"Current Device Count: {torch.cuda.device_count()}")
-        print(f"Current Device Name: {torch.cuda.get_device_name(0)}")
+        log.info(f"Torch CUDA available: {torch.cuda.is_available()}")
+        log.info(f"Current Device Count: {torch.cuda.device_count()}")
+        log.info(f"Current Device Name: {torch.cuda.get_device_name(0)}")
     else:
-        print("CUDA NOT AVAILABLE")
+        log.warning("CUDA NOT AVAILABLE")
 
 class SAMRequest(BaseModel):
     image_path: str
@@ -100,8 +102,7 @@ def predict(req: SAMRequest):
         return SAMResponse(items=serialized_items)
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.exception(f"SAM predict error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         # Aggressive cleanup to prevent OOM

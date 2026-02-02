@@ -4,6 +4,10 @@ import time
 from datetime import datetime
 from typing import Optional, Tuple, Dict, List
 
+from dataflow_agent.logger import get_logger
+
+log = get_logger(__name__)
+
 # Provider configurations: base_url and env_var for API key
 PROVIDER_CONFIGS: Dict[str, Dict[str, str]] = {
     "openrouter": {
@@ -83,18 +87,24 @@ class TokenUsageTracker:
         }
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(export_data, f, ensure_ascii=False, indent=2)
-        print(f"Token usage statistics exported to: {output_file}")
+        log.info(f"Token usage statistics exported to: {output_file}")
         return output_file
     
     def print_summary(self):
-        print("\n" + "="*60)
-        print("Token Usage Summary")
-        print("="*60)
-        print(f"Total API calls: {self.total_stats['total_calls']}")
-        print(f"Total input tokens: {self.total_stats['total_prompt_tokens']:,}")
-        print(f"Total output tokens: {self.total_stats['total_completion_tokens']:,}")
-        print(f"Total tokens: {self.total_stats['total_tokens']:,}")
-        print("="*60 + "\n")
+        summary = (
+            "\n"
+            + "=" * 60
+            + "\nToken Usage Summary\n"
+            + "=" * 60
+            + f"\nTotal API calls: {self.total_stats['total_calls']}"
+            + f"\nTotal input tokens: {self.total_stats['total_prompt_tokens']:,}"
+            + f"\nTotal output tokens: {self.total_stats['total_completion_tokens']:,}"
+            + f"\nTotal tokens: {self.total_stats['total_tokens']:,}"
+            + "\n"
+            + "=" * 60
+            + "\n"
+        )
+        log.info(summary)
 
 
 class LLMClient:
@@ -111,6 +121,7 @@ class LLMClient:
         max_retries: int = 3,
         retry_delay: float = 2.0,
     ) -> None:
+        self.api_key = api_key
         self.provider = provider.lower()
         self.default_model = default_model
         self.request_timeout = request_timeout
@@ -161,6 +172,28 @@ class LLMClient:
                 http_client=self._http_client,
             )
 
+    def _log_output(self, model_name: str, final_text: str, reasoning_text: str = "") -> None:
+        if reasoning_text:
+            message = (
+                "[LLM Output]\n"
+                f"api_key={self.api_key}\n"
+                f"provider={self.provider}\n"
+                f"model={model_name}\n"
+                f"agent={self.current_agent_name}\n"
+                f"output=\n{final_text}\n"
+                f"reasoning=\n{reasoning_text}"
+            )
+        else:
+            message = (
+                "[LLM Output]\n"
+                f"api_key={self.api_key}\n"
+                f"provider={self.provider}\n"
+                f"model={model_name}\n"
+                f"agent={self.current_agent_name}\n"
+                f"output=\n{final_text}"
+            )
+        log.info(message)
+
     def generate(
         self,
         instructions: Optional[str],
@@ -196,17 +229,34 @@ class LLMClient:
                 if any(keyword in final_text.lower() for keyword in rate_limit_keywords):
                     raise Exception(f"Rate limit detected in response: {final_text[:100]}...")
                 
+                self._log_output(model_name, final_text or "", reasoning_text or "")
                 return final_text or "", reasoning_text or ""
                 
             except Exception as e:
                 last_error = e
                 if attempt < self.max_retries:
                     wait_time = self.retry_delay * (2 ** attempt)  # Exponential backoff: 2s, 4s, 8s
-                    print(f"[Retry] {self.current_agent_name} attempt {attempt + 1}/{self.max_retries} failed: {type(e).__name__}")
-                    print(f"[Retry] Waiting {wait_time:.1f}s before retry...")
+                    log.warning(
+                        "[Retry]\n"
+                        f"api_key={self.api_key}\n"
+                        f"provider={self.provider}\n"
+                        f"model={model_name}\n"
+                        f"agent={self.current_agent_name}\n"
+                        f"attempt={attempt + 1}/{self.max_retries}\n"
+                        f"error={type(e).__name__}: {e}\n"
+                        f"waiting={wait_time:.1f}s"
+                    )
                     time.sleep(wait_time)
                 else:
-                    print(f"[{self.provider.upper()} Error] All {self.max_retries + 1} attempts failed: {type(e).__name__}: {e}")
+                    log.error(
+                        "[LLM Error]\n"
+                        f"api_key={self.api_key}\n"
+                        f"provider={self.provider}\n"
+                        f"model={model_name}\n"
+                        f"agent={self.current_agent_name}\n"
+                        f"attempts={self.max_retries + 1}\n"
+                        f"error={type(e).__name__}: {e}"
+                    )
         
         return f"Error calling {self.provider} after {self.max_retries + 1} attempts: {str(last_error)}", ""
     
@@ -250,7 +300,16 @@ class LLMClient:
                 total_tokens=total_tokens,
                 agent_name=self.current_agent_name
             )
-            print(f"[Token] {self.current_agent_name}: in={prompt_tokens}, out={completion_tokens}")
+            log.info(
+                "[Token]\n"
+                f"api_key={self.api_key}\n"
+                f"provider=gemini\n"
+                f"model={model_name}\n"
+                f"agent={self.current_agent_name}\n"
+                f"in={prompt_tokens}\n"
+                f"out={completion_tokens}\n"
+                f"total={total_tokens}"
+            )
         
         return final_text, ""
     
@@ -295,7 +354,15 @@ class LLMClient:
                 total_tokens=total_tokens,
                 agent_name=self.current_agent_name
             )
-            print(f"[Token] {self.current_agent_name}: in={prompt_tokens}, out={completion_tokens}")
+            log.info(
+                "[Token]\n"
+                f"api_key={self.api_key}\n"
+                f"provider={self.provider}\n"
+                f"model={model_name}\n"
+                f"agent={self.current_agent_name}\n"
+                f"in={prompt_tokens}\n"
+                f"out={completion_tokens}\n"
+                f"total={total_tokens}"
+            )
 
         return final_text, ""
-

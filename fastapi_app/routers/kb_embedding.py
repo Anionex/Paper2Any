@@ -7,8 +7,10 @@ from dataflow_agent.utils import get_project_root
 from fastapi_app.config import settings
 from fastapi_app.utils import _to_outputs_url
 from fastapi_app.dependencies.auth import get_supabase_client
+from dataflow_agent.logger import get_logger
 
 router = APIRouter(prefix="/kb", tags=["Knowledge Base Embedding"])
+log = get_logger(__name__)
 
 
 def _extract_email_from_path(path_str: str) -> Optional[str]:
@@ -50,7 +52,7 @@ def _write_manifest_ids_to_supabase(manifest: Dict[str, Any]) -> None:
                         {"kb_file_id": file_id}
                     ).eq("user_email", email).eq("file_name", filename).execute()
         except Exception as e:
-            print(f"[kb_embedding] Supabase writeback failed: {e}")
+            log.warning(f"[kb_embedding] Supabase writeback failed: {e}")
 
 @router.post("/embedding")
 async def create_embedding(
@@ -116,7 +118,7 @@ async def create_embedding(
                     except Exception:
                         pass
             else:
-                print(f"Warning: File not found locally: {local_path}")
+                log.warning(f"File not found locally: {local_path}")
         
         if not process_list:
              return {
@@ -145,7 +147,7 @@ async def create_embedding(
         try:
             _write_manifest_ids_to_supabase(manifest)
         except Exception as e:
-            print(f"[kb_embedding] writeback error: {e}")
+            log.warning(f"[kb_embedding] writeback error: {e}")
 
         return {
             "success": True,

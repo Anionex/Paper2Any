@@ -1732,7 +1732,7 @@ if __name__ == "__main__":
 
     OUT_PATH = PY_PATH.with_suffix(".json")
     OUT_PATH.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"saved to {OUT_PATH}")
+    log.info(f"saved to {OUT_PATH}")
 
 
 

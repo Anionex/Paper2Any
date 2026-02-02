@@ -200,10 +200,12 @@ if __name__ == "__main__":
         API_KEY = os.getenv("DF_API_KEY", "sk-xxx")
         MODEL = os.getenv("DF_IMG_MODEL", "gemini-2.5-flash") # Use a chat/vision model
 
-        print(f"--- Video Understanding Config ---")
-        print(f"URL: {API_URL}")
-        print(f"Model: {MODEL}")
-        print(f"----------------------------------")
+        log.info(
+            "--- Video Understanding Config ---\n"
+            f"URL: {API_URL}\n"
+            f"Model: {MODEL}\n"
+            "----------------------------------"
+        )
 
         # 尝试使用环境变量指定视频，否则查找
         video_path = os.getenv("TEST_VIDEO_PATH")
@@ -211,13 +213,13 @@ if __name__ == "__main__":
             video_path = find_any_mp4()
         
         if not video_path or not os.path.exists(video_path):
-            print("No video found for testing. Set TEST_VIDEO_PATH env var.")
+            log.warning("No video found for testing. Set TEST_VIDEO_PATH env var.")
             return
 
-        print(f"Using video: {video_path}")
+        log.info(f"Using video: {video_path}")
         
         try:
-            print("[1] Testing Video Understanding...")
+            log.info("[1] Testing Video Understanding...")
             result = await call_video_understanding_async(
                 model=MODEL,
                 messages=[{"role": "user", "content": "Describe what happens in this video."}],
@@ -225,8 +227,8 @@ if __name__ == "__main__":
                 api_key=API_KEY,
                 video_path=video_path
             )
-            print(">> Video Result:", result)
+            log.info(f">> Video Result: {result}")
         except Exception as e:
-            print(f">> Video Failed: {e}")
+            log.error(f">> Video Failed: {e}")
 
     asyncio.run(_test())

@@ -17,12 +17,14 @@ from dataflow_agent.workflow.wf_kb_mindmap import create_kb_mindmap_graph
 from dataflow_agent.toolkits.ragtool.vector_store_tool import process_knowledge_base_files, VectorStoreManager
 from dataflow_agent.utils import get_project_root
 from dataflow_agent.workflow import run_workflow
+from dataflow_agent.logger import get_logger
 from fastapi_app.config import settings
 from fastapi_app.schemas import Paper2PPTRequest
 from fastapi_app.utils import _from_outputs_url, _to_outputs_url
 from fastapi_app.workflow_adapters.wa_paper2ppt import _init_state_from_request
 
 router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
+log = get_logger(__name__)
 
 # Base directory for storing KB files
 # Use absolute path as requested by user or relative to project root
@@ -164,7 +166,7 @@ async def upload_kb_file(
         }
 
     except Exception as e:
-        print(f"Error uploading file: {e}")
+        log.error(f"Error uploading file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/delete")

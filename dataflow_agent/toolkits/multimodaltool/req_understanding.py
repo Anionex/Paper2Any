@@ -114,15 +114,17 @@ if __name__ == "__main__":
         API_KEY = os.getenv("DF_API_KEY", "sk-xxx")
         MODEL = os.getenv("DF_IMG_MODEL", "gemini-2.5-flash") # Use a chat/vision model
 
-        print(f"--- Understanding Config ---")
-        print(f"URL: {API_URL}")
-        print(f"Model: {MODEL}")
-        print(f"----------------------------")
+        log.info(
+            "--- Understanding Config ---\n"
+            f"URL: {API_URL}\n"
+            f"Model: {MODEL}\n"
+            "----------------------------"
+        )
 
         img_path = create_dummy_image("./test_understanding.png")
         
         try:
-            print("[1] Testing Image Understanding...")
+            log.info("[1] Testing Image Understanding...")
             result = await call_image_understanding_async(
                 model=MODEL,
                 messages=[{"role": "user", "content": "What is the dominant color in this image?"}],
@@ -130,8 +132,8 @@ if __name__ == "__main__":
                 api_key=API_KEY,
                 image_path=img_path
             )
-            print(">> Understanding Result:", result)
+            log.info(f">> Understanding Result: {result}")
         except Exception as e:
-            print(f">> Understanding Failed: {e}")
+            log.error(f">> Understanding Failed: {e}")
 
     asyncio.run(_test())

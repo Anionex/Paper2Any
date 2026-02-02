@@ -14,6 +14,9 @@ from fastapi_app.routers import paper2drawio
 from fastapi_app.routers import paper2rebuttal
 from fastapi_app.middleware.api_key import APIKeyMiddleware
 from dataflow_agent.utils import get_project_root
+from dataflow_agent.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -71,7 +74,7 @@ def create_app() -> FastAPI:
     # 确保目录存在
     outputs_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"[INFO] Mounting /outputs to {outputs_dir}")
+    log.info(f"[INFO] Mounting /outputs to {outputs_dir}")
     
     app.mount(
         "/outputs",

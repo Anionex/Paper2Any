@@ -601,6 +601,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
         type Paper2FigureJsonResp = {
           success: boolean;
+          error?: string;
           ppt_filename: string;
           svg_filename: string;
           svg_image_filename: string;
@@ -613,7 +614,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
         const data: Paper2FigureJsonResp = await res.json();
         if (!data.success) {
-          throw new Error(t('errors.serverBusy'));
+          throw new Error(data.error || t('errors.serverBusy'));
         }
 
         setAllOutputFiles(data.all_output_files ?? []);
@@ -1008,6 +1009,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
                 subtitle="可直接在下方编辑图形，支持复制或下载 .drawio / Edit below and download .drawio"
                 xmlContent={drawioXml}
                 onXmlChange={setDrawioXml}
+                loadingLabel={drawioXml === emptyDrawioXml ? '等待生成 / Pending' : undefined}
               />
             </div>
           )}

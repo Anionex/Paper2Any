@@ -290,7 +290,7 @@ if __name__ == "__main__":
         language="zh",
         json_file=f"{DataFlowPath.get_dataflow_dir().parent}/dataflow/example/DataflowAgent/mq_test_data.jsonl"
     )
-    print(local_tool_for_sample(state,sample_size=2))
+    logger.info(local_tool_for_sample(state, sample_size=2))
     # from dataflow.utils.registry import OPERATOR_REGISTRY
     
     # print("="*50)

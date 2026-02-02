@@ -399,7 +399,7 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             img = Image.new('RGB', size, color=color)
             img.save(path)
-            print(f"Created dummy image: {path}")
+            log.info(f"Created dummy image: {path}")
         return path
 
     async def _test():
@@ -408,13 +408,15 @@ if __name__ == "__main__":
         # 修改测试模型为文档推荐的 gpt-image-1
         MODEL = os.getenv("DF_IMG_MODEL", "gpt-image-1") 
 
-        print(f"--- Config ---")
-        print(f"URL: {API_URL}")
-        print(f"Model: {MODEL}")
-        print(f"----------------")
+        log.info(
+            "--- Config ---\n"
+            f"URL: {API_URL}\n"
+            f"Model: {MODEL}\n"
+            "----------------"
+        )
 
         # 1. 测试文生图
-        print("\n[1] Testing Text-to-Image Generation...")
+        log.info("[1] Testing Text-to-Image Generation...")
         
         # 针对 SeeDream 模型的特殊处理
         gen_kwargs = {
@@ -433,12 +435,12 @@ if __name__ == "__main__":
             
         try:
             await generate_or_edit_and_save_image_async(**gen_kwargs)
-            print(">> Generation Success: ./test_gen_result.png")
+            log.info(">> Generation Success: ./test_gen_result.png")
         except Exception as e:
-            print(f">> Generation Failed: {e}")
+            log.error(f">> Generation Failed: {e}")
 
         # 2. 测试图生图 (Edit)
-        print("\n[2] Testing Image Editing...")
+        log.info("[2] Testing Image Editing...")
         dummy_input = f"{get_project_root()}/tests/test_02.png"
         try:
             await generate_or_edit_and_save_image_async(
@@ -450,14 +452,14 @@ if __name__ == "__main__":
                 use_edit=True,
                 image_path=dummy_input
             )
-            print(">> Edit Success: ./test_edit_result.png")
+            log.info(">> Edit Success: ./test_edit_result.png")
         except Exception as e:
-            print(f">> Edit Failed: {e}")
+            log.error(f">> Edit Failed: {e}")
 
         # 3. 测试多图编辑 (Gemini Specific)
         # 仅当模型是 gemini 时测试
         if "gemini" in MODEL.lower():
-            print("\n[3] Testing Multi-Image Edit (Gemini Specific)...")
+            log.info("[3] Testing Multi-Image Edit (Gemini Specific)...")
             img1 = f"{get_project_root()}/tests/test_02.png"
             img2 = f"{get_project_root()}/tests/cat_icon.png"
             try:
@@ -469,10 +471,10 @@ if __name__ == "__main__":
                     api_key=API_KEY,
                     model=MODEL
                 )
-                print(">> Multi-Image Success: ./test_multi_result.png")
+                log.info(">> Multi-Image Success: ./test_multi_result.png")
             except Exception as e:
-                print(f">> Multi-Image Failed: {e}")
+                log.error(f">> Multi-Image Failed: {e}")
         else:
-            print("\n[3] Skipping Multi-Image Edit (Not a Gemini model)")
+            log.info("[3] Skipping Multi-Image Edit (Not a Gemini model)")
 
     asyncio.run(_test())

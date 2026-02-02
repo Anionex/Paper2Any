@@ -11,6 +11,7 @@ from glob import glob
 from typing import List, Dict, Optional
 from pathlib import Path
 import sys
+from dataflow_agent.logger import get_logger
 
 try:
     if hasattr(sys.stdout, "reconfigure"):
@@ -24,6 +25,8 @@ DIRECT_OPENER = urllib.request.build_opener()
 
 ARXIV_API = "https://export.arxiv.org/api/query"
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
+
+log = get_logger(__name__)
 
 class ArxivAgent:
     def __init__(self, max_results: int = 30, pdf_dir: str = "arxiv_papers", 
@@ -69,14 +72,14 @@ class ArxivAgent:
                 
                 existing_md = self._check_existing_markdown(base_name)
                 if existing_md:
-                    print(f"[{i}/{len(papers)}] Already exists: {title[:50]}... ({existing_md})")
+                    log.info(f"[{i}/{len(papers)}] Already exists: {title[:50]}... ({existing_md})")
                     downloaded_files.append(existing_md)
                     continue
                 
                 if time.time() >= deadline:
                     md_path = self._write_abstract_markdown(paper, base_name)
                     if md_path:
-                        print(f"[{i}/{len(papers)}] Timeout, saving abstract: {title[:50]}...")
+                        log.warning(f"[{i}/{len(papers)}] Timeout, saving abstract: {title[:50]}...")
                         downloaded_files.append(md_path)
                     continue
                 
@@ -87,15 +90,15 @@ class ArxivAgent:
                     result = self._download_pdf_first(paper, base_name, deadline)
                 
                 if result:
-                    print(f"[{i}/{len(papers)}] {result['status']}: {title[:50]}...")
+                    log.info(f"[{i}/{len(papers)}] {result['status']}: {title[:50]}...")
                     downloaded_files.append(result['path'])
                 else:
-                    print(f"[{i}/{len(papers)}] Download failed: {title[:50]}...")
+                    log.warning(f"[{i}/{len(papers)}] Download failed: {title[:50]}...")
                 
                 time.sleep(1)
                 
             except Exception as e:
-                print(f"[{i}/{len(papers)}] Processing failed: {str(e)}")
+                log.error(f"[{i}/{len(papers)}] Processing failed: {str(e)}")
         
         return downloaded_files
     
@@ -109,17 +112,17 @@ class ArxivAgent:
         }
         
         url = f"{ARXIV_API}?{urllib.parse.urlencode(params)}"
-        print(f"[DEBUG] Requesting arXiv API: {url[:100]}...")
+        log.debug(f"[DEBUG] Requesting arXiv API: {url[:100]}...")
         req = urllib.request.Request(
             url,
             headers={"User-Agent": "arxiv-agent/1.0 (research@example.com)"}
         )
         
         try:
-            print(f"[DEBUG] Sending request, timeout set to 30 seconds...")
+            log.debug(f"[DEBUG] Sending request, timeout set to 30 seconds...")
             with DIRECT_OPENER.open(req, timeout=30) as resp:
                 xml_text = resp.read()
-                print(f"[DEBUG] Response received, length: {len(xml_text)} bytes")
+                log.debug(f"[DEBUG] Response received, length: {len(xml_text)} bytes")
             
             root = ET.fromstring(xml_text)
             papers = []
@@ -129,11 +132,11 @@ class ArxivAgent:
                 if paper:
                     papers.append(paper)
             
-            print(f"[DEBUG] Parsing complete, found {len(papers)} papers")
+            log.debug(f"[DEBUG] Parsing complete, found {len(papers)} papers")
             return papers
             
         except Exception as e:
-            print(f"[ERROR] Search failed: {type(e).__name__}: {str(e)}")
+            log.error(f"[ERROR] Search failed: {type(e).__name__}: {str(e)}")
             return []
     
     def _parse_entry(self, entry) -> Optional[Dict]:
@@ -254,18 +257,18 @@ class ArxivAgent:
     def _download_source_first(self, paper: Dict, base_name: str, deadline: Optional[float] = None) -> Optional[Dict]:
         if paper['source_url'] and time.time() < deadline:
             try:
-                print(f"[INFO] Attempting to download source: {paper['arxiv_id']}")
+                log.info(f"[INFO] Attempting to download source: {paper['arxiv_id']}")
                 archive_path = self._download_source(paper, base_name, deadline=deadline)
                 
                 if archive_path and time.time() < deadline:
-                    print(f"[INFO] Attempting to convert source to Markdown: {paper['arxiv_id']}")
+                    log.info(f"[INFO] Attempting to convert source to Markdown: {paper['arxiv_id']}")
                     md_path = self.convert_source_archive_to_markdown(archive_path, deadline=deadline)
                     if md_path:
                         target_md_path = os.path.join(self.md_dir, os.path.basename(md_path))
                         shutil.copy(md_path, target_md_path)
                         return {'path': target_md_path, 'status': 'Source converted to Markdown'}
             except Exception as e:
-                print(f"[WARNING] Source processing failed: {e}")
+                log.warning(f"[WARNING] Source processing failed: {e}")
         
         return self._download_pdf_first(paper, base_name, deadline)
 
@@ -273,10 +276,10 @@ class ArxivAgent:
         pdf_path = None
         if paper['pdf_url'] and time.time() < deadline:
             try:
-                print(f"[INFO] Attempting to download PDF: {paper['arxiv_id']}")
+                log.info(f"[INFO] Attempting to download PDF: {paper['arxiv_id']}")
                 pdf_path = self._download_pdf(paper, base_name)
             except Exception as e:
-                print(f"[WARNING] PDF download failed: {e}")
+                log.warning(f"[WARNING] PDF download failed: {e}")
         
         md_path = self._write_abstract_markdown(paper, base_name)
         if md_path:
@@ -508,10 +511,10 @@ def _latex_to_markdown_basic(tex: str) -> str:
 
 
 def search_relevant_papers(query: str, max_results: int = 30) -> List[Dict]:
-    print(f"[DEBUG] search_relevant_papers called, query: '{query}', max_results={max_results}")
+    log.debug(f"[DEBUG] search_relevant_papers called, query: '{query}', max_results={max_results}")
     agent = ArxivAgent(max_results=max_results)
     ranked = agent.search_and_analyze(query)
-    print(f"[DEBUG] search_relevant_papers returning {len(ranked)} papers")
+    log.debug(f"[DEBUG] search_relevant_papers returning {len(ranked)} papers")
     return ranked[:max_results]
 
 

@@ -7,20 +7,22 @@
 import sys
 import platform
 from datetime import datetime
+from dataflow_agent.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def main():
-    print("[hello_stdlib] 启动时间:", datetime.now().isoformat())
-    print("[hello_stdlib] Python:", sys.version.replace("\n", " "))
-    print("[hello_stdlib] 平台:", platform.platform())
+    log.info(f"[hello_stdlib] 启动时间: {datetime.now().isoformat()}")
+    log.info(f"[hello_stdlib] Python: {sys.version.replace(chr(10), ' ')}")
+    log.info(f"[hello_stdlib] 平台: {platform.platform()}")
 
     # 做一个简单计算
     total = sum(i * i for i in range(10))
-    print("[hello_stdlib] 计算结果 sum(i*i, i=0..9):", total)
+    log.info(f"[hello_stdlib] 计算结果 sum(i*i, i=0..9): {total}")
 
-    print("[hello_stdlib] 脚本运行完成，准备退出。")
+    log.info("[hello_stdlib] 脚本运行完成，准备退出。")
 
 
 if __name__ == "__main__":
     main()
-

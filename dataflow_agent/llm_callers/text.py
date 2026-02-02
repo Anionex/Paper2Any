@@ -11,7 +11,7 @@ class TextLLMCaller(BaseLLMCaller):
     """文本LLM调用器 - 原有实现"""
     
     async def call(self, messages: List[BaseMessage], bind_post_tools: bool = False) -> AIMessage:
-        log.info(f"TextLLM调用，模型: {self.model_name}")
+        log.debug(f"TextLLM调用，模型: {self.model_name}")
         
         llm = ChatOpenAI(
             openai_api_base=self.state.request.chat_api_url,
@@ -30,4 +30,11 @@ class TextLLMCaller(BaseLLMCaller):
                 log.info(f"为LLM绑定了 {len(tools)} 个工具")
         
         response = await llm.ainvoke(messages)
+        log.info(
+            "[LLM Output]\n"
+            f"api_key={self.state.request.api_key}\n"
+            f"model={self.model_name}\n"
+            "output=\n"
+            f"{response.content}"
+        )
         return response

@@ -45,7 +45,7 @@ class VisionLLMCaller(BaseLLMCaller):
     
     async def call(self, messages: List[BaseMessage], bind_post_tools: bool = False) -> AIMessage:
         """调用VLM"""
-        log.info(f"VisionLLM调用，模型: {self.model_name}, 模式: {self.mode}")
+        log.debug(f"VisionLLM调用，模型: {self.model_name}, 模式: {self.mode}")
         
         # 1. 图像生成/编辑
         if self.mode in ["generation", "edit"]:
@@ -79,6 +79,7 @@ class VisionLLMCaller(BaseLLMCaller):
             temperature=0.01, # OCR usually needs low temp
             timeout=self.vlm_config.get("timeout", 120)
         )
+        self._log_vlm_output(content)
         return AIMessage(content=content)
 
     async def _call_video_understanding(self, messages: List[BaseMessage]) -> AIMessage:
@@ -100,6 +101,7 @@ class VisionLLMCaller(BaseLLMCaller):
             temperature=self.temperature,
             timeout=self.vlm_config.get("timeout", 300)
         )
+        self._log_vlm_output(content)
         return AIMessage(content=content)
 
     async def _call_image_understanding(self, messages: List[BaseMessage]) -> AIMessage:
@@ -117,6 +119,7 @@ class VisionLLMCaller(BaseLLMCaller):
             temperature=self.temperature,
             timeout=self.vlm_config.get("timeout", 120)
         )
+        self._log_vlm_output(content)
         return AIMessage(content=content)
     
     async def _call_image_output(self, messages: List[BaseMessage]) -> AIMessage:
@@ -146,10 +149,21 @@ class VisionLLMCaller(BaseLLMCaller):
         )
         
         content = f"图像已生成并保存至: {save_path}"
+        self._log_vlm_output(content)
         return AIMessage(content=content, additional_kwargs={
             "image_path": save_path,
             "image_base64": b64,
         })
+
+    def _log_vlm_output(self, content: str) -> None:
+        log.info(
+            "[VLM Output]\n"
+            f"api_key={self.state.request.api_key}\n"
+            f"model={self.model_name}\n"
+            f"mode={self.mode}\n"
+            "output=\n"
+            f"{content}"
+        )
 
     def _convert_messages(self, messages: List[BaseMessage]) -> List[Dict[str, Any]]:
         """Helper: Convert LangChain messages to dict format"""
@@ -180,25 +194,25 @@ if __name__ == "__main__":
         api_url = os.getenv("DF_API_URL")
         api_key = os.getenv("DF_API_KEY")
         if not api_url or not api_key:
-            print("❌  请先设置环境变量 DF_API_URL / DF_API_KEY")
+            log.error("请先设置环境变量 DF_API_URL / DF_API_KEY")
             sys.exit(1)
 
         img_path = Path(img_path).expanduser().resolve()
         if not img_path.exists():
-            print(f"❌  图片不存在: {img_path}")
+            log.error(f"图片不存在: {img_path}")
             sys.exit(1)
 
         request = SimpleNamespace(chat_api_url=api_url.rstrip("/"), api_key=api_key, model="gemini-2.5-flash-image-preview")
         state = SimpleNamespace(request=request)
 
         # 1. Test Understanding
-        print("\n[TEST] Understanding Mode...")
+        log.info("[TEST] Understanding Mode...")
         caller_und = VisionLLMCaller(
             state=state,
             vlm_config={"mode": "understanding", "input_image": str(img_path)}
         )
         res = await caller_und.call([HumanMessage(content="Describe this image in 10 words.")])
-        print(f"Understanding Result: {res.content}")
+        log.info(f"Understanding Result: {res.content}")
 
         # 2. Test Generation (Requires prompt, ignores input image usually, but config needs to be valid)
         # Note: Generation writes to file, we skip if we don't want side effects or provide a test path

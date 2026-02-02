@@ -56,6 +56,9 @@ import os
 
 import numpy as np
 from PIL import Image
+from dataflow_agent.logger import get_logger
+
+log = get_logger(__name__)
 
 # Optional imports (lazy usage, we guard them at call-time)
 try:
@@ -374,7 +377,7 @@ def run_sam_auto_server(
                         mask_flat = np.frombuffer(mask_bytes, dtype=bool)
                         mask = mask_flat.reshape(tuple(mask_shape))
                     except Exception:
-                        print(f"Failed to decode/decompress mask: {e}")
+                        log.warning(f"Failed to decode/decompress mask: {e}")
                         mask = None
             else:
                 mask = None
@@ -1312,8 +1315,8 @@ if __name__ == "__main__":
     out_dir = Path(f"{get_project_root()}/outputs")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[Demo] Input image: {img_path}")
-    print(f"[Demo] Output dir : {out_dir}")
+    log.info(f"[Demo] Input image: {img_path}")
+    log.info(f"[Demo] Output dir : {out_dir}")
 
     # 2. Read image (BGR for OpenCV visualization)
     img_bgr = cv2.imread(str(img_path))
@@ -1341,7 +1344,7 @@ if __name__ == "__main__":
             nms_by="bbox",
         )
 
-        print(f"[SAM] Got {len(items)} masks after post-processing")
+        log.info(f"[SAM] Got {len(items)} masks after post-processing")
 
         # 3.1 Save each SAM instance as a separate image
         sam_inst_dir = out_dir / "sam_instances"
@@ -1352,9 +1355,9 @@ if __name__ == "__main__":
             prefix="sam_inst_",
             mode="bbox",  # or "rgba"
         )
-        print(f"[SAM] {len(saved_paths)} instance images saved to dir: {sam_inst_dir}")
+        log.info(f"[SAM] {len(saved_paths)} instance images saved to dir: {sam_inst_dir}")
         for p in saved_paths:
-            print("   ", p)
+            log.info(f"   {p}")
 
         # 3.2 Keep original overlay visualization
         if items:
@@ -1369,13 +1372,13 @@ if __name__ == "__main__":
 
             sam_vis_path = out_dir / "sam_masks_overlay.png"
             cv2.imwrite(str(sam_vis_path), overlay)
-            print(f"[SAM] Overlay saved to: {sam_vis_path}")
+            log.info(f"[SAM] Overlay saved to: {sam_vis_path}")
         else:
-            print("[SAM] No masks returned.")
+            log.info("[SAM] No masks returned.")
     except ImportError as e:
-        print("[SAM] Skipped due to missing dependency:", e)
+        log.warning(f"[SAM] Skipped due to missing dependency: {e}")
     except Exception as e:
-        print("[SAM] Error while running SAM demo:", e)
+        log.error(f"[SAM] Error while running SAM demo: {e}")
 
     # 4. Test Felzenszwalb segmentation (classical graph-based)
     try:
@@ -1388,7 +1391,7 @@ if __name__ == "__main__":
         )
         segments = res["segments"]
         num_segments = res["num_segments"]
-        print(f"[Felzenszwalb] num_segments = {num_segments}")
+        log.info(f"[Felzenszwalb] num_segments = {num_segments}")
 
         # Visualize boundaries using skimage + OpenCV
         from skimage import segmentation as _seg
@@ -1399,8 +1402,8 @@ if __name__ == "__main__":
 
         felz_vis_path = out_dir / "felzenszwalb_boundaries.png"
         cv2.imwrite(str(felz_vis_path), vis_bgr)
-        print(f"[Felzenszwalb] Boundary visualization saved to: {felz_vis_path}")
+        log.info(f"[Felzenszwalb] Boundary visualization saved to: {felz_vis_path}")
     except ImportError as e:
-        print("[Felzenszwalb] Skipped due to missing dependency:", e)
+        log.warning(f"[Felzenszwalb] Skipped due to missing dependency: {e}")
     except Exception as e:
-        print("[Felzenszwalb] Error while running Felzenszwalb demo:", e)
+        log.error(f"[Felzenszwalb] Error while running Felzenszwalb demo: {e}")

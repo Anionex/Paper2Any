@@ -39,7 +39,7 @@ class ChartTypeRecommender(BaseAgent):
 
     def get_task_prompt_params(self, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         """从 pre_tool_results 中获取 prompt 参数"""
-        print("ChartTypeRecommender get_task_prompt_params", pre_tool_results)
+        log.debug(f"ChartTypeRecommender get_task_prompt_params: {pre_tool_results}")
         paper_idea = pre_tool_results.get("paper_idea", "")
         table_info = pre_tool_results.get("table_info", {})
         log.info(f"[ChartTypeRecommender] 获取 prompt 参数: paper_idea={paper_idea}, table_info={table_info}")

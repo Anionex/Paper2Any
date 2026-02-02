@@ -1425,14 +1425,14 @@ if __name__ == "__main__":
     # 调用封装好的单页接口
     info = paddle_ocr_page_with_layout(img_path)
 
-    print("=== PaddleOCR 测试结果 ===")
-    print(f"image_size: {info['image_size']}")
-    print(f"body_h_px: {info['body_h_px']}")
-    print(f"bg_color: {info['bg_color']}")
-    print(f"检测到文本框数量: {len(info['lines'])}")
+    log.info("=== PaddleOCR 测试结果 ===")
+    log.info(f"image_size: {info['image_size']}")
+    log.info(f"body_h_px: {info['body_h_px']}")
+    log.info(f"bg_color: {info['bg_color']}")
+    log.info(f"检测到文本框数量: {len(info['lines'])}")
 
     for i, (bbox, text, conf) in enumerate(info["lines"], start=1):
-        print(f"[{i:02d}] conf={conf:.1f} bbox={bbox} text={text}")
+        log.info(f"[{i:02d}] conf={conf:.1f} bbox={bbox} text={text}")
 
     # 把检测框画在图上，并保存到文件，而不是弹出窗口
     try:

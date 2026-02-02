@@ -25,10 +25,12 @@ from fastapi_app.services.rebuttal.tools import pdf_to_md
 from fastapi_app.dependencies import get_optional_user, AuthUser
 from fastapi_app.utils import _to_outputs_url
 from dataflow_agent.utils import get_project_root
+from dataflow_agent.logger import get_logger
 
 router = APIRouter(tags=["paper2rebuttal"])
 PROJECT_ROOT = get_project_root()
 OUTPUTS_ROOT = PROJECT_ROOT / "outputs"
+log = get_logger(__name__)
 
 
 def _resolve_user_dir(user: Optional[AuthUser], email: Optional[str]) -> str:
@@ -527,7 +529,7 @@ async def start_analysis(
                 num_questions = len(session_obj.questions) if session_obj and session_obj.questions else 3
                 # Use all questions as workers for maximum parallelism
                 max_workers = num_questions
-                print(f"[LOG] Processing {num_questions} questions with {max_workers} parallel workers")
+                log.info(f"[LOG] Processing {num_questions} questions with {max_workers} parallel workers")
                 
                 # Process all questions in parallel
                 rebuttal_service.process_all_questions_parallel(session_id, max_workers=max_workers)
@@ -536,15 +538,13 @@ async def start_analysis(
                 session = rebuttal_service.get_session(session_id)
                 if session:
                     session.overall_status = ProcessStatus.WAITING_FEEDBACK
-                    print(f"[LOG] Analysis completed, status set to WAITING_FEEDBACK")
+                    log.info("[LOG] Analysis completed, status set to WAITING_FEEDBACK")
                 try:
                     _export_rebuttal_outputs(session_id, user_dir)
                 except Exception:
                     pass
             except Exception as e:
-                print(f"[ERROR] Background analysis failed: {e}")
-                import traceback
-                traceback.print_exc()
+                log.exception(f"[ERROR] Background analysis failed: {e}")
                 # Set error status
                 session = rebuttal_service.get_session(session_id)
                 if session:

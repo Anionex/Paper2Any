@@ -20,9 +20,9 @@
       "paper2rebuttal": "反驳信生成(Rebuttal)"
     },
     "navSub": {
-      "paper2figureTechExp": "技术路线图 · 实验数据图",
-      "paper2drawioAi": "科研图表 · DrawIO",
-      "paper2figureModelDrawio": "模型结构图 · DrawIO / PPT"
+      "paper2figureTechExp": "技术路线图/实验图生成",
+      "paper2drawioAi": "流程图/架构图生成",
+      "paper2figureModelDrawio": "模型结构图生成"
     },
     "navTooltip": {
       "paper2figure": "根据文档内容生成科研绘图，包括模型架构图、技术路线图、实验数据图等可编辑的PPTX格式图表",
@@ -37,9 +37,9 @@
       "paper2rebuttal": "AI辅助生成学术论文反驳信，自动分析评审意见并给出回复策略"
     },
     "navSubTooltip": {
-      "paper2figureTechExp": "面向技术路线图与实验数据图的精简页面，支持 PDF / 文本输入",
-      "paper2drawioAi": "纯 AI 驱动的 DrawIO 图表生成，适合流程图与架构图",
-      "paper2figureModelDrawio": "先生成模型结构图，再一键转 DrawIO 在线编辑或 PPT"
+      "paper2figureTechExp": "从 PDF / 文本生成技术路线图与实验数据图，支持模板与配色，可导出 PPT / SVG",
+      "paper2drawioAi": "输入文本生成流程图/架构图（DrawIO），可在线编辑并导出 PNG / SVG / DrawIO",
+      "paper2figureModelDrawio": "生成模型结构图，支持提示词微调与预览，并可转 DrawIO 在线编辑或导出 PPT / PNG / SVG"
     },
     "sidebar": {
       "toggle": "切换菜单",

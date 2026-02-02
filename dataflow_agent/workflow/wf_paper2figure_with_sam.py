@@ -872,14 +872,14 @@ def create_p2fig_graph() -> GenericGraphBuilder:  # noqa: N802
             # 保存PPT
             prs.save(str(ppt_path))
             state.ppt_path = ppt_path
-            print(f"PPT generated successfully: {ppt_path}")
-            print(f"Slide size: {slide_width_px}x{slide_height_px} pixels")
-            print(f"[MAIN] Total layout items: {len(state.layout_items)}, drawn: {layout_drawn}")
-            print(f"[MAIN] Total content elements added: {len(state.fig_mask)}, text_drawn={text_drawn}, img_drawn={img_drawn}")
-            print(f"[EMF_ONLY] layout items drawn: {layout_debug_drawn}")
+            log.info(f"PPT generated successfully: {ppt_path}")
+            log.info(f"Slide size: {slide_width_px}x{slide_height_px} pixels")
+            log.info(f"[MAIN] Total layout items: {len(state.layout_items)}, drawn: {layout_drawn}")
+            log.info(f"[MAIN] Total content elements added: {len(state.fig_mask)}, text_drawn={text_drawn}, img_drawn={img_drawn}")
+            log.info(f"[EMF_ONLY] layout items drawn: {layout_debug_drawn}")
 
         except Exception as e:
-            print(f"Error generating PPT: {e}")
+            log.error(f"Error generating PPT: {e}")
 
         return state
 

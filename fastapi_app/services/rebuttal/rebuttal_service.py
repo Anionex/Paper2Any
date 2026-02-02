@@ -12,6 +12,7 @@ from enum import Enum
 from fastapi_app.services.rebuttal.llm import LLMClient, TokenUsageTracker
 from fastapi_app.services.rebuttal.arxiv import search_relevant_papers
 from fastapi_app.services.rebuttal.tools import _read_text, load_prompt, pdf_to_md, download_pdf_and_convert_md, _fix_json_escapes
+from dataflow_agent.logger import get_logger
 
 
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +32,8 @@ os.makedirs(SESSIONS_BASE_DIR, exist_ok=True)
 token_tracker = TokenUsageTracker()
 
 llm_client: Optional[LLMClient] = None
+
+log = get_logger(__name__)
 
 
 def init_llm_client(api_key: str, chat_api_url: str = None, provider: str = None, model: str = "gpt-5.1") -> LLMClient:
@@ -84,6 +87,13 @@ def init_llm_client(api_key: str, chat_api_url: str = None, provider: str = None
             site_name="Rebuttal Assistant",
             token_tracker=token_tracker
         )
+    log.info(
+        "[Rebuttal LLM Init]\n"
+        f"api_key={api_key}\n"
+        f"provider={llm_client.provider}\n"
+        f"model={model}\n"
+        f"base_url={chat_api_url or 'default'}"
+    )
     return llm_client
 
 
@@ -371,7 +381,7 @@ class Agent3:
             
             return need_search, queries, links, reason
         except (json.JSONDecodeError, ValueError) as e:
-            print(f"[Agent3] JSON parsing failed: {e}")
+            log.warning(f"[Agent3] JSON parsing failed: {e}")
             return False, [], [], ""
 
 
@@ -765,7 +775,7 @@ def extract_reference_paper_indices(agent4_output: str) -> List[int]:
             numbers = [int(n) for n in numbers if isinstance(n, (int, str)) and str(n).isdigit()]
             return list(dict.fromkeys(numbers))
         except (json.JSONDecodeError, ValueError) as e:
-            print(f"[extract_reference_paper_indices] JSON parsing failed: {e}")
+            log.warning(f"[extract_reference_paper_indices] JSON parsing failed: {e}")
             return []
     return []
 
@@ -811,7 +821,7 @@ def parse_strategy_json(agent_output: str) -> Tuple[str, List[Dict], str]:
         
         return strategy_text, todo_list, draft_response
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"[parse_strategy_json] JSON parsing failed: {e}")
+        log.warning(f"[parse_strategy_json] JSON parsing failed: {e}")
         # Fallback: treat entire output as strategy text
         return agent_output, [], ""
 
@@ -1137,7 +1147,7 @@ class RebuttalService:
                             self.sessions[entry] = session
                             restored += 1
         except Exception as e:
-            print(f"[ERROR] Failed to restore sessions from disk: {e}")
+            log.error(f"[ERROR] Failed to restore sessions from disk: {e}")
         return restored
     
     def _get_session_log_dir(self, session_id: str) -> str:
@@ -1193,10 +1203,10 @@ class RebuttalService:
             with open(interaction_log_path, 'w', encoding='utf-8') as f:
                 json.dump(interaction_data, f, ensure_ascii=False, indent=2)
             
-            print(f"[LOG] Interaction log saved to: {interaction_log_path}")
+            log.info(f"[LOG] Interaction log saved to: {interaction_log_path}")
             
         except Exception as e:
-            print(f"[ERROR] Failed to save interaction log: {e}")
+            log.exception(f"[ERROR] Failed to save interaction log: {e}")
     
     def _save_session_summary(self, session_id: str) -> None:
         """Save session summary containing final strategies and interaction stats for all questions"""
@@ -1246,12 +1256,10 @@ class RebuttalService:
                 with open(summary_path, 'w', encoding='utf-8') as f:
                     json.dump(summary_data, f, ensure_ascii=False, indent=2)
                 
-                print(f"[LOG] Session summary saved to: {summary_path}")
+                log.info(f"[LOG] Session summary saved to: {summary_path}")
             
         except Exception as e:
-            print(f"[ERROR] Failed to save session summary: {e}")
-            import traceback
-            traceback.print_exc()
+            log.exception(f"[ERROR] Failed to save session summary: {e}")
     
     def create_session(self, session_id: str, paper_path: str, review_path: str) -> SessionState:
 
@@ -1282,10 +1290,13 @@ class RebuttalService:
         log_collector.add(f"Session created: {session_id}")
         log_collector.add(f"Session directory: {session_dir}")
         
-        print(f"[Session] Created session: {session_id}")
-        print(f"  - Session directory: {session_dir}")
-        print(f"  - Logs directory: {logs_dir}")
-        print(f"  - Papers directory: {arxiv_papers_dir}")
+        log.info(
+            "[Session] Created session\n"
+            f"- Session ID: {session_id}\n"
+            f"- Session directory: {session_dir}\n"
+            f"- Logs directory: {logs_dir}\n"
+            f"- Papers directory: {arxiv_papers_dir}"
+        )
         
         return session
     
@@ -1346,7 +1357,7 @@ class RebuttalService:
                 session.log_collector.add(msg)
             if progress_callback:
                 progress_callback(msg)
-            print(f"[Progress] {msg}")
+            log.info(f"[Progress] {msg}")
         
         try:
             update_progress("Converting PDF to Markdown...")
@@ -1410,7 +1421,7 @@ class RebuttalService:
                 session.log_collector.add(f"Q{q_state.question_id}: {msg}")
             if progress_callback:
                 progress_callback(msg)
-            print(f"[Q{q_state.question_id}] {msg}")
+            log.info(f"[Q{q_state.question_id}] {msg}")
         
         try:
             num = q_state.question_id
@@ -1447,9 +1458,9 @@ class RebuttalService:
                 
                 for query_idx, query in enumerate(queries, 1):
                     update_progress(f"🔍 查询 {query_idx}/{len(queries)}: {query[:50]}...")
-                    print(f"Searching: {query}")
+                    log.info(f"Searching: {query}")
                     papers = search_relevant_papers(query, max_results=6)
-                    print(f"Found {len(papers)} papers")
+                    log.info(f"Found {len(papers)} papers")
                     update_progress(f"✓ 找到 {len(papers)} 篇相关论文")
                     
                     for paper in papers:
@@ -1469,7 +1480,7 @@ class RebuttalService:
                     
 
                     selected_indices = extract_reference_paper_indices(agent4.final_text)
-                    print(f"Agent4 selected indices: {selected_indices}")
+                    log.info(f"Agent4 selected indices: {selected_indices}")
                     selected_papers_list = []
                     if selected_indices:
                         update_progress(f"✓ 已筛选出 {len(selected_indices)} 篇相关论文")
@@ -1500,20 +1511,24 @@ class RebuttalService:
             if not q_state.selected_papers and unique_papers:
                 q_state.selected_papers = [dict(p) for p in unique_papers]
             
-            print(f"[INFO] Final papers to process: {len(unique_papers)}")
+            log.info(f"[INFO] Final papers to process: {len(unique_papers)}")
             
             reference_paper_summary = []
             
             def _process_single_reference(ti: int, paper_obj: dict) -> Tuple[int, str]:
                 try:
-                    print(f"\n{'='*80}")
-                    print(f"[INFO] Processing reference #{ti} Title: {paper_obj.get('title', 'N/A')[:50]}")
-                    print(f"{'='*80}")
+                    title = paper_obj.get('title', 'N/A')
+                    log.info(
+                        "\n"
+                        + "=" * 80
+                        + f"\n[INFO] Processing reference #{ti} Title: {title[:50]}\n"
+                        + "=" * 80
+                    )
                     
                     md_path = download_pdf_and_convert_md(paper_obj, output_dir=session.arxiv_papers_dir)
                     
                     if not md_path:
-                        print(f"[ERROR] Paper #{ti} processing failed, skipping")
+                        log.error(f"[ERROR] Paper #{ti} processing failed, skipping")
                         return (ti, "")
                     
                     md_content = ""
@@ -1521,25 +1536,23 @@ class RebuttalService:
                         with open(md_path, 'r', encoding='utf-8', errors='ignore') as rf:
                             md_content = rf.read(150000) 
                     except Exception as e:
-                        print(f"[ERROR] Failed to read Markdown: {e}")
+                        log.error(f"[ERROR] Failed to read Markdown: {e}")
                         return (ti, "")
                     
                     if not md_content or len(md_content.strip()) < 20:
-                        print(f"[ERROR] Markdown content is empty or too short, skipping")
+                        log.error(f"[ERROR] Markdown content is empty or too short, skipping")
                         return (ti, "")
                     
-                    print(f"[STEP 3] Starting Agent5 to analyze reference paper...")
+                    log.info("[STEP 3] Starting Agent5 to analyze reference paper...")
                     agent5 = Agent5(paper_summary, question_text, md_content,
                                    paper_obj.get('abs_url', ''), num=num*100+ti, log_dir=session.logs_dir)
                     agent5_output = agent5.run()
-                    print(f"[SUCCESS] Agent5 complete, output length: {len(agent5_output)} characters")
+                    log.info(f"[SUCCESS] Agent5 complete, output length: {len(agent5_output)} characters")
                     
                     return (ti, agent5_output)
                     
                 except Exception as e:
-                    print(f"[ERROR] Processing reference #{ti} failed: {type(e).__name__}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    log.exception(f"[ERROR] Processing reference #{ti} failed: {type(e).__name__}: {e}")
                     return (ti, "")
             
             analysis_by_ti: Dict[int, str] = {}
@@ -1620,7 +1633,7 @@ class RebuttalService:
             try:
                 self._save_session_summary(session_id)
             except Exception as e:
-                print(f"[WARNING] Failed to save session summary: {e}")
+                log.warning(f"[WARNING] Failed to save session summary: {e}")
             
             q_state.status = ProcessStatus.WAITING_FEEDBACK
             update_progress("✅ 处理完成，等待您的反馈...")
@@ -1652,7 +1665,7 @@ class RebuttalService:
                 session.log_collector.add(f"Q{q_state.question_id}: {msg}")
             if progress_callback:
                 progress_callback(msg)
-            print(f"[HITL Q{q_state.question_id}] {msg}")
+            log.info(f"[HITL Q{q_state.question_id}] {msg}")
         
         try:
             update_progress("🔄 正在根据您的反馈修订策略...")
@@ -1742,7 +1755,7 @@ class RebuttalService:
                 session.log_collector.add(f"[并行处理] {msg}")
             if progress_callback:
                 progress_callback(msg)
-            print(f"[Parallel] {msg}")
+            log.info(f"[Parallel] {msg}")
         
         num_questions = len(session.questions)
         if num_questions == 0:
@@ -1761,9 +1774,7 @@ class RebuttalService:
                 # Note: _save_session_summary is already called in process_single_question
                 return (idx, q_state)
             except Exception as e:
-                print(f"[ERROR] Question {idx+1} processing failed: {e}")
-                import traceback
-                traceback.print_exc()
+                log.exception(f"[ERROR] Question {idx+1} processing failed: {e}")
                 session = self.get_session(session_id)
                 if session and idx < len(session.questions):
                     session.questions[idx].status = ProcessStatus.ERROR
@@ -1789,9 +1800,7 @@ class RebuttalService:
                     results_map[idx] = q_state
                     update_progress(f"✓ 问题 {idx+1}/{num_questions} 处理完成")
                 except Exception as e:
-                    print(f"[ERROR] Failed to get result for question {idx+1}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    log.exception(f"[ERROR] Failed to get result for question {idx+1}: {e}")
                     # 仍写入当前 session 中该问题的状态，避免后续覆盖时丢失
                     session_ref = self.get_session(session_id)
                     if session_ref and idx < len(session_ref.questions):
@@ -1927,7 +1936,7 @@ class RebuttalService:
             session.progress_message = msg
             if progress_callback:
                 progress_callback(msg)
-            print(f"[Final] {msg}")
+            log.info(f"[Final] {msg}")
         
         unsatisfied = [q for q in session.questions if not q.is_satisfied]
         if unsatisfied:
@@ -1966,7 +1975,7 @@ class RebuttalService:
             summary_path = os.path.join(session.logs_dir, "summary.md")
             with open(summary_path, "w", encoding="utf-8") as f:
                 f.write(summary_md)
-            print(f"[LOG] Summary markdown saved to: {summary_path}")
+            log.info(f"[LOG] Summary markdown saved to: {summary_path}")
             
             token_tracker.print_summary()
             token_tracker.export_to_file()

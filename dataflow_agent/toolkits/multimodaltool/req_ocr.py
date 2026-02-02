@@ -117,9 +117,9 @@ if __name__ == "__main__":
                 d = ImageDraw.Draw(img)
                 d.text((10,10), text, fill=(0,0,0))
                 img.save(path)
-                print(f"Created text image: {path}")
+                log.info(f"Created text image: {path}")
             except ImportError:
-                print("PIL not available, skipping image creation")
+                log.warning("PIL not available, skipping image creation")
         return path
 
     async def _test():
@@ -127,18 +127,20 @@ if __name__ == "__main__":
         API_KEY = os.getenv("DF_API_KEY", "sk-xxx")
         MODEL = os.getenv("DF_OCR_MODEL", "qwen-vl-ocr-2025-11-20")
 
-        print(f"--- OCR Config ---")
-        print(f"URL: {API_URL}")
-        print(f"Model: {MODEL}")
-        print(f"----------------")
+        log.info(
+            "--- OCR Config ---\n"
+            f"URL: {API_URL}\n"
+            f"Model: {MODEL}\n"
+            "----------------"
+        )
 
         img_path = f"{get_project_root()}/tests/test_02.png"
         if not os.path.exists(img_path):
-            print("Image creation failed, skipping test.")
+            log.warning("Image creation failed, skipping test.")
             return
 
         try:
-            print("[1] Testing OCR...")
+            log.info("[1] Testing OCR...")
             result = await call_ocr_async(
                 model=MODEL,
                 messages=[{"role": "user", "content": "Extract text from this image, return JSON. "}],
@@ -146,8 +148,8 @@ if __name__ == "__main__":
                 api_key=API_KEY,
                 image_path=img_path
             )
-            print(">> OCR Result:", result)
+            log.info(f">> OCR Result: {result}")
         except Exception as e:
-            print(f">> OCR Failed: {e}")
+            log.error(f">> OCR Failed: {e}")
 
     asyncio.run(_test())

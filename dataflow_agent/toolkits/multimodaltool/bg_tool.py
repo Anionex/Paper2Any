@@ -28,6 +28,7 @@ from PIL import Image, ImageFilter
 import torch
 from torchvision import transforms
 from transformers import AutoModelForImageSegmentation
+from dataflow_agent.logger import get_logger
 
 CURRENT_DIR = Path(__file__).resolve().parent
 MODEL_PATH = CURRENT_DIR / "onnx" / "model.onnx"
@@ -35,6 +36,7 @@ OUTPUT_DIR = CURRENT_DIR
 
 # 进程级抠图模型缓存：按 model_path 复用 BriaRMBG2Remover 实例
 _BG_RMBG_MODEL_CACHE: dict[str, "BriaRMBG2Remover"] = {}
+log = get_logger(__name__)
 
 
 def ensure_model(model_path: Path) -> None:
@@ -55,10 +57,10 @@ def ensure_model(model_path: Path) -> None:
         当下载结束后仍未在 ``model_path`` 处找到模型文件时抛出。
     """
     if model_path.exists():
-        print(f"模型已存在: {model_path}")
+        log.info(f"模型已存在: {model_path}")
         return
 
-    print("未检测到模型文件，正在下载 RMBG-2.0 权重...")
+    log.info("未检测到模型文件，正在下载 RMBG-2.0 权重...")
 
     # 确保目录存在
     model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +83,7 @@ def ensure_model(model_path: Path) -> None:
             "请检查 ModelScope 或手动下载。"
         )
 
-    print(f"模型已成功下载到: {model_path}")
+    log.info(f"模型已成功下载到: {model_path}")
 
 
 class BriaRMBG2Remover:
@@ -113,7 +115,7 @@ class BriaRMBG2Remover:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
 
-        print(f"加载本地权重: {self.model_path}")
+        log.info(f"加载本地权重: {self.model_path}")
         self.model = AutoModelForImageSegmentation.from_pretrained(
             self.model_path,
             trust_remote_code=True,
@@ -147,7 +149,7 @@ class BriaRMBG2Remover:
             输出抠图结果 PNG 文件的绝对路径。
         """
         image_path = Path(image_path)
-        print(f"开始抠图: {image_path}")
+        log.info(f"开始抠图: {image_path}")
 
         # Load image
         image = Image.open(image_path).convert("RGB")
@@ -171,7 +173,7 @@ class BriaRMBG2Remover:
         out_path = self.output_dir / f"{image_path.stem}_bg_removed.png"
         out.save(out_path)
 
-        print(f"抠图完成: {out_path}")
+        log.info(f"抠图完成: {out_path}")
         return str(out_path)
 
     def remove_background_batch(self, image_paths: list[str]) -> list[str]:
@@ -183,7 +185,7 @@ class BriaRMBG2Remover:
 
         for image_path in image_paths:
             image_path = Path(image_path)
-            print(f"[Batch] 开始抠图: {image_path}")
+            log.info(f"[Batch] 开始抠图: {image_path}")
 
             # Load image
             image = Image.open(image_path).convert("RGB")
@@ -207,7 +209,7 @@ class BriaRMBG2Remover:
             out_path = self.output_dir / f"{image_path.stem}_bg_removed.png"
             out.save(out_path)
 
-            print(f"[Batch] 抠图完成: {out_path}")
+            log.info(f"[Batch] 抠图完成: {out_path}")
             results.append(str(out_path))
 
         return results
@@ -927,4 +929,4 @@ if __name__ == "__main__":
             "output_dir": args.output_dir,
         }
     )
-    print(out)
+    log.info(out)

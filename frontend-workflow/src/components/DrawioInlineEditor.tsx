@@ -13,6 +13,7 @@ interface DrawioInlineEditorProps {
   xmlContent: string;
   onXmlChange?: (xml: string) => void;
   height?: string;
+  loadingLabel?: string;
 }
 
 const DrawioInlineEditor: React.FC<DrawioInlineEditorProps> = ({
@@ -21,6 +22,7 @@ const DrawioInlineEditor: React.FC<DrawioInlineEditorProps> = ({
   xmlContent,
   onXmlChange,
   height = '560px',
+  loadingLabel,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastLoadedXmlRef = useRef('');
@@ -302,7 +304,7 @@ const DrawioInlineEditor: React.FC<DrawioInlineEditorProps> = ({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-[11px] ${drawioReady ? 'text-emerald-300' : 'text-slate-500'}`}>
-            {drawioReady ? '就绪 / Ready' : '加载中 / Loading'}
+            {drawioReady ? '就绪 / Ready' : (loadingLabel ?? '加载中 / Loading')}
           </span>
           <select
             value={exportFormat}

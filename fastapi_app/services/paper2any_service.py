@@ -324,9 +324,31 @@ class Paper2AnyService:
         safe_png_color = _to_outputs_url(p2f_resp.svg_color_image_filename, request) if p2f_resp.svg_color_image_filename else ""
 
         safe_all_files: list[str] = []
-        for abs_path in getattr(p2f_resp, "all_output_files", []) or []:
+        abs_all_files = getattr(p2f_resp, "all_output_files", []) or []
+        for abs_path in abs_all_files:
             if abs_path:
                 safe_all_files.append(_to_outputs_url(abs_path, request))
+
+        has_preview_image = False
+        for abs_path in abs_all_files:
+            if abs_path and abs_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                has_preview_image = True
+                break
+
+        if graph_type == "model_arch" and not has_preview_image:
+            return {
+                "success": False,
+                "error": "生成完成，但未找到预览图片（PNG/JPG/WebP）。请检查生成日志或模型输出。",
+                "ppt_filename": safe_ppt,
+                "drawio_filename": "",
+                "svg_filename": safe_svg,
+                "svg_image_filename": safe_png,
+                "svg_bw_filename": safe_svg_bw,
+                "svg_bw_image_filename": safe_png_bw,
+                "svg_color_filename": safe_svg_color,
+                "svg_color_image_filename": safe_png_color,
+                "all_output_files": safe_all_files,
+            }
 
         # 7. 可选：生成 image2drawio（仅 model_arch）
         drawio_url = ""
