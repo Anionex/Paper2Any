@@ -133,6 +133,21 @@ def _extract_svg_from_react_md(md_path: Path) -> str:
         return ""
 
 
+def _read_svg_file(svg_path: Path) -> str:
+    """
+    读取纯 SVG 文件内容。
+    """
+    if not svg_path.exists():
+        log.warning(f"SVG 模板文件不存在: {svg_path}")
+        return ""
+
+    try:
+        return svg_path.read_text(encoding="utf-8").strip()
+    except Exception as e:
+        log.error(f"读取 SVG 模板失败: {svg_path} err={e}")
+        return ""
+
+
 def _get_template_svg_code(state: Paper2FigureState, use_color: bool = False) -> str:
     """
     根据语言和配色选择合适的 SVG 模板代码。
@@ -150,6 +165,18 @@ def _get_template_svg_code(state: Paper2FigureState, use_color: bool = False) ->
     """
     root = get_project_root()
     lang = getattr(getattr(state, "request", None), "language", "EN")
+
+    # 若用户选择了技术路线模板，优先使用对应 SVG 文件
+    template_name = getattr(getattr(state, "request", None), "tech_route_template", "") or ""
+    if template_name:
+        safe_name = Path(template_name).name
+        template_stem = Path(safe_name).stem
+        template_svg = root / "dataflow_agent" / "workflow" / "resources" / "tech-roadmap-template" / "svg" / f"{template_stem}.svg"
+        svg_code = _read_svg_file(template_svg)
+        if svg_code:
+            log.info(f"使用自定义技术路线模板: {template_svg}")
+            return svg_code
+        log.warning(f"自定义模板未找到或为空: {template_svg}")
 
     # 模板目录
     template_dir = root / "dataflow_agent" / "workflow" / "resources"
@@ -411,17 +438,20 @@ def create_paper2technical_graph() -> GenericGraphBuilder:  # noqa: N802
                 svg_code
             )
 
-            # 注入全局样式
-            idx = svg_code.find(">")
-            if idx != -1:
-                style_block = f"""
-    <style type="text/css">
-        text, tspan {{
-        font-family: {chinese_fonts} !important;
-        }}
-    </style>
-    """
-                svg_code = svg_code[:idx + 1] + style_block + svg_code[idx + 1:]
+            # 注入全局样式：必须插在 <svg ...> 起始标签之后，避免破坏 XML 结构
+            m = re.search(r"<svg\\b[^>]*>", svg_code, flags=re.IGNORECASE)
+            if m:
+                style_block = (
+                    "\n  <style type=\"text/css\">\n"
+                    "    text, tspan {\n"
+                    f"      font-family: {chinese_fonts} !important;\n"
+                    "    }\n"
+                    "  </style>\n"
+                )
+                insert_pos = m.end()
+                svg_code = svg_code[:insert_pos] + style_block + svg_code[insert_pos:]
+            else:
+                log.warning("[_post_process_svg] 未找到 <svg> 起始标签，跳过样式注入")
 
         return svg_code
 

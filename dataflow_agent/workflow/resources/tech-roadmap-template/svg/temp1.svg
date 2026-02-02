@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="768" viewBox="0 0 1024 768">
+  <style>
+    .bg { fill: #2f3642; }
+    .label { fill: #3a414c; }
+    .stroke-blue { stroke: #5a7fbf; }
+    .stroke-teal { stroke: #5aa4a3; }
+    .stroke-orange { stroke: #b07546; }
+    .panel { fill: #343e48; stroke-width: 2; }
+    .module { fill: #323c45; stroke-width: 2; }
+    .pill { fill: #2c3640; stroke-width: 1.5; }
+    .title-text { fill: #d5dde5; font: 600 16px "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    .label-text { fill: #dbe3eb; font: 600 18px "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    .pill-text { fill: #c9d3dc; font: 500 12px "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1024" height="768" rx="24" />
+
+  <!-- Top row -->
+  <rect class="label stroke-blue" x="28" y="24" width="120" height="110" rx="16" />
+  <text class="label-text" x="88" y="79" text-anchor="middle" dominant-baseline="middle">展现层</text>
+
+  <rect class="panel stroke-blue" x="170" y="24" width="826" height="110" rx="16" />
+  <!-- Top pills -->
+  <g class="stroke-blue">
+    <rect class="pill" x="198" y="54" width="130" height="48" rx="14" />
+    <rect class="pill" x="344" y="54" width="130" height="48" rx="14" />
+    <rect class="pill" x="490" y="54" width="130" height="48" rx="14" />
+    <rect class="pill" x="636" y="54" width="130" height="48" rx="14" />
+    <rect class="pill" x="782" y="54" width="130" height="48" rx="14" />
+    <text class="pill-text" x="263" y="78" text-anchor="middle" dominant-baseline="middle">小程序</text>
+    <text class="pill-text" x="409" y="78" text-anchor="middle" dominant-baseline="middle">APP</text>
+    <text class="pill-text" x="555" y="78" text-anchor="middle" dominant-baseline="middle">PAD</text>
+    <text class="pill-text" x="701" y="78" text-anchor="middle" dominant-baseline="middle">客户端</text>
+    <text class="pill-text" x="847" y="78" text-anchor="middle" dominant-baseline="middle">WEB</text>
+  </g>
+
+  <!-- Middle row -->
+  <rect class="label stroke-teal" x="28" y="160" width="120" height="270" rx="16" />
+  <text class="label-text" x="88" y="295" text-anchor="middle" dominant-baseline="middle">应用层</text>
+
+  <rect class="panel stroke-teal" x="170" y="160" width="826" height="270" rx="16" />
+
+  <!-- Middle modules -->
+  <g class="stroke-teal">
+    <rect class="module" x="188" y="180" width="250" height="230" rx="14" />
+    <rect class="module" x="458" y="180" width="250" height="230" rx="14" />
+    <rect class="module" x="728" y="180" width="250" height="230" rx="14" />
+
+    <text class="title-text" x="313" y="205" text-anchor="middle" dominant-baseline="middle">核心模块</text>
+    <text class="title-text" x="583" y="205" text-anchor="middle" dominant-baseline="middle">基础模块</text>
+    <text class="title-text" x="853" y="205" text-anchor="middle" dominant-baseline="middle">其他模块</text>
+
+    <!-- Core module pills -->
+    <rect class="pill" x="206" y="230" width="102" height="30" rx="10" />
+    <rect class="pill" x="322" y="230" width="102" height="30" rx="10" />
+    <rect class="pill" x="206" y="272" width="102" height="30" rx="10" />
+    <rect class="pill" x="322" y="272" width="102" height="30" rx="10" />
+    <rect class="pill" x="206" y="314" width="102" height="30" rx="10" />
+    <rect class="pill" x="322" y="314" width="102" height="30" rx="10" />
+    <text class="pill-text" x="257" y="245" text-anchor="middle" dominant-baseline="middle">功能1</text>
+    <text class="pill-text" x="373" y="245" text-anchor="middle" dominant-baseline="middle">功能2</text>
+    <text class="pill-text" x="257" y="287" text-anchor="middle" dominant-baseline="middle">功能3</text>
+    <text class="pill-text" x="373" y="287" text-anchor="middle" dominant-baseline="middle">功能4</text>
+    <text class="pill-text" x="257" y="329" text-anchor="middle" dominant-baseline="middle">功能5</text>
+    <text class="pill-text" x="373" y="329" text-anchor="middle" dominant-baseline="middle">功能6</text>
+
+    <!-- Base module pills -->
+    <rect class="pill" x="476" y="230" width="102" height="30" rx="10" />
+    <rect class="pill" x="592" y="230" width="102" height="30" rx="10" />
+    <rect class="pill" x="476" y="272" width="102" height="30" rx="10" />
+    <rect class="pill" x="592" y="272" width="102" height="30" rx="10" />
+    <rect class="pill" x="476" y="314" width="102" height="30" rx="10" />
+    <rect class="pill" x="592" y="314" width="102" height="30" rx="10" />
+    <text class="pill-text" x="527" y="245" text-anchor="middle" dominant-baseline="middle">功能1</text>
+    <text class="pill-text" x="643" y="245" text-anchor="middle" dominant-baseline="middle">功能2</text>
+    <text class="pill-text" x="527" y="287" text-anchor="middle" dominant-baseline="middle">功能3</text>
+    <text class="pill-text" x="643" y="287" text-anchor="middle" dominant-baseline="middle">功能4</text>
+    <text class="pill-text" x="527" y="329" text-anchor="middle" dominant-baseline="middle">功能5</text>
+    <text class="pill-text" x="643" y="329" text-anchor="middle" dominant-baseline="middle">功能6</text>
+
+    <!-- Other module pills -->
+    <rect class="pill" x="746" y="230" width="102" height="30" rx="10" />
+    <rect class="pill" x="862" y="230" width="102" height="30" rx="10" />
+    <rect class="pill" x="746" y="272" width="102" height="30" rx="10" />
+    <rect class="pill" x="862" y="272" width="102" height="30" rx="10" />
+    <rect class="pill" x="746" y="314" width="102" height="30" rx="10" />
+    <rect class="pill" x="862" y="314" width="102" height="30" rx="10" />
+    <text class="pill-text" x="797" y="245" text-anchor="middle" dominant-baseline="middle">功能1</text>
+    <text class="pill-text" x="913" y="245" text-anchor="middle" dominant-baseline="middle">功能2</text>
+    <text class="pill-text" x="797" y="287" text-anchor="middle" dominant-baseline="middle">功能3</text>
+    <text class="pill-text" x="913" y="287" text-anchor="middle" dominant-baseline="middle">功能4</text>
+    <text class="pill-text" x="797" y="329" text-anchor="middle" dominant-baseline="middle">功能5</text>
+    <text class="pill-text" x="913" y="329" text-anchor="middle" dominant-baseline="middle">功能6</text>
+  </g>
+
+  <!-- Bottom row -->
+  <rect class="label stroke-orange" x="28" y="456" width="120" height="270" rx="16" />
+  <text class="label-text" x="88" y="591" text-anchor="middle" dominant-baseline="middle">平台层</text>
+
+  <rect class="panel stroke-orange" x="170" y="456" width="826" height="270" rx="16" />
+
+  <!-- Bottom modules -->
+  <g class="stroke-orange">
+    <rect class="module" x="188" y="480" width="250" height="210" rx="14" />
+    <rect class="module" x="458" y="480" width="250" height="210" rx="14" />
+    <rect class="module" x="728" y="480" width="250" height="210" rx="14" />
+
+    <text class="title-text" x="313" y="505" text-anchor="middle" dominant-baseline="middle">模块1</text>
+    <text class="title-text" x="583" y="505" text-anchor="middle" dominant-baseline="middle">模块2</text>
+    <text class="title-text" x="853" y="505" text-anchor="middle" dominant-baseline="middle">模块3</text>
+
+    <!-- Bottom module pills -->
+    <rect class="pill" x="206" y="535" width="102" height="30" rx="10" />
+    <rect class="pill" x="322" y="535" width="102" height="30" rx="10" />
+    <rect class="pill" x="206" y="577" width="102" height="30" rx="10" />
+    <rect class="pill" x="322" y="577" width="102" height="30" rx="10" />
+    <text class="pill-text" x="257" y="550" text-anchor="middle" dominant-baseline="middle">功能1</text>
+    <text class="pill-text" x="373" y="550" text-anchor="middle" dominant-baseline="middle">功能2</text>
+    <text class="pill-text" x="257" y="592" text-anchor="middle" dominant-baseline="middle">功能3</text>
+    <text class="pill-text" x="373" y="592" text-anchor="middle" dominant-baseline="middle">功能4</text>
+
+    <rect class="pill" x="476" y="535" width="102" height="30" rx="10" />
+    <rect class="pill" x="592" y="535" width="102" height="30" rx="10" />
+    <rect class="pill" x="476" y="577" width="102" height="30" rx="10" />
+    <rect class="pill" x="592" y="577" width="102" height="30" rx="10" />
+    <text class="pill-text" x="527" y="550" text-anchor="middle" dominant-baseline="middle">功能1</text>
+    <text class="pill-text" x="643" y="550" text-anchor="middle" dominant-baseline="middle">功能2</text>
+    <text class="pill-text" x="527" y="592" text-anchor="middle" dominant-baseline="middle">功能3</text>
+    <text class="pill-text" x="643" y="592" text-anchor="middle" dominant-baseline="middle">功能4</text>
+
+    <rect class="pill" x="746" y="535" width="102" height="30" rx="10" />
+    <rect class="pill" x="862" y="535" width="102" height="30" rx="10" />
+    <rect class="pill" x="746" y="577" width="102" height="30" rx="10" />
+    <rect class="pill" x="862" y="577" width="102" height="30" rx="10" />
+    <text class="pill-text" x="797" y="550" text-anchor="middle" dominant-baseline="middle">功能1</text>
+    <text class="pill-text" x="913" y="550" text-anchor="middle" dominant-baseline="middle">功能2</text>
+    <text class="pill-text" x="797" y="592" text-anchor="middle" dominant-baseline="middle">功能3</text>
+    <text class="pill-text" x="913" y="592" text-anchor="middle" dominant-baseline="middle">功能4</text>
+  </g>
+</svg>

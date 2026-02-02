@@ -3,7 +3,7 @@ import { Settings2, ChevronUp, ChevronDown, Loader2, Download, Info, CheckCircle
 import { useTranslation } from 'react-i18next';
 import QRCodeTooltip from '../QRCodeTooltip';
 import { GraphType, Language, StyleType, FigureComplex } from './types';
-import { GENERATION_STAGES, TECH_ROUTE_PALETTES } from './constants';
+import { GENERATION_STAGES, TECH_ROUTE_PALETTES, TECH_ROUTE_TEMPLATES } from './constants';
 import { API_URL_OPTIONS } from '../../config/api';
 import {
   DEFAULT_PAPER2FIGURE_MODELS,
@@ -44,6 +44,8 @@ interface SettingsCardProps {
   svgColorPath: string | null;
   techRoutePalette: string;
   setTechRoutePalette: (palette: string) => void;
+  techRouteTemplate: string;
+  setTechRouteTemplate: (templateId: string) => void;
   referenceImage: File | null;
   setReferenceImage: (file: File | null) => void;
   referenceImagePreview: string | null;
@@ -84,6 +86,8 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
   svgColorPath,
   techRoutePalette,
   setTechRoutePalette,
+  techRouteTemplate,
+  setTechRouteTemplate,
   referenceImage,
   setReferenceImage,
   referenceImagePreview,
@@ -105,6 +109,7 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
   // 配色方案下拉框状态
   const [paletteDropdownOpen, setPaletteDropdownOpen] = useState(false);
   const paletteDropdownRef = useRef<HTMLDivElement>(null);
+  const [templatePreview, setTemplatePreview] = useState<{ src: string; label: string } | null>(null);
 
   // 点击外部关闭下拉框
   useEffect(() => {
@@ -277,6 +282,64 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
                 {graphType === 'exp_data' && <option value="Low Poly 3D">{t('advanced.style.lowPoly')}</option>}
                 {graphType === 'exp_data' && <option value="blocky LEGO aesthetic">{t('advanced.style.lego')}</option>}
               </select>
+            </div>
+          )}
+
+          {graphType === 'tech_route' && (
+            <div className="space-y-2">
+              <label className="block text-xs text-gray-400">{t('techRoute.templateLabel')}</label>
+              <div className="grid grid-cols-2 gap-2">
+                {TECH_ROUTE_TEMPLATES.map((tpl) => {
+                  const isActive = techRouteTemplate === tpl.id;
+                  return (
+                    <button
+                      key={tpl.id || 'auto'}
+                      type="button"
+                      onClick={() => setTechRouteTemplate(tpl.id)}
+                      className={`rounded-lg border text-left transition-all ${
+                        isActive
+                          ? 'border-primary-400/80 bg-primary-500/10'
+                          : 'border-white/10 bg-black/20 hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="p-2">
+                        <div className="relative overflow-hidden rounded-md border border-white/10 bg-black/30 h-20 flex items-center justify-center group">
+                          {tpl.preview ? (
+                            <img
+                              src={tpl.preview}
+                              alt={t(tpl.labelKey)}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="text-[10px] text-gray-400 px-2 text-center">
+                              {t('techRoute.templateAuto')}
+                            </div>
+                          )}
+                          {tpl.preview && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTemplatePreview({ src: tpl.preview, label: t(tpl.labelKey) });
+                              }}
+                              className="absolute bottom-1 right-1 text-[9px] px-1.5 py-0.5 rounded-full bg-black/70 text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {t('techRoute.templateZoom')}
+                            </button>
+                          )}
+                          {isActive && (
+                            <span className="absolute top-1 right-1 text-[9px] px-1.5 py-0.5 rounded-full bg-primary-500/80 text-white">
+                              {t('techRoute.templateSelected')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-[10px] text-gray-200">{t(tpl.labelKey)}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-500">{t('techRoute.templateHint')}</p>
             </div>
           )}
 
@@ -588,6 +651,36 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
           </div>
         )}
       </div>
+
+      {templatePreview && (
+        <div
+          className="fixed inset-0 z-[999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setTemplatePreview(null)}
+        >
+          <div
+            className="max-w-4xl w-full bg-black/80 border border-white/10 rounded-xl p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm text-gray-200">{templatePreview.label}</div>
+              <button
+                type="button"
+                onClick={() => setTemplatePreview(null)}
+                className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-gray-200"
+              >
+                {t('techRoute.templateClose')}
+              </button>
+            </div>
+            <div className="w-full max-h-[70vh] overflow-auto rounded-lg border border-white/10 bg-black/40">
+              <img
+                src={templatePreview.src}
+                alt={templatePreview.label}
+                className="w-full h-auto object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

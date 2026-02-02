@@ -48,6 +48,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       gradient: 'from-teal-500 to-cyan-500'
     },
     {
+      id: 'image2drawio',
+      labelKey: t('app.nav.image2drawio'),
+      tooltipKey: t('app.navTooltip.image2drawio'),
+      icon: Image,
+      gradient: 'from-amber-500 to-lime-500'
+    },
+    {
       id: 'paper2rebuttal',
       labelKey: t('app.nav.paper2rebuttal'),
       tooltipKey: t('app.navTooltip.paper2rebuttal'),
@@ -62,6 +69,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       gradient: 'from-purple-500 to-pink-500'
     },
     {
+      id: 'ppt2polish',
+      labelKey: t('app.nav.ppt2polish'),
+      tooltipKey: t('app.navTooltip.ppt2polish'),
+      icon: Wand2,
+      gradient: 'from-cyan-500 to-teal-500'
+    },
+    {
       id: 'pdf2ppt',
       labelKey: t('app.nav.pdf2ppt'),
       tooltipKey: t('app.navTooltip.pdf2ppt'),
@@ -74,20 +88,6 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navTooltip.image2ppt'),
       icon: ImagePlus,
       gradient: 'from-cyan-500 to-blue-500'
-    },
-    {
-      id: 'image2drawio',
-      labelKey: t('app.nav.image2drawio'),
-      tooltipKey: t('app.navTooltip.image2drawio'),
-      icon: Image,
-      gradient: 'from-amber-500 to-lime-500'
-    },
-    {
-      id: 'ppt2polish',
-      labelKey: t('app.nav.ppt2polish'),
-      tooltipKey: t('app.navTooltip.ppt2polish'),
-      icon: Wand2,
-      gradient: 'from-cyan-500 to-teal-500'
     },
     {
       id: 'knowledge',
