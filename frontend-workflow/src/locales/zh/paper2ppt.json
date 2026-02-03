@@ -42,6 +42,7 @@
       "apiUrl": "API URL",
       "buyLink": "点击购买",
       "model": "模型",
+      "customModelTip": "手动输入模型名称（需与所选 API 服务商支持的模型名一致）",
       "genModel": "图像生成模型（中文使用3 pro）",
       "pageCount": "生成页数",
       "longPaper": "启用长文档模式，适用于生成40到100页的PPT",

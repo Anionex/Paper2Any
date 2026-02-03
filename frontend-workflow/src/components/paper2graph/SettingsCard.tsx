@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import QRCodeTooltip from '../QRCodeTooltip';
 import { GraphType, Language, StyleType, FigureComplex } from './types';
 import { GENERATION_STAGES, TECH_ROUTE_PALETTES, TECH_ROUTE_TEMPLATES } from './constants';
-import { API_URL_OPTIONS } from '../../config/api';
+import { API_URL_OPTIONS, getPurchaseUrl } from '../../config/api';
 import {
   DEFAULT_PAPER2FIGURE_MODELS,
   PAPER2FIGURE_EXP_DATA_MODELS,
@@ -162,7 +162,7 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
               </select>
               <QRCodeTooltip>
                 <a
-                  href={llmApiUrl === 'http://123.129.219.111:3000/v1' ? "http://123.129.219.111:3000" : "https://api.apiyi.com/register/?aff_code=TbrD"}
+                  href={getPurchaseUrl(llmApiUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="whitespace-nowrap text-[10px] text-primary-300 hover:text-primary-200 hover:underline px-2"

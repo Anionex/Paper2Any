@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Upload, FileText, CheckCircle, RefreshCw, Download, ArrowRight, Loader2, History, ChevronLeft, Clock } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
-import { API_KEY, DEFAULT_LLM_API_URL, API_URL_OPTIONS } from '../../config/api';
+import { API_KEY, DEFAULT_LLM_API_URL, API_URL_OPTIONS, getPurchaseUrl } from '../../config/api';
 import { DEFAULT_PAPER2REBUTTAL_MODEL, PAPER2REBUTTAL_MODELS, withModelOptions } from '../../config/models';
 import ReactMarkdown from 'react-markdown';
 import Timeline from './Timeline';
@@ -845,7 +845,7 @@ const Paper2RebuttalPage = () => {
                       <label className="block text-xs text-gray-400">{t('paper2rebuttal:upload.apiUrl')}</label>
                       <QRCodeTooltip>
                         <a
-                          href={llmApiUrl === 'http://123.129.219.111:3000/v1' ? "http://123.129.219.111:3000" : "https://api.apiyi.com/register/?aff_code=TbrD"}
+                          href={getPurchaseUrl(llmApiUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"

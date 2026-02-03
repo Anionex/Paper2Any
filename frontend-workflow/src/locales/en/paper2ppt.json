@@ -42,6 +42,7 @@
       "apiUrl": "API URL",
       "buyLink": "Buy Now",
       "model": "Model",
+      "customModelTip": "Manually enter a model name (must match the selected provider's supported models).",
       "genModel": "Image Gen Model",
       "pageCount": "Page Count",
       "longPaper": "Enable Long Paper Mode (40-100 pages)",
