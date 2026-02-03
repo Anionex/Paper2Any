@@ -230,7 +230,8 @@ Paper2Any 当前包含以下几个子能力：
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![pip](https://img.shields.io/badge/pip-latest-3776AB?style=flat-square&logo=pypi&logoColor=white)
 
-### 🐳 Docker 快速启动（推荐）
+<details>
+<summary><strong>🐳 Docker 快速启动（推荐）— 部署与更新</strong></summary>
 
 ```bash
 # 1. 克隆仓库
@@ -248,10 +249,22 @@ docker compose up -d --build
 - 前端：http://localhost:3000
 - 后端健康检查：http://localhost:8000/health
 
+修改与更新：
+- 代码或 `.env` 变更后重新构建：`docker compose up -d --build`
+- 拉取最新代码并重建：
+  - `git pull`
+  - `docker compose up -d --build`
+
+常用命令：
+- 查看日志：`docker compose logs -f`
+- 停止服务：`docker compose down`
+
 说明：
 - 首次构建会比较慢（系统依赖 + Python 依赖）。
 - 前端配置在构建期生效（compose build args），修改后需重新 `docker compose up -d --build`。
 - 输出和模型目录会挂载到宿主机（`./outputs`、`./models`），数据不会丢。
+
+</details>
 
 ### 🐧 Linux 安装
 
