@@ -161,10 +161,19 @@ def extract_text_color(image_bgr: np.ndarray, bbox_px: List[int]) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def save_masked_rgba(image_bgr: np.ndarray, mask: np.ndarray, out_path: str) -> str:
+def save_masked_rgba(
+    image_bgr: np.ndarray,
+    mask: np.ndarray,
+    out_path: str,
+    dilate_px: int = 0,
+) -> str:
     """Save masked region as RGBA PNG with alpha channel."""
     h, w = image_bgr.shape[:2]
     mask = normalize_mask(mask, (h, w))
+    if dilate_px and dilate_px > 0:
+        k = int(max(1, dilate_px))
+        kernel = np.ones((k * 2 + 1, k * 2 + 1), np.uint8)
+        mask = cv2.dilate(mask.astype(np.uint8), kernel, iterations=1) > 0
     rgba = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2BGRA)
     alpha = (mask.astype(np.uint8) * 255)
     rgba[:, :, 3] = alpha

@@ -10,6 +10,7 @@
   "config": {
     "title": "AI 设置",
     "apiUrl": "API 地址",
+    "buyLink": "点击购买",
     "apiKey": "API Key（用于 VLM / 修复）",
     "model": "对话模型",
     "genModel": "图像编辑模型",

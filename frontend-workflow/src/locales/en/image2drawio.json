@@ -10,6 +10,7 @@
   "config": {
     "title": "AI Settings",
     "apiUrl": "API Base URL",
+    "buyLink": "Buy Now",
     "apiKey": "API Key (for VLM / inpainting)",
     "genModel": "Image Edit Model",
     "vlmModel": "VLM OCR Model"
