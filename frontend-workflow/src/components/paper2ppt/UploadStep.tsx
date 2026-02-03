@@ -1,6 +1,6 @@
 import React, { ChangeEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API_URL_OPTIONS } from '../../config/api';
+import { API_URL_OPTIONS, getPurchaseUrl } from '../../config/api';
 import { PAPER2PPT_GEN_FIG_MODELS, PAPER2PPT_MODELS, withModelOptions } from '../../config/models';
 import {
   UploadCloud, Settings2, Loader2, AlertCircle, Sparkles,
@@ -275,14 +275,14 @@ const UploadStep: React.FC<UploadStepProps> = ({
                   <Globe size={12} /> {t('upload.config.apiUrl')}
                 </label>
                 <QRCodeTooltip>
-                <a
-                  href={llmApiUrl === 'http://123.129.219.111:3000/v1' ? "http://123.129.219.111:3000" : "https://api.apiyi.com/register/?aff_code=TbrD"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"
-                >
-                  {t('upload.config.buyLink')}
-                </a>
+                  <a
+                    href={getPurchaseUrl(llmApiUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"
+                  >
+                    {t('upload.config.buyLink')}
+                  </a>
                 </QRCodeTooltip>
               </div>
               <select 
@@ -315,13 +315,18 @@ const UploadStep: React.FC<UploadStepProps> = ({
                     <option key={option} value={option}>{option}</option>
                   ))}
                 </select>
-                <input
-                  type="text"
-                  value={model} 
-                  onChange={e => setModel(e.target.value)}
-                  placeholder="自定义模型"
-                  className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-                />
+                <div className="relative group">
+                  <input
+                    type="text"
+                    value={model} 
+                    onChange={e => setModel(e.target.value)}
+                    placeholder="自定义模型"
+                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 w-56 -translate-y-1/2 rounded-md border border-white/10 bg-black/80 px-2 py-1.5 text-[10px] text-gray-100 opacity-0 shadow-lg transition group-hover:opacity-100">
+                    {t('upload.config.customModelTip')}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

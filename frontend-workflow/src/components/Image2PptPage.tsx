@@ -5,7 +5,7 @@ import {
   AlertCircle, Github, Star, X, FileImage, ArrowRight, Key, Globe, Sparkles, Image as ImageIcon, MessageSquare, Copy
 } from 'lucide-react';
 import { uploadAndSaveFile } from '../services/fileService';
-import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../config/api';
 import { DEFAULT_IMAGE2PPT_GEN_FIG_MODEL, IMAGE2PPT_GEN_FIG_MODELS, withModelOptions } from '../config/models';
 import { checkQuota, recordUsage } from '../services/quotaService';
 import { verifyLlmConnection } from '../services/llmService';
@@ -465,7 +465,7 @@ const Image2PptPage = () => {
                         </select>
                         <QRCodeTooltip>
                         <a
-                          href="https://api.apiyi.com/register/?aff_code=TbrD"
+                          href={getPurchaseUrl(llmApiUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="whitespace-nowrap text-[10px] text-cyan-300 hover:text-cyan-200 hover:underline px-1"

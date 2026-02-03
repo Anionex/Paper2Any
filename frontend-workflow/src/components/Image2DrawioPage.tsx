@@ -13,7 +13,8 @@ import {
   Image as ImageIcon,
   Sparkles,
 } from 'lucide-react';
-import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../config/api';
+import QRCodeTooltip from './QRCodeTooltip';
 import {
   DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL,
   DEFAULT_IMAGE2DRAWIO_VLM_MODEL,
@@ -549,7 +550,19 @@ const Image2DrawioPage = () => {
                 {t('config.title')}
               </h3>
                 <div className="space-y-3">
-                  <label className="block text-xs text-slate-400">{t('config.apiUrl')}</label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs text-slate-400">{t('config.apiUrl')}</label>
+                    <QRCodeTooltip>
+                      <a
+                        href={getPurchaseUrl(apiUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="whitespace-nowrap text-[10px] text-amber-300 hover:text-amber-200 hover:underline px-1"
+                      >
+                        {t('config.buyLink')}
+                      </a>
+                    </QRCodeTooltip>
+                  </div>
                   <select
                     value={apiUrl}
                     onChange={(e) => setApiUrl(e.target.value)}

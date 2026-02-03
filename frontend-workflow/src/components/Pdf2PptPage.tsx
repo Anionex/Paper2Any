@@ -5,7 +5,7 @@ import {
   AlertCircle, Github, Star, X, FileText, ArrowRight, Key, Globe, ToggleLeft, ToggleRight, Sparkles, Image, MessageSquare, Copy, Info
 } from 'lucide-react';
 import { uploadAndSaveFile } from '../services/fileService';
-import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../config/api';
 import { DEFAULT_PDF2PPT_GEN_FIG_MODEL, PDF2PPT_GEN_FIG_MODELS, withModelOptions } from '../config/models';
 import { checkQuota, recordUsage } from '../services/quotaService';
 import { verifyLlmConnection } from '../services/llmService';
@@ -522,7 +522,7 @@ const Pdf2PptPage = () => {
                         </select>
                         <QRCodeTooltip>
                         <a
-                          href="https://api.apiyi.com/register/?aff_code=TbrD"
+                          href={getPurchaseUrl(llmApiUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="whitespace-nowrap text-[10px] text-purple-300 hover:text-purple-200 hover:underline px-1"

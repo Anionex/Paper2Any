@@ -23,6 +23,7 @@
       "apiKey": "API Key (starts with sk-)",
       "apiKeyPlaceholder": "sk-...",
       "model": "Model Name",
+      "customModelTip": "Manually enter a model name (must match the selected provider's supported models).",
       "genModel": "Image Gen Model",
       "language": "Language",
       "styleTitle": "Style Config",

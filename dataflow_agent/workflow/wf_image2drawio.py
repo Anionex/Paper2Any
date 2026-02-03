@@ -33,11 +33,18 @@ from dataflow_agent.state import Paper2FigureState
 from dataflow_agent.agentroles import create_vlm_agent
 
 from dataflow_agent.toolkits.multimodaltool.req_img import generate_or_edit_and_save_image_async
-from dataflow_agent.toolkits.multimodaltool.sam_tool import segment_layout_boxes, segment_layout_boxes_server, free_sam_model
+from dataflow_agent.toolkits.multimodaltool.sam_tool import (
+    run_sam_auto,
+    run_sam_auto_server,
+    postprocess_sam_items,
+    filter_sam_items_by_area_and_score,
+    free_sam_model,
+)
 from dataflow_agent.toolkits.multimodaltool import ppt_tool
 from dataflow_agent.toolkits.drawio_tools import wrap_xml
 from dataflow_agent.toolkits.image2drawio import (
     classify_shape,
+    extract_text_color,
     mask_to_bbox,
     normalize_mask,
     sample_fill_stroke,
@@ -48,8 +55,20 @@ from dataflow_agent.toolkits.image2drawio import (
 log = get_logger(__name__)
 
 TEXT_COLOR = "#111111"
-TEXT_FONT_SIZE = 14
+TEXT_FONT_SIZE_DEFAULT = 14
+TEXT_FONT_SIZE_MIN = 8
+TEXT_FONT_SIZE_MAX = 48
+TEXT_FONT_SCALE = 0.7
+TEXT_FONT_MAX_RATIO_SHAPE = 0.45
 TEXT_FONT_STYLE = 1  # draw.io fontStyle=1 => bold
+MAX_DRAWIO_ELEMENTS = 600
+MIN_IMAGE_AREA_RATIO = 0.00001
+SHAPE_CONF_THRESHOLDS = {
+    "rect": 0.75,
+    "rounded_rect": 0.55,
+    "ellipse": 0.75,
+    "diamond": 0.7,
+}
 
 
 def _ensure_result_path(state: Paper2FigureState) -> str:
@@ -81,6 +100,123 @@ def _encode_image_base64(path: str) -> str:
     return base64.b64encode(data).decode("utf-8")
 
 
+def _clamp_int(val: float, low: int, high: int) -> int:
+    return int(max(low, min(high, round(val))))
+
+
+def _font_size_from_height(height_px: float, max_px: Optional[float] = None) -> int:
+    if height_px <= 0:
+        return TEXT_FONT_SIZE_DEFAULT
+    size = height_px * TEXT_FONT_SCALE
+    if max_px is not None and max_px > 0:
+        size = min(size, max_px)
+    return _clamp_int(size, TEXT_FONT_SIZE_MIN, TEXT_FONT_SIZE_MAX)
+
+
+def _hex_to_rgb(hex_color: str) -> Optional[tuple[int, int, int]]:
+    if not hex_color or not isinstance(hex_color, str):
+        return None
+    s = hex_color.strip()
+    if s.startswith("#"):
+        s = s[1:]
+    if len(s) != 6:
+        return None
+    try:
+        r = int(s[0:2], 16)
+        g = int(s[2:4], 16)
+        b = int(s[4:6], 16)
+        return (r, g, b)
+    except Exception:
+        return None
+
+
+def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
+    r, g, b = rgb
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _average_hex(colors: List[str]) -> Optional[str]:
+    vals = []
+    for c in colors:
+        rgb = _hex_to_rgb(c)
+        if rgb is not None:
+            vals.append(rgb)
+    if not vals:
+        return None
+    arr = np.array(vals, dtype=np.float32)
+    mean = np.mean(arr, axis=0)
+    rgb = tuple(int(max(0, min(255, v))) for v in mean.tolist())
+    return _rgb_to_hex(rgb)
+
+
+def _luminance(rgb: tuple[int, int, int]) -> float:
+    r, g, b = rgb
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _pick_contrast_text_color(fill_hex: str) -> str:
+    rgb = _hex_to_rgb(fill_hex)
+    if rgb is None:
+        return TEXT_COLOR
+    return "#ffffff" if _luminance(rgb) < 140 else TEXT_COLOR
+
+
+def _bbox_area(b: List[int]) -> int:
+    return max(0, b[2] - b[0]) * max(0, b[3] - b[1])
+
+
+def _sanitize_bbox(bbox_px: Optional[List[int]], target_shape: tuple[int, int, int]) -> Optional[List[int]]:
+    if not bbox_px or len(bbox_px) != 4:
+        return None
+    h, w = target_shape[:2]
+    try:
+        x1, y1, x2, y2 = [float(v) for v in bbox_px]
+    except Exception:
+        return None
+    # Detect normalized bbox
+    if 0.0 <= x2 <= 1.5 and 0.0 <= y2 <= 1.5 and w > 2 and h > 2:
+        x1 *= w
+        x2 *= w
+        y1 *= h
+        y2 *= h
+    x1 = int(round(x1))
+    y1 = int(round(y1))
+    x2 = int(round(x2))
+    y2 = int(round(y2))
+    x1 = max(0, min(w - 1, x1))
+    y1 = max(0, min(h - 1, y1))
+    x2 = max(0, min(w, x2))
+    y2 = max(0, min(h, y2))
+    if x2 - x1 < 2 or y2 - y1 < 2:
+        return None
+    return [x1, y1, x2, y2]
+
+
+def _bbox_intersection_ratio(a: List[int], b: List[int]) -> float:
+    xA = max(a[0], b[0])
+    yA = max(a[1], b[1])
+    xB = min(a[2], b[2])
+    yB = min(a[3], b[3])
+    inter = max(0, xB - xA) * max(0, yB - yA)
+    area_a = _bbox_area(a)
+    if area_a == 0:
+        return 0.0
+    return inter / float(area_a)
+
+
+def _save_bbox_crop(image_bgr: np.ndarray, bbox_px: List[int], out_path: str) -> str:
+    bbox = _sanitize_bbox(bbox_px, image_bgr.shape)
+    if not bbox:
+        return out_path
+    x1, y1, x2, y2 = bbox
+    crop = image_bgr[y1:y2, x1:x2]
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    cv2.imwrite(out_path, crop)
+    return out_path
+
+
+
+
 def _build_mxcell(
     cell_id: str,
     value: str,
@@ -103,25 +239,34 @@ def _build_mxcell(
     )
 
 
-def _shape_style(shape_type: str, fill_hex: str, stroke_hex: str) -> str:
+def _shape_style(
+    shape_type: str,
+    fill_hex: str,
+    stroke_hex: str,
+    font_size: Optional[int] = None,
+    font_color: Optional[str] = None,
+) -> str:
     if shape_type == "ellipse":
         base = "shape=ellipse;"
     elif shape_type == "diamond":
         base = "shape=rhombus;"
     else:
         base = "rounded=1;" if shape_type == "rounded_rect" else "rounded=0;"
+    fs = int(font_size) if font_size else TEXT_FONT_SIZE_DEFAULT
+    fc = font_color or TEXT_COLOR
     return (
         f"{base}whiteSpace=wrap;html=1;align=center;verticalAlign=middle;"
         f"fillColor={fill_hex};strokeColor={stroke_hex};"
-        f"fontColor={TEXT_COLOR};fontStyle={TEXT_FONT_STYLE};fontSize={TEXT_FONT_SIZE};"
+        f"fontColor={fc};fontStyle={TEXT_FONT_STYLE};fontSize={fs};"
     )
 
 
-def _text_style(color_hex: str) -> str:
+def _text_style(color_hex: str, font_size: Optional[int] = None) -> str:
+    fs = int(font_size) if font_size else TEXT_FONT_SIZE_DEFAULT
     return (
         "text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;"
-        f"strokeColor=none;fillColor=none;fontColor={TEXT_COLOR};"
-        f"fontStyle={TEXT_FONT_STYLE};fontSize={TEXT_FONT_SIZE};"
+        f"strokeColor=none;fillColor=none;fontColor={color_hex or TEXT_COLOR};"
+        f"fontStyle={TEXT_FONT_STYLE};fontSize={fs};"
     )
 
 
@@ -329,18 +474,22 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
         sam_server_urls = [u.strip() for u in sam_server_env.split(",") if u.strip()]
         layout_items: List[Dict[str, Any]] = []
 
+        try:
+            with Image.open(img_path) as tmp:
+                w, h = tmp.size
+        except Exception:
+            w, h = 1024, 1024
+        img_area = max(1, int(w * h))
+        small_area = max(800, int(img_area * 0.001))
+        min_area_small = max(20, int(img_area * 0.00001))
+        min_area_large = max(120, int(img_area * 0.00005))
+
         if sam_server_urls:
             try:
-                layout_items = segment_layout_boxes_server(
+                layout_items = run_sam_auto_server(
                     image_path=img_path,
-                    output_dir=str(out_dir),
                     server_urls=sam_server_urls,
                     checkpoint=sam_ckpt,
-                    min_area=120,
-                    min_score=0.0,
-                    iou_threshold=0.2,
-                    top_k=None,
-                    nms_by="mask",
                 )
             except Exception as e:
                 log.warning(f"[image2drawio] SAM server failed: {e}, fallback to local")
@@ -348,15 +497,9 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
 
         if not layout_items:
             try:
-                layout_items = segment_layout_boxes(
+                layout_items = run_sam_auto(
                     image_path=img_path,
-                    output_dir=str(out_dir),
                     checkpoint=sam_ckpt,
-                    min_area=120,
-                    min_score=0.0,
-                    iou_threshold=0.2,
-                    top_k=None,
-                    nms_by="mask",
                 )
             except Exception as e_local:
                 log.error(f"[image2drawio] SAM local failed: {e_local}")
@@ -367,13 +510,41 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
                 except Exception:
                     pass
 
-        # compute bbox_px
-        try:
-            with Image.open(img_path) as tmp:
-                w, h = tmp.size
-        except Exception:
-            w, h = 1024, 1024
+        if layout_items:
+            small_items = []
+            large_items = []
+            for it in layout_items:
+                area = int(it.get("area", 0) or 0)
+                if area < small_area:
+                    small_items.append(it)
+                else:
+                    large_items.append(it)
 
+            large_items = postprocess_sam_items(
+                large_items,
+                min_area=min_area_large,
+                min_score=0.0,
+                iou_threshold=0.5,
+                top_k=None,
+                nms_by="mask",
+            )
+            small_items = filter_sam_items_by_area_and_score(
+                small_items,
+                min_area=min_area_small,
+                min_score=0.0,
+            )
+            if small_items:
+                small_items = postprocess_sam_items(
+                    small_items,
+                    min_area=min_area_small,
+                    min_score=0.0,
+                    iou_threshold=0.85,
+                    top_k=None,
+                    nms_by="mask",
+                )
+            layout_items = large_items + small_items
+
+        # compute bbox_px
         for it in layout_items:
             bbox = it.get("bbox")
             if bbox and len(bbox) == 4:
@@ -382,7 +553,19 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
                 y1 = int(round(y1n * h))
                 x2 = int(round(x2n * w))
                 y2 = int(round(y2n * h))
-                it["bbox_px"] = [x1, y1, x2, y2]
+                bbox_px = _sanitize_bbox([x1, y1, x2, y2], (h, w, 1))
+                if bbox_px:
+                    it["bbox_px"] = bbox_px
+            elif it.get("mask") is not None:
+                try:
+                    tmp_mask = normalize_mask(it.get("mask"), (h, w))
+                    mask_bbox = mask_to_bbox(tmp_mask)
+                    if mask_bbox:
+                        bbox_px = _sanitize_bbox(mask_bbox, (h, w, 1))
+                        if bbox_px:
+                            it["bbox_px"] = bbox_px
+                except Exception:
+                    pass
 
         state.layout_items = layout_items
         return state
@@ -397,6 +580,11 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
         if image_bgr is None:
             state.drawio_elements = []
             return state
+        orig_bgr = image_bgr
+        if state.fig_draft_path and os.path.exists(state.fig_draft_path):
+            tmp_orig = cv2.imread(state.fig_draft_path)
+            if tmp_orig is not None:
+                orig_bgr = tmp_orig
 
         base_dir = Path(_ensure_result_path(state))
         icon_dir = base_dir / "icons"
@@ -404,46 +592,91 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
 
         shapes = []
         images = []
+        shape_text_items: List[List[Dict[str, Any]]] = []
+
+        image_area = max(1, int(image_bgr.shape[0] * image_bgr.shape[1]))
 
         # classify SAM items
         for idx, it in enumerate(getattr(state, "layout_items", []) or []):
             mask = it.get("mask")
             bbox_px = it.get("bbox_px")
-            if mask is None or bbox_px is None:
-                if mask is None:
-                    continue
+            mask_bbox = None
+
+            if mask is not None:
                 try:
-                    tmp_mask = normalize_mask(mask, image_bgr.shape[:2])
-                    bbox_px = mask_to_bbox(tmp_mask)
+                    mask = normalize_mask(mask, image_bgr.shape[:2])
+                    mask_bbox = mask_to_bbox(mask)
                 except Exception:
-                    bbox_px = None
-                if bbox_px is None:
-                    continue
+                    mask = None
+                    mask_bbox = None
 
-            mask = normalize_mask(mask, image_bgr.shape[:2])
-            shape_type, conf = classify_shape(mask)
+            if bbox_px is None and mask_bbox is not None:
+                bbox_px = mask_bbox
+            bbox_px = _sanitize_bbox(bbox_px, image_bgr.shape)
+            if bbox_px is None:
+                continue
 
-            if shape_type != "unknown" and conf >= 0.8:
-                fill_hex, stroke_hex = sample_fill_stroke(image_bgr, mask)
-                shapes.append({
-                    "id": f"s{idx}",
-                    "kind": "shape",
-                    "shape_type": shape_type,
-                    "bbox_px": bbox_px,
-                    "fill": fill_hex,
-                    "stroke": stroke_hex,
-                    "text": "",
-                    "area": it.get("area", 0),
-                })
+            area = int(it.get("area", 0) or 0)
+            if area <= 0:
+                area = _bbox_area(bbox_px)
+            area_ratio = float(area) / float(image_area)
+            bbox_area = _bbox_area(bbox_px)
+            bbox_area_ratio = float(bbox_area) / float(image_area)
+            if area_ratio > 0.98:
+                continue
+            if mask is None and bbox_area_ratio > 0.98:
+                continue
+
+            if mask is not None and mask_bbox is None:
+                mask = None
+
+            if mask is not None:
+                shape_type, conf = classify_shape(mask)
+                min_conf = SHAPE_CONF_THRESHOLDS.get(shape_type, 0.8)
+                fill_ratio = float(area) / float(max(1, bbox_area))
+                if shape_type == "unknown" and area_ratio > 0.005 and fill_ratio > 0.88:
+                    shape_type = "rect"
+                    conf = 0.6
+                if shape_type != "unknown" and conf >= min_conf:
+                    fill_hex, stroke_hex = sample_fill_stroke(image_bgr, mask)
+                    shapes.append({
+                        "id": f"s{idx}",
+                        "kind": "shape",
+                        "shape_type": shape_type,
+                        "bbox_px": bbox_px,
+                        "fill": fill_hex,
+                        "stroke": stroke_hex,
+                        "text": "",
+                        "text_color": _pick_contrast_text_color(fill_hex),
+                        "font_size": None,
+                        "area": area,
+                    })
+                    shape_text_items.append([])
+                else:
+                    out_path = icon_dir / f"icon_{idx}.png"
+                    save_masked_rgba(image_bgr, mask, str(out_path), dilate_px=1)
+                    img_area_ratio = float(_bbox_area(mask_bbox or bbox_px)) / float(image_area)
+                    if img_area_ratio < MIN_IMAGE_AREA_RATIO:
+                        continue
+                    images.append({
+                        "id": f"i{idx}",
+                        "kind": "image",
+                        "bbox_px": mask_bbox or bbox_px,
+                        "image_path": str(out_path),
+                        "area": area,
+                    })
             else:
                 out_path = icon_dir / f"icon_{idx}.png"
-                save_masked_rgba(image_bgr, mask, str(out_path))
+                _save_bbox_crop(image_bgr, bbox_px, str(out_path))
+                img_area_ratio = float(_bbox_area(bbox_px)) / float(image_area)
+                if img_area_ratio < MIN_IMAGE_AREA_RATIO:
+                    continue
                 images.append({
                     "id": f"i{idx}",
                     "kind": "image",
                     "bbox_px": bbox_px,
                     "image_path": str(out_path),
-                    "area": it.get("area", 0),
+                    "area": area,
                 })
 
         # assign OCR text to shapes (scale OCR boxes to match clean_bg size if needed)
@@ -457,6 +690,7 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
         except Exception:
             orig_w, orig_h = None, None
 
+        color_bgr = orig_bgr
         if orig_w and orig_h:
             tgt_h, tgt_w = image_bgr.shape[:2]
             scale_x = tgt_w / float(orig_w)
@@ -478,49 +712,112 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
                         ],
                     })
                 ocr_items = scaled_items
+            if orig_bgr.shape[:2] != (tgt_h, tgt_w):
+                try:
+                    color_bgr = cv2.resize(orig_bgr, (tgt_w, tgt_h), interpolation=cv2.INTER_LINEAR)
+                except Exception:
+                    color_bgr = image_bgr
+        else:
+            color_bgr = image_bgr
         unassigned_text = []
         for t in ocr_items:
             tb = t.get("bbox_px")
-            if not tb:
+            if not tb or len(tb) != 4:
                 continue
             cx = (tb[0] + tb[2]) * 0.5
             cy = (tb[1] + tb[3]) * 0.5
             best_iou = 0.0
+            best_overlap = 0.0
             best_idx = -1
             for i, s in enumerate(shapes):
                 sb = s["bbox_px"]
-                if sb[0] <= cx <= sb[2] and sb[1] <= cy <= sb[3]:
-                    iou = bbox_iou_px(tb, sb)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_idx = i
-            if best_idx >= 0 and best_iou > 0.05:
-                text_val = t.get("text", "").strip()
-                if text_val:
-                    if shapes[best_idx]["text"]:
-                        shapes[best_idx]["text"] += "\n" + text_val
-                    else:
-                        shapes[best_idx]["text"] = text_val
-            else:
-                unassigned_text.append(t)
+                iou = bbox_iou_px(tb, sb)
+                overlap = _bbox_intersection_ratio(tb, sb)
+                if overlap > best_overlap or (overlap == best_overlap and iou > best_iou):
+                    best_overlap = overlap
+                    best_iou = iou
+                    best_idx = i
+            if best_idx >= 0:
+                sb = shapes[best_idx]["bbox_px"]
+                center_inside = sb[0] <= cx <= sb[2] and sb[1] <= cy <= sb[3]
+                if best_overlap >= 0.3 or best_iou >= 0.05 or center_inside:
+                    text_val = t.get("text", "").strip()
+                    if text_val and best_idx < len(shape_text_items):
+                        shape_text_items[best_idx].append({
+                            "text": text_val,
+                            "bbox_px": tb,
+                            "color": extract_text_color(color_bgr, tb),
+                        })
+                    continue
+            unassigned_text.append(t)
 
         texts = []
-        for i, t in enumerate(unassigned_text):
+        text_id = 0
+        for i, s in enumerate(shapes):
+            items = shape_text_items[i] if i < len(shape_text_items) else []
+            if len(items) == 1:
+                item = items[0]
+                tb = item["bbox_px"]
+                sb = s.get("bbox_px", [0, 0, 0, 0])
+                tb_area = _bbox_area(tb)
+                sb_area = _bbox_area(sb)
+                area_ratio = float(tb_area) / float(max(1, sb_area))
+                if area_ratio >= 0.02:
+                    s["text"] = item["text"]
+                    s["text_color"] = item["color"] or s.get("text_color", TEXT_COLOR)
+                    tb_h = int(tb[3] - tb[1])
+                    s["font_size"] = _font_size_from_height(
+                        tb_h,
+                        max_px=(sb[3] - sb[1]) * TEXT_FONT_MAX_RATIO_SHAPE,
+                    )
+                else:
+                    tb_h = int(tb[3] - tb[1])
+                    texts.append({
+                        "id": f"t{text_id}",
+                        "kind": "text",
+                        "bbox_px": tb,
+                        "text": item["text"],
+                        "color": item["color"],
+                        "font_size": _font_size_from_height(tb_h),
+                    })
+                    text_id += 1
+            elif len(items) > 1:
+                for item in items:
+                    tb = item["bbox_px"]
+                    tb_h = int(tb[3] - tb[1])
+                    texts.append({
+                        "id": f"t{text_id}",
+                        "kind": "text",
+                        "bbox_px": tb,
+                        "text": item["text"],
+                        "color": item["color"],
+                        "font_size": _font_size_from_height(tb_h),
+                    })
+                    text_id += 1
+
+        for t in unassigned_text:
             tb = t.get("bbox_px")
-            if not tb:
+            if not tb or len(tb) != 4:
                 continue
+            tb_h = int(tb[3] - tb[1])
             texts.append({
-                "id": f"t{i}",
+                "id": f"t{text_id}",
                 "kind": "text",
                 "bbox_px": tb,
                 "text": t.get("text", ""),
-                "color": TEXT_COLOR,
+                "color": extract_text_color(color_bgr, tb),
+                "font_size": _font_size_from_height(tb_h),
             })
+            text_id += 1
 
         # sort elements by z (shapes large -> small, then images, then texts)
         shapes.sort(key=lambda s: s.get("area", 0), reverse=True)
         images.sort(key=lambda s: s.get("area", 0), reverse=True)
-
+        total = len(shapes) + len(images) + len(texts)
+        if total > MAX_DRAWIO_ELEMENTS:
+            keep = max(0, MAX_DRAWIO_ELEMENTS - len(shapes) - len(texts))
+            if keep < len(images):
+                images = images[:keep]
         state.drawio_elements = shapes + images + texts
         return state
 
@@ -552,7 +849,13 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
 
         for el in elements:
             if el.get("kind") == "shape":
-                style = _shape_style(el.get("shape_type", "rect"), el.get("fill", "#ffffff"), el.get("stroke", "#000000"))
+                style = _shape_style(
+                    el.get("shape_type", "rect"),
+                    el.get("fill", "#ffffff"),
+                    el.get("stroke", "#000000"),
+                    font_size=el.get("font_size"),
+                    font_color=el.get("text_color"),
+                )
                 value = el.get("text", "")
                 cells.append(_build_mxcell(str(id_counter), value, style, el["bbox_px"]))
                 id_counter += 1
@@ -565,7 +868,7 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
                 cells.append(_build_mxcell(str(id_counter), "", style, el["bbox_px"]))
                 id_counter += 1
             elif el.get("kind") == "text":
-                style = _text_style(el.get("color", "#000000"))
+                style = _text_style(el.get("color", "#000000"), font_size=el.get("font_size"))
                 value = el.get("text", "")
                 cells.append(_build_mxcell(str(id_counter), value, style, el["bbox_px"]))
                 id_counter += 1

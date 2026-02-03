@@ -239,7 +239,8 @@ Paper2Any currently includes the following sub-capabilities:
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![pip](https://img.shields.io/badge/pip-latest-3776AB?style=flat-square&logo=pypi&logoColor=white)
 
-### 🐳 Docker (Recommended)
+<details>
+<summary><strong>🐳 Docker (Recommended) — Deployment & Updates</strong></summary>
 
 ```bash
 # 1. Clone
@@ -257,10 +258,22 @@ Open:
 - Frontend: http://localhost:3000
 - Backend health: http://localhost:8000/health
 
+Modify & update:
+- After changing code or `.env`, rebuild: `docker compose up -d --build`
+- Pull latest code and rebuild:
+  - `git pull`
+  - `docker compose up -d --build`
+
+Common commands:
+- View logs: `docker compose logs -f`
+- Stop services: `docker compose down`
+
 Notes:
 - The first build may take a while (system deps + Python deps).
 - Frontend env is baked at build time (compose build args). If you change it, rebuild with `docker compose up -d --build`.
 - Outputs/models are mounted to the host (`./outputs`, `./models`) for persistence.
+
+</details>
 
 ### 🐧 Linux Installation
 

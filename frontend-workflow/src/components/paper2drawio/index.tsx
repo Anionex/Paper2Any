@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Wand2, Upload, FileText, Send, Download, Image as ImageIcon } from 'lucide-react';
 import type { DiagramType, DiagramStyle, ChatMessage } from './types';
-import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL } from '../../config/api';
+import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../../config/api';
 import {
   DEFAULT_PAPER2DRAWIO_IMAGE_MODEL,
   DEFAULT_PAPER2DRAWIO_MODEL,
@@ -15,6 +15,7 @@ import { getApiSettings, saveApiSettings } from '../../services/apiSettingsServi
 import { verifyLlmConnection } from '../../services/llmService';
 import Banner from './Banner';
 import ExamplesSection from './ExamplesSection';
+import QRCodeTooltip from '../QRCodeTooltip';
 
 const DRAWIO_ORIGINS = new Set(['https://embed.diagrams.net', 'https://app.diagrams.net']);
 const STORAGE_KEY = 'paper2drawio_settings';
@@ -844,6 +845,19 @@ export default function Paper2DrawioPage({
                 {t('apiConfig')}
               </h3>
               <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs text-slate-400">{t('apiUrl')}</label>
+                  <QRCodeTooltip>
+                    <a
+                      href={getPurchaseUrl(apiUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="whitespace-nowrap text-[10px] text-sky-300 hover:text-sky-200 hover:underline px-1"
+                    >
+                      {t('buyLink')}
+                    </a>
+                  </QRCodeTooltip>
+                </div>
                 {generationMode === 'paper2drawio' ? (
                   <select
                     value={apiUrl}
