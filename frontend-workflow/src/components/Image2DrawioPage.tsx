@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../config/api';
 import QRCodeTooltip from './QRCodeTooltip';
+import CasesSection from './CasesSection';
 import {
   DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL,
   DEFAULT_IMAGE2DRAWIO_VLM_MODEL,
@@ -33,6 +34,7 @@ const DRAWIO_ANIMATE_STEP_MS = 60;
 const DRAWIO_ANIMATE_MAX_CELLS = 240;
 const DRAWIO_ANIMATE_LARGE_BATCH = 5;
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const FEISHU_DOC_URL = 'https://wcny4qa9krto.feishu.cn/wiki/VXKiwYndwiWAVmkFU6kcqsTenWh';
 
 const panelClass =
   'rounded-2xl bg-white/5 border border-white/10 p-4 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.25)]';
@@ -722,6 +724,27 @@ const Image2DrawioPage = () => {
             </div>
           </div>
         </div>
+
+        <CasesSection
+          title={t('cases.title')}
+          subtitle={t('cases.subtitle')}
+          feishuLabel={t('cases.feishu')}
+          feishuUrl={FEISHU_DOC_URL}
+          tone="amber"
+          columns={1}
+          cases={[
+            {
+              title: t('cases.items.case1Title'),
+              description: t('cases.items.case1Desc'),
+              image: '/drawIO/image2drawio1.png',
+            },
+            {
+              title: t('cases.items.case2Title'),
+              description: t('cases.items.case2Desc'),
+              image: '/drawIO/image2drawio2.png',
+            },
+          ]}
+        />
       </div>
     </div>
   );

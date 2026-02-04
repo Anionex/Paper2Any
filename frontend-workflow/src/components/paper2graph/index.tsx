@@ -59,6 +59,7 @@ interface Paper2FigurePageProps {
   enableDrawio?: boolean;
   drawioLabel?: string;
   showDrawioEmpty?: boolean;
+  extraSection?: React.ReactNode;
 }
 
 function detectFileKind(file: File): FileKind {
@@ -79,6 +80,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
   enableDrawio = false,
   drawioLabel,
   showDrawioEmpty = false,
+  extraSection,
 }) => {
   const { t } = useTranslation('paper2graph');
   const { user, refreshQuota } = useAuthStore();
@@ -1022,6 +1024,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
             svgColorPath={svgColorPath}
           />
 
+          {extraSection && <div className="mb-2">{extraSection}</div>}
           {showExamples && <ExamplesSection visibleTypes={exampleTypes ?? allowedGraphTypes} />}
         </div>
       </div>

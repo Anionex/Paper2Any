@@ -156,5 +156,16 @@
       "tableTextToExpDataTitle": "论文实验表格文本 → 自动整理实验数据 绘制成 PPT",
       "tableTextToExpDataDesc": "从文本形式的实验结果描述中抽取指标与对照组，一键生成适合汇报的实验结果 PPTX。"
     }
+  },
+  "cases": {
+    "title": "模型架构图案例",
+    "subtitle": "示例可直接转为 DrawIO 在线编辑",
+    "feishu": "查看飞书文档",
+    "items": {
+      "case1Title": "模型架构示例一",
+      "case1Desc": "结构层级清晰，便于二次编辑",
+      "case2Title": "模型架构示例二",
+      "case2Desc": "模块关系与数据流展示"
+    }
   }
 }

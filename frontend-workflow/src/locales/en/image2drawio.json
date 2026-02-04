@@ -43,5 +43,16 @@
     "sizeLimit": "Image size must be under 15MB",
     "apiFail": "Conversion failed, please try again",
     "quotaFull": "Quota exceeded, please try later"
+  },
+  "cases": {
+    "title": "Cases",
+    "subtitle": "Convert sample images into editable DrawIO",
+    "feishu": "View Feishu Doc",
+    "items": {
+      "case1Title": "Case 1",
+      "case1Desc": "Complex diagram converted to editable DrawIO",
+      "case2Title": "Case 2",
+      "case2Desc": "Structure details automatically reconstructed"
+    }
   }
 }

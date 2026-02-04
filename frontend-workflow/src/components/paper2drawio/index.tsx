@@ -14,7 +14,6 @@ import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
 import { verifyLlmConnection } from '../../services/llmService';
 import Banner from './Banner';
-import ExamplesSection from './ExamplesSection';
 import QRCodeTooltip from '../QRCodeTooltip';
 
 const DRAWIO_ORIGINS = new Set(['https://embed.diagrams.net', 'https://app.diagrams.net']);
@@ -33,6 +32,7 @@ interface Paper2DrawioPageProps {
   showHeader?: boolean;
   showBanner?: boolean;
   intro?: React.ReactNode;
+  extraSection?: React.ReactNode;
 }
 
 export default function Paper2DrawioPage({
@@ -42,6 +42,7 @@ export default function Paper2DrawioPage({
   showHeader = true,
   showBanner: showBannerProp = true,
   intro,
+  extraSection,
 }: Paper2DrawioPageProps) {
   const { t } = useTranslation('paper2drawio');
   const { user } = useAuthStore();
@@ -1245,6 +1246,7 @@ export default function Paper2DrawioPage({
             </div>
           </div>
         </div>
+        {extraSection && <div className="mt-8">{extraSection}</div>}
       </div>
     </div>
   );

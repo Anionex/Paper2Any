@@ -1301,7 +1301,14 @@ class RebuttalService:
         return session
     
     def get_session(self, session_id: str) -> Optional[SessionState]:
-        return self.sessions.get(session_id)
+        session = self.sessions.get(session_id)
+        if session:
+            return session
+        # Auto-restore from disk if not in memory (e.g., multi-worker/after restart).
+        try:
+            return self.restore_session_from_disk(session_id)
+        except Exception:
+            return None
     
     def list_active_sessions(self) -> List[Dict]:
 
@@ -1726,6 +1733,8 @@ class RebuttalService:
         session = self.get_session(session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
+        if question_idx < 0 or question_idx >= len(session.questions):
+            raise ValueError(f"Question index {question_idx} out of range")
         
         q_state = session.questions[question_idx]
         q_state.is_satisfied = True
