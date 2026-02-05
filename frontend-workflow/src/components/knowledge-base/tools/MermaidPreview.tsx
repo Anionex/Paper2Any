@@ -147,7 +147,6 @@ export const MermaidPreview = ({ mermaidCode, title = "思维导图预览" }: Me
   const clampZoom = (value: number) => Math.min(5, Math.max(0.2, value));
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
     const direction = e.deltaY > 0 ? 0.9 : 1.1;
     setZoom(prev => clampZoom(prev * direction));
   };

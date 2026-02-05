@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { KnowledgeBaseEntry, KnowledgeFile, ToolType } from './types';
-import { FileText, Image, Video, Link as LinkIcon, Trash2, Search, Filter, X, Database, Loader2, AlertCircle, Folder, Download, PencilLine, Plus } from 'lucide-react';
+import { FileText, Image, Video, Link as LinkIcon, Trash2, Search, Filter, X, Database, Loader2, AlertCircle, Folder, Download, PencilLine, Plus, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { API_KEY, API_URL_OPTIONS } from '../../config/api';
 import { useAuthStore } from '../../stores/authStore';
@@ -24,6 +24,8 @@ interface LibraryViewProps {
 const TOOL_SUPPORTED_TYPES: Record<ToolType, string[]> = {
   chat: ['doc', 'image', 'video', 'link'], // Chat 支持所有类型（通过向量检索）
   search: ['doc', 'image', 'video', 'link'], // 语义检索支持所有类型
+  deepresearch: ['doc', 'image', 'video', 'link'], // 深度研究支持多种类型（可选素材）
+  report: ['doc'], // 报告生成仅支持文档
   ppt: ['doc', 'image'], // PPT 生成支持 PDF/PPTX + 图片
   podcast: ['doc'], // Podcast 仅支持文档类型（PDF/DOCX/PPTX）
   mindmap: ['doc'], // MindMap 暂定支持文档
@@ -34,6 +36,8 @@ const TOOL_SUPPORTED_TYPES: Record<ToolType, string[]> = {
 const TOOL_DISPLAY_NAMES: Record<ToolType, string> = {
   chat: '智能问答',
   search: '语义检索',
+  deepresearch: '深度研究',
+  report: '报告生成',
   ppt: 'PPT生成',
   podcast: '播客生成',
   mindmap: '思维导图',
@@ -43,6 +47,8 @@ const TOOL_DISPLAY_NAMES: Record<ToolType, string> = {
 const TOOL_HINTS: Record<ToolType, string> = {
   chat: '',
   search: '语义检索无需选择文件，但仅支持已入库的素材。',
+  deepresearch: '深度研究可直接输入主题，也可选文件增强上下文。',
+  report: '报告生成仅支持文档类型（PDF/DOCX/PPTX）。',
   ppt: 'PPT 生成支持 PDF / PPTX / DOCX 文档和图片素材；文档可多选并合并。',
   podcast: '播客生成仅支持文档类型（PDF/DOCX/PPTX）。',
   mindmap: '思维导图当前仅支持文档类型。',
@@ -51,9 +57,17 @@ const TOOL_HINTS: Record<ToolType, string> = {
 
 export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selectedIds, onToggleSelect, onGoToUpload, onRefresh, onRefreshKnowledgeBases, onPreview, onDelete, activeTool }: LibraryViewProps) => {
   const { user } = useAuthStore();
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    if (typeof window === 'undefined') return 320;
+    const saved = window.localStorage.getItem('kb_left_panel_width');
+    const parsed = saved ? parseInt(saved, 10) : 320;
+    return Number.isNaN(parsed) ? 320 : parsed;
+  });
   const [filterType, setFilterType] = useState<'all' | 'embedded'>('all');
   const [activeKbId, setActiveKbId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [kbPanelCollapsed, setKbPanelCollapsed] = useState(false);
   const [kbModalOpen, setKbModalOpen] = useState(false);
   const [kbModalMode, setKbModalMode] = useState<'create' | 'rename'>('create');
   const [kbEditing, setKbEditing] = useState<KnowledgeBaseEntry | null>(null);
@@ -68,6 +82,8 @@ export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selected
   const [manifestLoading, setManifestLoading] = useState(false);
   const [manifestData, setManifestData] = useState<any>(null);
   const [manifestError, setManifestError] = useState('');
+  const leftPanelMin = 260;
+  const leftPanelMax = 460;
 
   // 判断文件是否被当前工具支持
   const isFileSupported = (file: KnowledgeFile): boolean => {
@@ -115,6 +131,11 @@ export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selected
       }));
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('kb_left_panel_width', String(leftPanelWidth));
+  }, [leftPanelWidth]);
 
   const kbStats = useMemo(() => {
     const stats: Record<string, { count: number; size: number }> = {};
@@ -478,109 +499,140 @@ export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selected
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-        {/* Knowledge Bases Panel */}
-        <div className="w-full lg:w-[320px] flex-shrink-0 bg-white/5 border border-white/10 rounded-xl p-4 h-fit lg:h-full overflow-hidden">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm font-medium text-white flex items-center gap-2">
-              <Folder size={16} className="text-purple-400" />
-              知识库分类
-            </div>
-            <button
-              onClick={openCreateKb}
-              className="text-xs px-2 py-1 rounded-md bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 flex items-center gap-1"
-            >
-              <Plus size={12} /> 新建
-            </button>
-          </div>
-
-          <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-            <button
-              onClick={() => setActiveKbId('all')}
-              className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${
-                activeKbId === 'all'
-                  ? 'border-purple-500/50 bg-purple-500/10 text-white'
-                  : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">全部文件</span>
-                <span className="text-xs text-gray-500">{files.length}</span>
+        {!kbPanelCollapsed && (
+          <div
+            className="relative w-full flex-shrink-0 bg-white/5 border border-white/10 rounded-xl p-4 h-fit lg:h-full overflow-hidden"
+            style={{ width: `min(100%, ${leftPanelWidth}px)` }}
+          >
+            <div
+              className="hidden lg:block absolute top-0 right-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-purple-500/30 transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX;
+                const startWidth = leftPanelWidth;
+                const onMove = (evt: MouseEvent) => {
+                  const next = Math.min(leftPanelMax, Math.max(leftPanelMin, startWidth + (evt.clientX - startX)));
+                  setLeftPanelWidth(next);
+                };
+                const onUp = () => {
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+              }}
+            />
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-sm font-medium text-white flex items-center gap-2">
+                <Folder size={16} className="text-purple-400" />
+                知识库分类
               </div>
-            </button>
-
-            <button
-              onClick={() => setActiveKbId('uncategorized')}
-              className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${
-                activeKbId === 'uncategorized'
-                  ? 'border-purple-500/50 bg-purple-500/10 text-white'
-                  : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">未分类</span>
-                <span className="text-xs text-gray-500">{kbStats.uncategorized?.count || 0}</span>
-              </div>
-              <div className="text-xs text-gray-500 mt-1">大小：{formatBytes(kbStats.uncategorized?.size || 0)}</div>
-            </button>
-
-            {kbLoading && (
-              <div className="text-xs text-gray-500 flex items-center gap-2">
-                <Loader2 className="animate-spin" size={12} /> 正在加载知识库...
-              </div>
-            )}
-
-            {sortedKnowledgeBases.map(kb => {
-              const stats = kbStats[kb.id] || { count: 0, size: 0 };
-              return (
-                <div
-                  key={kb.id}
-                  className={`w-full px-3 py-2 rounded-lg border transition-all ${
-                    activeKbId === kb.id
-                      ? 'border-purple-500/50 bg-purple-500/10 text-white'
-                      : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
-                  }`}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setKbPanelCollapsed(true)}
+                  className="text-xs px-2 py-1 rounded-md bg-white/10 text-gray-300 hover:bg-white/20 flex items-center gap-1"
+                  title="收起分类"
                 >
-                  <button onClick={() => setActiveKbId(kb.id)} className="w-full text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate">{kb.name}</span>
-                      <span className="text-xs text-gray-500">{stats.count}</span>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1 flex items-center justify-between">
-                      <span>大小：{formatBytes(stats.size)}</span>
-                      <span>{new Date(kb.createdAt).toLocaleDateString()}</span>
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-2 mt-2">
-                    <button
-                      onClick={() => exportKnowledgeBase(kb)}
-                      className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="导出 ZIP"
-                      disabled={kbActionLoading}
-                    >
-                      <Download size={12} /> 导出
-                    </button>
-                    <button
-                      onClick={() => openRenameKb(kb)}
-                      className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="重命名"
-                      disabled={kbActionLoading}
-                    >
-                      <PencilLine size={12} /> 重命名
-                    </button>
-                    <button
-                      onClick={() => confirmDeleteKb(kb)}
-                      className="text-xs px-2 py-1 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-300 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="删除知识库"
-                      disabled={kbActionLoading}
-                    >
-                      <Trash2 size={12} /> 删除
-                    </button>
-                  </div>
+                  <ChevronLeft size={12} /> 收起
+                </button>
+                <button
+                  onClick={openCreateKb}
+                  className="text-xs px-2 py-1 rounded-md bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 flex items-center gap-1"
+                >
+                  <Plus size={12} /> 新建
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+              <button
+                onClick={() => setActiveKbId('all')}
+                className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${
+                  activeKbId === 'all'
+                    ? 'border-purple-500/50 bg-purple-500/10 text-white'
+                    : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">全部文件</span>
+                  <span className="text-xs text-gray-500">{files.length}</span>
                 </div>
-              );
-            })}
+              </button>
+
+              <button
+                onClick={() => setActiveKbId('uncategorized')}
+                className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${
+                  activeKbId === 'uncategorized'
+                    ? 'border-purple-500/50 bg-purple-500/10 text-white'
+                    : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">未分类</span>
+                  <span className="text-xs text-gray-500">{kbStats.uncategorized?.count || 0}</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">大小：{formatBytes(kbStats.uncategorized?.size || 0)}</div>
+              </button>
+
+              {kbLoading && (
+                <div className="text-xs text-gray-500 flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={12} /> 正在加载知识库...
+                </div>
+              )}
+
+              {sortedKnowledgeBases.map(kb => {
+                const stats = kbStats[kb.id] || { count: 0, size: 0 };
+                return (
+                  <div
+                    key={kb.id}
+                    className={`w-full px-3 py-2 rounded-lg border transition-all ${
+                      activeKbId === kb.id
+                        ? 'border-purple-500/50 bg-purple-500/10 text-white'
+                        : 'border-white/10 bg-black/20 text-gray-300 hover:bg-white/5'
+                    }`}
+                  >
+                    <button onClick={() => setActiveKbId(kb.id)} className="w-full text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium truncate">{kb.name}</span>
+                        <span className="text-xs text-gray-500">{stats.count}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1 flex items-center justify-between">
+                        <span>大小：{formatBytes(stats.size)}</span>
+                        <span>{new Date(kb.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => exportKnowledgeBase(kb)}
+                        className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="导出 ZIP"
+                        disabled={kbActionLoading}
+                      >
+                        <Download size={12} /> 导出
+                      </button>
+                      <button
+                        onClick={() => openRenameKb(kb)}
+                        className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="重命名"
+                        disabled={kbActionLoading}
+                      >
+                        <PencilLine size={12} /> 重命名
+                      </button>
+                      <button
+                        onClick={() => confirmDeleteKb(kb)}
+                        className="text-xs px-2 py-1 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-300 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="删除知识库"
+                        disabled={kbActionLoading}
+                      >
+                        <Trash2 size={12} /> 删除
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Files Panel */}
         <div className="flex-1 min-w-0 flex flex-col">
@@ -599,6 +651,13 @@ export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selected
               </div>
               <button className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg border border-white/10">
                 <Filter size={18} />
+              </button>
+              <button
+                onClick={() => setViewMode(prev => (prev === 'grid' ? 'list' : 'grid'))}
+                className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg border border-white/10"
+                title={viewMode === 'grid' ? '切换为列表' : '切换为网格'}
+              >
+                {viewMode === 'grid' ? <List size={18} /> : <LayoutGrid size={18} />}
               </button>
               <button
                 onClick={openManifest}
@@ -652,80 +711,168 @@ export const LibraryView = ({ files, knowledgeBases, kbLoading = false, selected
             </div>
           </div>
 
-          {/* Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-20 flex-1">
-            {filteredFiles.map(file => {
-              const isSupported = isFileSupported(file);
-              return (
-              <div
-                key={file.id}
-                onClick={() => onPreview(file)}
-                className={`group relative p-4 rounded-xl border transition-all ${
-                  !isSupported
-                    ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5'
-                    : selectedIds.has(file.id)
-                      ? 'bg-purple-500/10 border-purple-500/50 cursor-pointer'
-                      : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10 cursor-pointer'
-                }`}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs text-gray-500">
+              {kbPanelCollapsed ? '分类已隐藏' : '分类已展开'}
+            </div>
+            {kbPanelCollapsed && (
+              <button
+                onClick={() => setKbPanelCollapsed(false)}
+                className="text-xs px-2 py-1 rounded-md bg-white/10 text-gray-300 hover:bg-white/20 flex items-center gap-1"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 bg-black/20 rounded-lg relative">
-                    {getIcon(file.type)}
-                    {file.isEmbedded && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#0a0a1a]" title="Embedded"></div>
-                    )}
-                    {!isSupported && (
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 rounded-full border border-[#0a0a1a] flex items-center justify-center" title="当前工具不支持此文件类型">
-                          <X size={10} className="text-white" />
-                        </div>
-                    )}
+                <ChevronRight size={12} /> 展开分类
+              </button>
+            )}
+          </div>
+
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-20 flex-1">
+              {filteredFiles.map(file => {
+                const isSupported = isFileSupported(file);
+                return (
+                <div
+                  key={file.id}
+                  onClick={() => onPreview(file)}
+                  className={`group relative p-4 rounded-xl border transition-all ${
+                    !isSupported
+                      ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5'
+                      : selectedIds.has(file.id)
+                        ? 'bg-purple-500/10 border-purple-500/50 cursor-pointer'
+                        : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10 cursor-pointer'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="p-2 bg-black/20 rounded-lg relative">
+                      {getIcon(file.type)}
+                      {file.isEmbedded && (
+                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#0a0a1a]" title="Embedded"></div>
+                      )}
+                      {!isSupported && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 rounded-full border border-[#0a0a1a] flex items-center justify-center" title="当前工具不支持此文件类型">
+                            <X size={10} className="text-white" />
+                          </div>
+                      )}
+                    </div>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isSupported) {
+                          onToggleSelect(file.id);
+                        }
+                      }}
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                        !isSupported
+                          ? 'cursor-not-allowed border-white/10 bg-white/5'
+                          : selectedIds.has(file.id)
+                            ? 'bg-purple-500 border-purple-500 cursor-pointer'
+                            : 'border-white/20 cursor-pointer hover:border-purple-400'
+                      }`}
+                    >
+                      {selectedIds.has(file.id) && <div className="w-2 h-2 bg-white rounded-full" />}
+                    </div>
                   </div>
+
+                  <h3 className="text-sm font-medium text-gray-200 truncate mb-1" title={file.name}>
+                    {file.name}
+                  </h3>
+                  
+                  <div className="text-xs text-gray-500 truncate">
+                    {file.kbId ? (knowledgeBases.find(kb => kb.id === file.kbId)?.name || '未命名知识库') : '未分类'}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
+                    <span>{file.size}</span>
+                    <span>{file.uploadTime.split(' ')[0]}</span>
+                  </div>
+
+                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                     <button
+                       onClick={(e) => handleDelete(file, e)}
+                       className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white shadow-lg"
+                       title="Delete file"
+                     >
+                       <Trash2 size={14} />
+                     </button>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-3 overflow-y-auto pb-20 flex-1">
+              {filteredFiles.map(file => {
+                const isSupported = isFileSupported(file);
+                return (
                   <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isSupported) {
-                        onToggleSelect(file.id);
-                      }
-                    }}
-                    className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                    key={file.id}
+                    onClick={() => onPreview(file)}
+                    className={`group relative px-4 py-3 rounded-xl border transition-all ${
                       !isSupported
-                        ? 'cursor-not-allowed border-white/10 bg-white/5'
+                        ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5'
                         : selectedIds.has(file.id)
-                          ? 'bg-purple-500 border-purple-500 cursor-pointer'
-                          : 'border-white/20 cursor-pointer hover:border-purple-400'
+                          ? 'bg-purple-500/10 border-purple-500/50 cursor-pointer'
+                          : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10 cursor-pointer'
                     }`}
                   >
-                    {selectedIds.has(file.id) && <div className="w-2 h-2 bg-white rounded-full" />}
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-black/20 rounded-lg relative flex-shrink-0">
+                        {getIcon(file.type)}
+                        {file.isEmbedded && (
+                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-[#0a0a1a]" title="Embedded"></div>
+                        )}
+                        {!isSupported && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 rounded-full border border-[#0a0a1a] flex items-center justify-center" title="当前工具不支持此文件类型">
+                            <X size={10} className="text-white" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-gray-200 truncate" title={file.name}>
+                          {file.name}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {file.kbId ? (knowledgeBases.find(kb => kb.id === file.kbId)?.name || '未命名知识库') : '未分类'}
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-gray-500 w-24 text-right flex-shrink-0">
+                        {file.size}
+                      </div>
+                      <div className="text-xs text-gray-500 w-24 text-right flex-shrink-0">
+                        {file.uploadTime.split(' ')[0]}
+                      </div>
+
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isSupported) {
+                            onToggleSelect(file.id);
+                          }
+                        }}
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${
+                          !isSupported
+                            ? 'cursor-not-allowed border-white/10 bg-white/5'
+                            : selectedIds.has(file.id)
+                              ? 'bg-purple-500 border-purple-500 cursor-pointer'
+                              : 'border-white/20 cursor-pointer hover:border-purple-400'
+                        }`}
+                      >
+                        {selectedIds.has(file.id) && <div className="w-2 h-2 bg-white rounded-full" />}
+                      </div>
+                      <button
+                        onClick={(e) => handleDelete(file, e)}
+                        className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white shadow-lg flex-shrink-0"
+                        title="Delete file"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <h3 className="text-sm font-medium text-gray-200 truncate mb-1" title={file.name}>
-                  {file.name}
-                </h3>
-                
-                <div className="text-xs text-gray-500 truncate">
-                  {file.kbId ? (knowledgeBases.find(kb => kb.id === file.kbId)?.name || '未命名知识库') : '未分类'}
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-                  <span>{file.size}</span>
-                  <span>{file.uploadTime.split(' ')[0]}</span>
-                </div>
-
-                {/* Hover Actions */}
-                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                   <button
-                     onClick={(e) => handleDelete(file, e)}
-                     className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white shadow-lg"
-                     title="Delete file"
-                   >
-                     <Trash2 size={14} />
-                   </button>
-                </div>
-              </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
       
