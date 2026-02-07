@@ -13,6 +13,7 @@ from fastapi_app.routers.paper2video import paper2video_endpoint, FeaturePaper2V
 from fastapi_app.schemas import Paper2FigureRequest, VerifyLlmRequest, VerifyLlmResponse
 from fastapi_app.workflow_adapters import run_paper2figure_wf_api
 from fastapi_app.utils import _to_outputs_url
+from fastapi_app.config.settings import settings
 from dataflow_agent.utils import get_project_root
 from dataflow_agent.logger import get_logger
 
@@ -368,33 +369,35 @@ class Paper2AnyService:
                             break
 
                 if fig_path:
-                    # 复用 image2drawio workflow
+                    # 复用 SAM3 版 drawio workflow
                     from dataflow_agent.workflow.registry import RuntimeRegistry
-                    from dataflow_agent.state import Paper2FigureState
+                    from dataflow_agent.state import Paper2DrawioState, Paper2DrawioRequest
 
                     sub_dir = run_dir / "image2drawio"
                     sub_dir.mkdir(parents=True, exist_ok=True)
 
-                    i2d_req = Paper2FigureRequest(
-                        input_type="FIGURE",
-                        input_content=str(fig_path),
-                        chat_api_url=chat_api_url,
-                        api_key=api_key,
+                    i2d_req = Paper2DrawioRequest(
+                        input_type="PDF",
+                        chat_api_url=settings.PAPER2DRAWIO_OCR_API_URL,
+                        api_key=settings.PAPER2DRAWIO_OCR_API_KEY,
+                        chat_api_key=settings.PAPER2DRAWIO_OCR_API_KEY,
                         model=p2f_req.model,
-                        gen_fig_model=img_gen_model_name,
                         vlm_model=p2f_req.vlm_model,
                         language=language,
                     )
-                    i2d_state = Paper2FigureState(request=i2d_req, messages=[])
-                    i2d_state.fig_draft_path = str(fig_path)
+                    i2d_state = Paper2DrawioState(request=i2d_req, messages=[])
+                    i2d_state.paper_file = str(fig_path)
+                    i2d_state.text_content = str(fig_path)
                     i2d_state.result_path = str(sub_dir)
 
-                    factory = RuntimeRegistry.get("image2drawio")
+                    factory = RuntimeRegistry.get("paper2drawio_sam3")
                     builder = factory()
                     graph = builder.build()
                     final_state = await graph.ainvoke(i2d_state)
 
-                    drawio_path = final_state.get("drawio_output_path", "") if isinstance(final_state, dict) else getattr(final_state, "drawio_output_path", "")
+                    drawio_path = final_state.get("output_xml_path", "") if isinstance(final_state, dict) else getattr(final_state, "output_xml_path", "")
+                    if not drawio_path:
+                        drawio_path = final_state.get("drawio_output_path", "") if isinstance(final_state, dict) else getattr(final_state, "drawio_output_path", "")
                     if drawio_path:
                         drawio_url = _to_outputs_url(drawio_path, request)
             except Exception as e:

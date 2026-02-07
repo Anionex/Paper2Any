@@ -66,6 +66,37 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 import cv2
+
+
+def _ensure_numpy_sctypes_compat() -> None:
+    """
+    NumPy 2.x 移除了 np.sctypes；imgaug 0.4.0 在导入阶段仍会访问该属性。
+    这里补一个最小兼容映射，避免 PaddleOCR 在模块导入时崩溃。
+    """
+    if hasattr(np, "sctypes"):
+        return
+
+    float_types = [np.float16, np.float32, np.float64]
+    if hasattr(np, "float128"):
+        float_types.append(np.float128)
+
+    complex_types = [np.complex64, np.complex128]
+    if hasattr(np, "complex256"):
+        complex_types.append(np.complex256)
+
+    np.sctypes = {
+        "int": [np.int8, np.int16, np.int32, np.int64],
+        "uint": [np.uint8, np.uint16, np.uint32, np.uint64],
+        "float": float_types,
+        "complex": complex_types,
+        "others": [np.bool_, np.bytes_, np.str_, np.object_],
+        "datetime": [np.datetime64],
+        "timedelta": [np.timedelta64],
+    }
+
+
+_ensure_numpy_sctypes_compat()
+
 from paddleocr import PaddleOCR
 
 from pptx import Presentation

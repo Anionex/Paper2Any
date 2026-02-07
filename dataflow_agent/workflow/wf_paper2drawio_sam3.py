@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import base64
 import copy
-import io
 import json
 import math
 import os
@@ -26,18 +25,26 @@ import time
 import html
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Literal
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 from PIL import Image
-import requests
 
 from dataflow_agent.state import Paper2DrawioState
 from dataflow_agent.graphbuilder.graph_builder import GenericGraphBuilder
 from dataflow_agent.workflow.registry import register
 from dataflow_agent.agentroles import create_vlm_agent
 from dataflow_agent.logger import get_logger
+from dataflow_agent.toolkits.multimodaltool.sam3_tool import (
+    Sam3PredictRun,
+    decode_sam3_mask,
+    dedup_sam3_results_across_groups,
+    filter_sam3_items_contained_by_images,
+    get_sam3_client,
+    run_sam3_predict_runs,
+)
+from dataflow_agent.toolkits.multimodaltool.ocr_config import get_ocr_api_credentials
 from dataflow_agent.toolkits.drawio_tools import wrap_xml
 from dataflow_agent.toolkits.image2drawio import (
     extract_text_color,
@@ -57,14 +64,10 @@ SHAPE_PROMPT = [
     "rounded rectangle",
     "diamond",
     "ellipse",
-    "circle",
-    "triangle",
-    "hexagon",
 ]
 
 ARROW_PROMPT = [
     "arrow",
-    "line",
     "connector",
 ]
 
@@ -72,24 +75,13 @@ IMAGE_PROMPT = [
     "icon",
     "symbol",
     "pictogram",
-    "glyph",
-    "picture",
     "logo",
-    "chart",
-    "plot",
-    "graph",
-    "diagram",
 ]
 
 # 泛化补召回提示词：避免与具体业务词绑定（如 planner/critic/robot）
 IMAGE_PROMPT_RECALL = [
     "illustration",
-    "object",
-    "device",
     "character",
-    "avatar",
-    "mascot",
-    "screenshot",
 ]
 
 BACKGROUND_PROMPT = [
@@ -118,6 +110,7 @@ SAM3_GROUP_CONFIG = {
 SAM3_IMAGE_RECALL_SCORE_THRESHOLD = 0.38
 SAM3_IMAGE_RECALL_MIN_AREA_BASE = 40
 SAM3_IMAGE_RECALL_MIN_AREA_RATIO = 0.00003
+SAM3_IMAGE_RECALL_TRIGGER_MAX_IMAGES = 2
 
 # Dedup params aligned with Edit-Banana defaults
 SAM3_DEDUP_IOU = 0.7
@@ -126,6 +119,7 @@ SAM3_SHAPE_IMAGE_IOU = 0.6
 
 MAX_DRAWIO_ELEMENTS = 800
 MIN_IMAGE_AREA_RATIO = 0.00001
+MAX_IMAGE_BBOX_AREA_RATIO = 0.88
 
 # 对低覆盖的大图标做前景细化回退，避免主体缺失且避免纯色背景串入
 IMAGE_MASK_REPAIR_LOW_COVERAGE_THRESHOLD = 0.58
@@ -135,72 +129,6 @@ IMAGE_MASK_REPAIR_MAX_COVERAGE_ON_ORIG_BBOX = 0.74
 IMAGE_MASK_REPAIR_MIN_GAIN_RATIO = 0.08
 IMAGE_FRAGMENT_SKIP_MAX_AREA = 2500
 IMAGE_FRAGMENT_CONTAIN_THRESHOLD = 0.6
-
-
-# ==================== SAM3 HTTP CLIENT (ported from Edit-Banana/sam3_service) ====================
-class Sam3ServiceClient:
-    def __init__(self, base_url: str, timeout: int = 120) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-
-    def health(self) -> bool:
-        resp = requests.get(f"{self.base_url}/health", timeout=5)
-        return resp.status_code == 200
-
-    def predict(
-        self,
-        image_path: str,
-        prompts: List[str],
-        return_masks: bool = False,
-        mask_format: Literal["rle", "png"] = "rle",
-        score_threshold: Optional[float] = None,
-        epsilon_factor: Optional[float] = None,
-        min_area: Optional[int] = None,
-    ) -> Dict:
-        payload = {
-            "image_path": image_path,
-            "prompts": prompts,
-            "return_masks": return_masks,
-            "mask_format": mask_format,
-        }
-        if score_threshold is not None:
-            payload["score_threshold"] = score_threshold
-        if epsilon_factor is not None:
-            payload["epsilon_factor"] = epsilon_factor
-        if min_area is not None:
-            payload["min_area"] = min_area
-
-        resp = requests.post(f"{self.base_url}/predict", json=payload, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
-
-
-class Sam3ServicePool:
-    def __init__(self, endpoints: List[str], timeout: int = 120) -> None:
-        if len(endpoints) == 0:
-            raise ValueError("At least one endpoint is required")
-        self.clients = [Sam3ServiceClient(url, timeout=timeout) for url in endpoints]
-        self._lock = threading.Lock()
-        self._cursor = itertools.cycle(range(len(self.clients)))
-
-    def predict(self, *args, **kwargs) -> Dict:
-        with self._lock:
-            client_index = next(self._cursor)
-        return self.clients[client_index].predict(*args, **kwargs)
-
-    def health(self) -> Dict[str, bool]:
-        status: Dict[str, bool] = {}
-        for client in self.clients:
-            try:
-                status[client.base_url] = client.health()
-            except Exception:
-                status[client.base_url] = False
-        return status
-
-
-# Needed by Sam3ServicePool
-import itertools
-import threading
 
 
 # ==================== TEXT VECTORIZATION ====================
@@ -1035,225 +963,97 @@ def _shape_type_from_prompt(prompt: str) -> str:
     return p or "rectangle"
 
 
-def _decode_mask(mask_obj: Dict[str, Any]) -> Optional[np.ndarray]:
-    if not mask_obj:
-        return None
-    fmt = mask_obj.get("format")
-    data = mask_obj.get("data")
-    shape = mask_obj.get("shape")
-    if not fmt or data is None:
-        return None
-    if fmt == "png":
-        try:
-            raw = base64.b64decode(data)
-            img = Image.open(io.BytesIO(raw)).convert("L")
-            arr = np.array(img)
-            return (arr > 0).astype(np.uint8)
-        except Exception:
-            return None
-    if fmt == "rle" and shape:
-        try:
-            h, w = int(shape[0]), int(shape[1])
-            runs = [int(x) for x in str(data).split(",") if x]
-            flat = np.zeros(sum(runs), dtype=np.uint8)
-            val = 0
-            idx = 0
-            for r in runs:
-                if r <= 0:
-                    continue
-                if val == 1:
-                    flat[idx:idx + r] = 1
-                idx += r
-                val = 1 - val
-            if flat.size < h * w:
-                flat = np.pad(flat, (0, h * w - flat.size), constant_values=0)
-            flat = flat[:h * w]
-            return flat.reshape((h, w))
-        except Exception:
-            return None
-    return None
-
-
-def _get_sam3_client() -> Optional[Any]:
-    env = os.getenv("SAM3_SERVER_URLS", "").strip() or os.getenv("SAM3_ENDPOINTS", "").strip()
-    if env:
-        endpoints = [u.strip() for u in env.split(",") if u.strip()]
-    else:
-        endpoints = ["http://127.0.0.1:8001"]
-    if not endpoints:
-        return None
-    if len(endpoints) == 1:
-        return Sam3ServiceClient(endpoints[0])
-    return Sam3ServicePool(endpoints)
-
-
-def _dedup_across_groups(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if not items:
-        return []
-    sorted_items = sorted(
-        items,
-        key=lambda x: (SAM3_GROUP_CONFIG.get(x.get("group", ""), {}).get("priority", 1), x.get("score", 0)),
-        reverse=True,
-    )
-    kept: List[Dict[str, Any]] = []
-    dropped = set()
-
-    for i, item_i in enumerate(sorted_items):
-        if i in dropped:
-            continue
-        kept.append(item_i)
-        bbox_i = item_i.get("bbox")
-        if not bbox_i:
-            continue
-        group_i = item_i.get("group", "")
-
-        for j in range(i + 1, len(sorted_items)):
-            if j in dropped:
-                continue
-            item_j = sorted_items[j]
-            bbox_j = item_j.get("bbox")
-            if not bbox_j:
-                continue
-            group_j = item_j.get("group", "")
-
-            iou = bbox_iou_px(bbox_i, bbox_j)
-            if iou < 0.1:
-                continue
-
-            if (group_i == "arrow" or group_j == "arrow") and iou > SAM3_ARROW_DEDUP_IOU:
-                dropped.add(j)
-                continue
-
-            # Prefer image over shape when overlapping
-            if iou > SAM3_SHAPE_IMAGE_IOU:
-                is_shape_image = (
-                    (group_i == "shape" and group_j == "image") or
-                    (group_i == "image" and group_j == "shape")
-                )
-                if is_shape_image:
-                    if group_i == "shape":
-                        if item_i in kept:
-                            kept.remove(item_i)
-                        kept.append(item_j)
-                        dropped.add(j)
-                        break
-                    dropped.add(j)
-                    continue
-
-            if iou > SAM3_DEDUP_IOU:
-                dropped.add(j)
-
-    return kept
-
-
-def _filter_contained_by_images(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if not items:
-        return items
-    IMAGE_GROUP = {"image"}
-    to_remove = set()
-    for i, a in enumerate(items):
-        if i in to_remove:
-            continue
-        bbox_a = a.get("bbox")
-        if not bbox_a:
-            continue
-        area_a = _bbox_area(bbox_a)
-        group_a = a.get("group", "")
-        for j, b in enumerate(items):
-            if i == j or j in to_remove:
-                continue
-            bbox_b = b.get("bbox")
-            if not bbox_b:
-                continue
-            area_b = _bbox_area(bbox_b)
-            group_b = b.get("group", "")
-            if area_a <= 0 or area_b <= 0:
-                continue
-            # Check containment of smaller in larger (intersection / area_small)
-            xA = max(bbox_a[0], bbox_b[0])
-            yA = max(bbox_a[1], bbox_b[1])
-            xB = min(bbox_a[2], bbox_b[2])
-            yB = min(bbox_a[3], bbox_b[3])
-            inter = max(0, xB - xA) * max(0, yB - yA)
-            if inter <= 0:
-                continue
-            if area_a > area_b:
-                contain = inter / float(area_b)
-                if contain > 0.85 and group_a in IMAGE_GROUP:
-                    to_remove.add(j)
-            else:
-                contain = inter / float(area_a)
-                if contain > 0.85 and group_b in IMAGE_GROUP:
-                    to_remove.add(i)
-                    break
-    return [it for k, it in enumerate(items) if k not in to_remove]
-
-
 def _sam3_predict_groups(client: Any, image_path: str) -> List[Dict[str, Any]]:
-    all_results: List[Dict[str, Any]] = []
-    image_area = None
+    image_area: Optional[int] = None
     try:
         with Image.open(image_path) as img:
             image_area = int(img.width * img.height)
     except Exception:
         image_area = None
 
-    def _predict_once(
-        *,
-        group: str,
-        prompts: List[str],
-        score_threshold: Optional[float],
-        min_area: Optional[int],
-    ) -> List[Dict[str, Any]]:
-        try:
-            resp = client.predict(
-                image_path=image_path,
-                prompts=prompts,
-                return_masks=True,
-                mask_format="png",
-                score_threshold=score_threshold,
-                min_area=min_area,
+    try:
+        base_runs: List[Sam3PredictRun] = []
+        for group, prompts in SAM3_GROUPS.items():
+            cfg = SAM3_GROUP_CONFIG.get(group, {})
+            base_runs.append(
+                Sam3PredictRun(
+                    group=group,
+                    prompts=prompts,
+                    score_threshold=cfg.get("score_threshold"),
+                    min_area=cfg.get("min_area"),
+                )
             )
-        except Exception as e:
-            log.warning(f"[paper2drawio_sam3] SAM3 {group} predict failed: {e}")
-            return []
-        results = resp.get("results", []) or []
-        for r in results:
-            r["group"] = group
-        return results
 
-    for group, prompts in SAM3_GROUPS.items():
-        cfg = SAM3_GROUP_CONFIG.get(group, {})
-        all_results.extend(
-            _predict_once(
-                group=group,
-                prompts=prompts,
-                score_threshold=cfg.get("score_threshold"),
-                min_area=cfg.get("min_area"),
-            )
+        all_results = run_sam3_predict_runs(
+            client=client,
+            image_path=image_path,
+            runs=base_runs,
+        )
+        all_results = dedup_sam3_results_across_groups(
+            all_results,
+            group_config=SAM3_GROUP_CONFIG,
+            dedup_iou=SAM3_DEDUP_IOU,
+            arrow_dedup_iou=SAM3_ARROW_DEDUP_IOU,
+            shape_image_iou=SAM3_SHAPE_IMAGE_IOU,
+        )
+        all_results = filter_sam3_items_contained_by_images(
+            all_results,
+            image_groups=["image"],
+            contain_threshold=0.85,
         )
 
-        # image 组执行第2轮补召回：泛化提示词 + 更低阈值
-        if group == "image":
+        safe_image_area = image_area if image_area and image_area > 0 else 1
+        core_image_hits = 0
+        for item in all_results:
+            if item.get("group") != "image":
+                continue
+            bbox = item.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            bbox_ratio = float(_bbox_area(bbox)) / float(safe_image_area)
+            if bbox_ratio <= MAX_IMAGE_BBOX_AREA_RATIO:
+                core_image_hits += 1
+
+        should_recall = core_image_hits <= SAM3_IMAGE_RECALL_TRIGGER_MAX_IMAGES
+        if should_recall and IMAGE_PROMPT_RECALL:
             recall_min_area = SAM3_IMAGE_RECALL_MIN_AREA_BASE
             if image_area and image_area > 0:
                 recall_min_area = max(
                     SAM3_IMAGE_RECALL_MIN_AREA_BASE,
                     int(image_area * SAM3_IMAGE_RECALL_MIN_AREA_RATIO),
                 )
-            all_results.extend(
-                _predict_once(
-                    group=group,
-                    prompts=IMAGE_PROMPT_RECALL,
-                    score_threshold=SAM3_IMAGE_RECALL_SCORE_THRESHOLD,
-                    min_area=recall_min_area,
-                )
-            )
 
-    # Dedup across groups + filter contained elements (align with Edit-Banana)
-    all_results = _dedup_across_groups(all_results)
-    all_results = _filter_contained_by_images(all_results)
-    return all_results
+            recall_results = run_sam3_predict_runs(
+                client=client,
+                image_path=image_path,
+                runs=[
+                    Sam3PredictRun(
+                        group="image",
+                        prompts=IMAGE_PROMPT_RECALL,
+                        score_threshold=SAM3_IMAGE_RECALL_SCORE_THRESHOLD,
+                        min_area=recall_min_area,
+                    )
+                ],
+            )
+            if recall_results:
+                all_results.extend(recall_results)
+                all_results = dedup_sam3_results_across_groups(
+                    all_results,
+                    group_config=SAM3_GROUP_CONFIG,
+                    dedup_iou=SAM3_DEDUP_IOU,
+                    arrow_dedup_iou=SAM3_ARROW_DEDUP_IOU,
+                    shape_image_iou=SAM3_SHAPE_IMAGE_IOU,
+                )
+                all_results = filter_sam3_items_contained_by_images(
+                    all_results,
+                    image_groups=["image"],
+                    contain_threshold=0.85,
+                )
+
+        return all_results
+    except Exception as e:
+        log.warning(f"[paper2drawio_sam3] SAM3 grouped predict failed: {e}")
+        return []
 
 
 def _build_elements_from_sam3(
@@ -1356,16 +1156,20 @@ def _build_elements_from_sam3(
         bbox = item.get("bbox")
         if not bbox or len(bbox) != 4:
             continue
-        area = int(item.get("area") or _bbox_area(bbox))
+        group = item.get("group", "")
+        bbox_area = _bbox_area(bbox)
+        area = int(item.get("area") or bbox_area)
         area_ratio = float(area) / image_area if image_area > 0 else 0
         if area_ratio > 0.98:
             continue
-        group = item.get("group", "")
+        bbox_area_ratio = float(bbox_area) / image_area if image_area > 0 else 0
+        if group == "image" and bbox_area_ratio > MAX_IMAGE_BBOX_AREA_RATIO:
+            continue
         prompt = item.get("prompt", "")
 
         mask = None
         if item.get("mask"):
-            mask = _decode_mask(item.get("mask"))
+            mask = decode_sam3_mask(item.get("mask"))
             if mask is not None:
                 mask = normalize_mask(mask.astype(bool), (h, w))
 
@@ -1490,14 +1294,22 @@ def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
             state.temp_data["text_blocks"] = []
             return state
 
-        api_key = getattr(state.request, "api_key", None) or getattr(state.request, "chat_api_key", None)
-        chat_api_url = getattr(state.request, "chat_api_url", None)
+        ocr_api_url, ocr_api_key = get_ocr_api_credentials()
+        api_key = ocr_api_key
+        chat_api_url = ocr_api_url
         if not chat_api_url or not api_key:
             log.warning("[paper2drawio_sam3] VLM OCR not configured")
             state.temp_data["text_blocks"] = []
             return state
 
         try:
+            temp_state = copy.copy(state)
+            if getattr(temp_state, "request", None):
+                temp_state.request = copy.copy(state.request)
+                temp_state.request.chat_api_url = chat_api_url
+                temp_state.request.api_key = api_key
+                temp_state.request.chat_api_key = api_key
+
             try:
                 vlm_timeout = int(os.getenv("VLM_OCR_TIMEOUT", "120"))
             except ValueError:
@@ -1509,7 +1321,7 @@ def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
                 vlm_mode="ocr",
                 additional_params={"input_image": img_path, "timeout": vlm_timeout},
             )
-            new_state = await agent.execute(state)
+            new_state = await agent.execute(temp_state)
             bbox_res = getattr(new_state, "bbox_result", [])
         except Exception as e:
             log.warning(f"[paper2drawio_sam3][VLM] OCR failed: {e}")
@@ -1542,7 +1354,7 @@ def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
         img_path = state.temp_data.get("input_image_path")
         if not img_path:
             return state
-        client = _get_sam3_client()
+        client = get_sam3_client()
         if client is None:
             log.error("[paper2drawio_sam3] SAM3 endpoints not configured")
             state.temp_data["sam3_results"] = []

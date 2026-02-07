@@ -102,11 +102,7 @@ async def run_pdf2ppt_wf_api(req: Paper2PPTRequest, result_path: Path | None = N
         f"[pdf2ppt] start workflow 'pdf2ppt_with_sam_ocr_mineru' "
         f"with pdf_file={state.pdf_file}, result_path={state.result_path}"
     )
-    if req.use_ai_edit or req.input_type == "FIGURE":
-        final_state: Paper2FigureState = await run_workflow("pdf2ppt_qwenvl", state)
-    else:
-        log.critical(f'无AI，走PDF路径！')
-        final_state: Paper2FigureState = await run_workflow("pdf2ppt_parallel", state)
+    final_state: Paper2FigureState = await run_workflow("pdf2ppt_qwenvl", state)
 
     ppt_path_value = final_state["ppt_path"]
     if not ppt_path_value:

@@ -114,6 +114,22 @@ _YOLO_MODELS: Dict[tuple, Any] = {}
 _HF_SEG_PIPELINES: Dict[str, Any] = {}
 _SAM3_PROCESSORS: Dict[str, Any] = {}
 
+SAM3_LAYOUT_PROMPTS: List[str] = [
+    "rectangle",
+    "rounded rectangle",
+    "diamond",
+    "ellipse",
+    "triangle",
+    "hexagon",
+    "arrow",
+    "line",
+    "connector",
+    "icon",
+    "symbol",
+    "pictogram",
+    "glyph",
+]
+
 
 # -----------------------------------------------------------------------------
 # Utils
@@ -159,10 +175,13 @@ def _ensure_sam3_available() -> None:
     try:
         project_root = get_project_root()
         candidates.append(project_root / "models" / "sam3-official" / "sam3")
-        candidates.append(project_root / "models" / "sam3")
+        candidates.append(Path("/data/users/pzw/models/sam3-official/sam3"))
     except Exception:
         pass
-    candidates.append(Path("/data/users/pzw/models/sam3-official/sam3"))
+    # Legacy absolute path fallback (kept as last resort only)
+    legacy_default = os.environ.get("SAM3_LEGACY_HOME", "").strip()
+    if legacy_default:
+        candidates.append(Path(legacy_default))
 
     added_paths: List[str] = []
     for p in candidates:
@@ -289,6 +308,102 @@ def _load_image_pil(image_path: str) -> Image.Image:
 def _get_image_size(image_path: str) -> tuple[int, int]:
     img = _load_image_pil(image_path)
     return img.size  # (width, height)
+
+
+def _is_sam3_checkpoint(checkpoint: str) -> bool:
+    name = Path(str(checkpoint)).name.lower()
+    full = str(checkpoint).lower()
+    if "sam3" in name or "sam3" in full:
+        return True
+    marker = os.environ.get("SAM_DEFAULT_KIND", "").strip().lower()
+    return marker == "sam3"
+
+
+def _resolve_layout_checkpoint(checkpoint: str) -> str:
+    if _is_sam3_checkpoint(checkpoint):
+        return checkpoint
+    if Path(str(checkpoint)).name.lower() in {"sam_b.pt", "sam_l.pt", "sam_h.pt"}:
+        return os.environ.get(
+            "SAM3_CHECKPOINT_PATH",
+            "/data/users/pzw/models/sam3/sam3.pt",
+        )
+    return checkpoint
+
+
+def _decode_server_mask(mask_obj: Dict[str, Any]) -> Optional[np.ndarray]:
+    if not mask_obj:
+        return None
+    fmt = mask_obj.get("format")
+    data = mask_obj.get("data")
+    shape = mask_obj.get("shape")
+    if not fmt or data is None:
+        return None
+
+    if fmt == "png":
+        try:
+            raw = base64.b64decode(data)
+            img = Image.open(io.BytesIO(raw)).convert("L")
+            arr = np.array(img)
+            return arr > 0
+        except Exception:
+            return None
+
+    if fmt == "rle" and shape:
+        try:
+            h, w = int(shape[0]), int(shape[1])
+            runs = [int(x) for x in str(data).split(",") if x]
+            flat = np.zeros(sum(runs), dtype=np.uint8)
+            val = 0
+            idx = 0
+            for r in runs:
+                if r <= 0:
+                    continue
+                if val == 1:
+                    flat[idx: idx + r] = 1
+                idx += r
+                val = 1 - val
+            if flat.size < h * w:
+                flat = np.pad(flat, (0, h * w - flat.size), constant_values=0)
+            flat = flat[: h * w]
+            return flat.reshape((h, w)).astype(bool)
+        except Exception:
+            return None
+    return None
+
+
+def _sam3_server_items_to_common(
+    image_path: str,
+    results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    width, height = _get_image_size(image_path)
+    all_items: List[Dict[str, Any]] = []
+    for it in results:
+        bbox_px = it.get("bbox")
+        if not bbox_px or len(bbox_px) != 4:
+            continue
+        x1, y1, x2, y2 = [float(v) for v in bbox_px]
+        bbox_norm = [
+            max(0.0, min(1.0, x1 / max(1, width))),
+            max(0.0, min(1.0, y1 / max(1, height))),
+            max(0.0, min(1.0, x2 / max(1, width))),
+            max(0.0, min(1.0, y2 / max(1, height))),
+        ]
+        mask = _decode_server_mask(it.get("mask") or {})
+        area = int(it.get("area") or 0)
+        if area <= 0 and mask is not None:
+            area = int(mask.sum())
+        all_items.append(
+            {
+                "mask": mask,
+                "bbox": bbox_norm,
+                "score": it.get("score"),
+                "area": area,
+                "prompt": it.get("prompt"),
+                "group": it.get("group"),
+                "bbox_px": [int(v) for v in bbox_px],
+            }
+        )
+    return all_items
 
 def _resolve_checkpoint_path(checkpoint: str) -> str:
     p = Path(checkpoint)
@@ -474,7 +589,11 @@ def free_sam_model(checkpoint: str = "sam_b.pt") -> None:
       无法调用 torch.cuda.empty_cache()。
     """
     global _SAM_MODELS
+    resolved_checkpoint = _resolve_layout_checkpoint(checkpoint)
+
     m = _SAM_MODELS.pop(checkpoint, None)
+    if checkpoint != resolved_checkpoint and m is None:
+        m = _SAM_MODELS.pop(resolved_checkpoint, None)
     if m is not None:
         # 尝试清理 ultralytics 内部引用
         try:
@@ -492,6 +611,8 @@ def free_sam_model(checkpoint: str = "sam_b.pt") -> None:
     # Also free SAM3 processors that use this checkpoint (if any)
     if _SAM3_PROCESSORS:
         to_drop = [k for k in _SAM3_PROCESSORS.keys() if k.startswith(f"{checkpoint}|")]
+        if checkpoint != resolved_checkpoint:
+            to_drop.extend([k for k in _SAM3_PROCESSORS.keys() if k.startswith(f"{resolved_checkpoint}|")])
         for k in to_drop:
             _SAM3_PROCESSORS.pop(k, None)
 
@@ -703,6 +824,8 @@ def run_sam_auto(
             - score: float or None
             - area: int (number of True pixels in mask)
     """
+    checkpoint = _resolve_layout_checkpoint(checkpoint)
+
     if text_prompt:
         return run_sam_text_prompt(
             image_path=image_path,
@@ -711,6 +834,21 @@ def run_sam_auto(
             device=device,
             confidence_threshold=confidence_threshold,
         )
+
+    if _is_sam3_checkpoint(checkpoint):
+        try:
+            items = run_sam_text_prompt(
+                image_path=image_path,
+                text_prompt=", ".join(SAM3_LAYOUT_PROMPTS),
+                checkpoint=checkpoint,
+                device=device,
+                confidence_threshold=confidence_threshold,
+            )
+            if items:
+                return items
+        except Exception as e:
+            log.warning(f"[run_sam_auto] SAM3 prompt segmentation fallback to SAM failed: {e}")
+
     model = _get_sam_model(checkpoint=checkpoint)
     # In recent ultralytics versions, SAM models can receive `device` at call time.
     # If your installed version does not support this, you can remove `device=device`.
@@ -807,6 +945,8 @@ def run_sam_auto_server(
     if not urls:
         raise ValueError("No server URLs provided")
     
+    checkpoint = _resolve_layout_checkpoint(checkpoint)
+
     # Simple random load balancing
     base_url = random.choice(urls)
     api_url = f"{base_url.rstrip('/')}/predict"
@@ -814,36 +954,47 @@ def run_sam_auto_server(
     # Ensure image path is absolute for server to access
     abs_image_path = os.path.abspath(image_path)
     
-    payload = {
-        "image_path": abs_image_path,
-        "checkpoint": checkpoint,
-        "device": device
-    }
+    is_sam3 = _is_sam3_checkpoint(checkpoint)
+
+    if is_sam3:
+        payload = {
+            "image_path": abs_image_path,
+            "prompts": SAM3_LAYOUT_PROMPTS,
+            "return_masks": True,
+            "mask_format": "png",
+            "score_threshold": 0.35,
+            "min_area": 40,
+        }
+    else:
+        payload = {
+            "image_path": abs_image_path,
+            "checkpoint": checkpoint,
+            "device": device
+        }
     
     try:
         response = requests.post(api_url, json=payload, timeout=300)
         response.raise_for_status()
         data = response.json()
         
+        if is_sam3:
+            results = data.get("results", []) or []
+            return _sam3_server_items_to_common(abs_image_path, results)
+
         items_raw = data.get("items", [])
         all_items: List[Dict[str, Any]] = []
-        
+
         for it in items_raw:
-            # Deserialize mask
             mask_b64 = it.get("mask_b64")
             mask_shape = it.get("mask_shape")
-            
+
             if mask_b64 and mask_shape:
                 try:
                     compressed_bytes = base64.b64decode(mask_b64)
-                    # Decompress using zlib
                     mask_bytes = zlib.decompress(compressed_bytes)
-                    # Reconstruct numpy bool array
-                    # Note: mask_bytes is flattened bool bytes
                     mask_flat = np.frombuffer(mask_bytes, dtype=bool)
                     mask = mask_flat.reshape(tuple(mask_shape))
                 except Exception as e:
-                    # Fallback for uncompressed data (backward compatibility) or decompression error
                     try:
                         mask_bytes = base64.b64decode(mask_b64)
                         mask_flat = np.frombuffer(mask_bytes, dtype=bool)
@@ -853,14 +1004,14 @@ def run_sam_auto_server(
                         mask = None
             else:
                 mask = None
-            
+
             all_items.append({
                 "mask": mask,
                 "bbox": it.get("bbox"),
                 "score": it.get("score"),
                 "area": it.get("area", 0)
             })
-            
+
         return all_items
         
     except Exception as e:

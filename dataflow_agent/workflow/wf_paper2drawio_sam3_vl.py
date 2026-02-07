@@ -39,6 +39,7 @@ from dataflow_agent.workflow.registry import register
 from dataflow_agent.agentroles import create_vlm_agent
 from dataflow_agent.logger import get_logger
 from dataflow_agent.toolkits.drawio_tools import wrap_xml
+from dataflow_agent.toolkits.multimodaltool.ocr_config import get_ocr_api_credentials
 from dataflow_agent.toolkits.image2drawio import (
     extract_text_color,
     mask_to_bbox,
@@ -1352,7 +1353,7 @@ def _build_elements_from_sam3(
 
 
 # ==================== WORKFLOW ====================
-@register("paper2drawio_sam3")
+@register("paper2drawio_sam3_vl")
 def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
     builder = GenericGraphBuilder(state_model=Paper2DrawioState, entry_point="_start_")
 
@@ -1382,8 +1383,9 @@ def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
             state.temp_data["text_blocks"] = []
             return state
 
-        api_key = getattr(state.request, "api_key", None) or getattr(state.request, "chat_api_key", None)
-        chat_api_url = getattr(state.request, "chat_api_url", None)
+        ocr_api_url, ocr_api_key = get_ocr_api_credentials()
+        api_key = ocr_api_key
+        chat_api_url = ocr_api_url
         if not chat_api_url or not api_key:
             log.warning("[paper2drawio_sam3_vl] VLM OCR not configured")
             state.temp_data["text_blocks"] = []
@@ -1394,6 +1396,13 @@ def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
                 vlm_timeout = int(os.getenv("VLM_OCR_TIMEOUT", "120"))
             except ValueError:
                 vlm_timeout = 120
+            temp_state = copy.copy(state)
+            if getattr(temp_state, "request", None):
+                temp_state.request = copy.copy(state.request)
+                temp_state.request.chat_api_url = chat_api_url
+                temp_state.request.api_key = api_key
+                temp_state.request.chat_api_key = api_key
+
             agent = create_vlm_agent(
                 name="ImageTextBBoxAgent",
                 model_name="qwen-vl-ocr-2025-11-20",
@@ -1401,7 +1410,7 @@ def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
                 vlm_mode="ocr",
                 additional_params={"input_image": img_path, "timeout": vlm_timeout},
             )
-            new_state = await agent.execute(state)
+            new_state = await agent.execute(temp_state)
             bbox_res = getattr(new_state, "bbox_result", [])
         except Exception as e:
             log.warning(f"[paper2drawio_sam3_vl][VLM] OCR failed: {e}")

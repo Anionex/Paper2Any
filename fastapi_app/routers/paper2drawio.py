@@ -55,8 +55,8 @@ class ChatResponse(BaseModel):
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_diagram(
     request: Request,
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: str = Form(""),
+    api_key: str = Form(""),
     model: Optional[str] = Form(None),
     enable_vlm_validation: Optional[bool] = Form(None),
     vlm_model: Optional[str] = Form(None),

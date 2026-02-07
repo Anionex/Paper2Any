@@ -4,13 +4,12 @@ pdf2ppt_qwenvl workflow
 基于 slides PDF，融合 VLM (Qwen-VL-OCR) 替代传统 PaddleOCR：
 1. 将 PDF 每页渲染为 PNG
 2. 对每页图片用 VLM (ImageTextBBoxAgent) 做文字识别与定位 (替代 PaddleOCR)
-3. 对每页图片用 MinerU 做版面分析（区分 Text vs Image/Table）
-4. 对每页图片用 SAM 做图标 / 图块分割
-5. AI 背景编辑：
+3. 对每页图片用 SAM3 做分组提示词分割（与 paper2drawio_sam3 一致）
+4. AI 背景编辑：
    - 基于 VLM 提取的 bbox 生成 mask (或利用 VLM 调试阶段的 no_text 图)
    - 调用 Inpainting API：填补 mask 之后的白色区域，结合背景颜色做 Inpainting
-6. 智能合并与 PPT 生成：
-   - 结合 MinerU (版面), SAM (图标), VLM (文字) 结果生成 PPT。
+5. 智能合并与 PPT 生成：
+   - 结合 SAM3 (图标), VLM (文字) 结果生成 PPT。
 """
 
 from __future__ import annotations
@@ -18,13 +17,11 @@ import os
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from collections import Counter
 import copy
 
 import cv2
 import numpy as np
 import fitz  # PyMuPDF
-import yaml
 from PIL import Image
 
 from dataflow_agent.workflow.registry import register
@@ -36,10 +33,17 @@ from dataflow_agent.utils import get_project_root
 from dataflow_agent.agentroles import create_vlm_agent
 
 # Tools
-from dataflow_agent.toolkits.multimodaltool.sam_tool import segment_layout_boxes, segment_layout_boxes_server, free_sam_model
+from dataflow_agent.toolkits.multimodaltool.sam3_tool import (
+    Sam3PredictRun,
+    decode_sam3_mask,
+    dedup_sam3_results_across_groups,
+    filter_sam3_items_contained_by_images,
+    get_sam3_client,
+    run_sam3_predict_runs,
+)
 from dataflow_agent.toolkits.multimodaltool.bg_tool import local_tool_for_bg_remove, free_bg_rm_model
-from dataflow_agent.toolkits.multimodaltool.mineru_tool import recursive_mineru_layout
 from dataflow_agent.toolkits.multimodaltool.req_img import generate_or_edit_and_save_image_async
+from dataflow_agent.toolkits.multimodaltool.ocr_config import get_ocr_api_credentials
 from dataflow_agent.toolkits.multimodaltool import ppt_tool
 
 from pptx import Presentation
@@ -48,34 +52,7 @@ from pptx.dml.color import RGBColor
 
 log = get_logger(__name__)
 
-# Provider check: fallback to local PaddleOCR when VLM OCR model not available.
-def _use_local_ocr(state: Paper2FigureState) -> bool:
-    chat_api_url = getattr(getattr(state, "request", None), "chat_api_url", "") or ""
-    return "comfly" in chat_api_url.lower()
 
-def _paddle_ocr_lines_to_vlm_items(lines: List[Any], w: int, h: int) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
-    if not lines:
-        return items
-    for line in lines:
-        try:
-            bbox_px, text, conf = line
-            if not bbox_px or len(bbox_px) != 4:
-                continue
-            x1, y1, x2, y2 = bbox_px
-            # Normalize to 0-1 and match VLM bbox order: [y1, x1, y2, x2]
-            y1n = max(0.0, min(1.0, float(y1) / float(h)))
-            x1n = max(0.0, min(1.0, float(x1) / float(w)))
-            y2n = max(0.0, min(1.0, float(y2) / float(h)))
-            x2n = max(0.0, min(1.0, float(x2) / float(w)))
-            items.append({
-                "bbox": [y1n, x1n, y2n, x2n],
-                "text": text or "",
-                "conf": conf,
-            })
-        except Exception:
-            continue
-    return items
 
 # --- Adaptive background fill helpers ---
 def _norm_bbox_to_px(bbox_n: List[float], w: int, h: int, pad: int = 0) -> Optional[List[int]]:
@@ -116,18 +93,6 @@ def _bbox_overlap_ratio(inner: List[int], outer: List[int]) -> float:
     inter = max(0, x2 - x1) * max(0, y2 - y1)
     area = max(1, (inner[2] - inner[0]) * (inner[3] - inner[1]))
     return inter / area
-
-def _collect_mineru_skip_bboxes(mineru_blocks: List[Dict[str, Any]]) -> List[List[float]]:
-    skip_types = {"image", "img", "table", "figure", "formula"}
-    skips: List[List[float]] = []
-    for blk in mineru_blocks or []:
-        btype = (blk.get("type") or "").lower()
-        if btype not in skip_types:
-            continue
-        bbox = blk.get("bbox")
-        if bbox and len(bbox) == 4:
-            skips.append(bbox)
-    return skips
 
 def _adaptive_fill_text_regions(
     img_path: str,
@@ -222,21 +187,179 @@ def _adaptive_fill_text_regions(
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     return bool(cv2.imwrite(output_path, out))
 
-# Load configuration from yaml
-def load_server_config():
-    root = get_project_root()
-    config_path = root / "conf" / "model_servers.yaml"
-    if not config_path.exists():
-        log.warning(f"Config file not found at {config_path}, using defaults.")
-        return {}
-    try:
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f) or {}
-    except Exception as e:
-        log.error(f"Failed to load config: {e}")
-        return {}
+SHAPE_PROMPT = [
+    "rectangle",
+    "rounded rectangle",
+    "diamond",
+    "ellipse",
+]
 
-SERVER_CONFIG = load_server_config()
+ARROW_PROMPT = [
+    "arrow",
+    "connector",
+]
+
+IMAGE_PROMPT = [
+    "icon",
+    "symbol",
+    "pictogram",
+    "logo",
+]
+
+IMAGE_PROMPT_RECALL = [
+    "illustration",
+    "character",
+]
+
+BACKGROUND_PROMPT = [
+    "panel",
+    "container",
+    "filled region",
+    "background",
+]
+
+SAM3_GROUPS = {
+    "shape": SHAPE_PROMPT,
+    "arrow": ARROW_PROMPT,
+    "image": IMAGE_PROMPT,
+    "background": BACKGROUND_PROMPT,
+}
+
+SAM3_GROUP_CONFIG = {
+    "shape": {"score_threshold": 0.5, "min_area": 200, "priority": 3},
+    "arrow": {"score_threshold": 0.45, "min_area": 50, "priority": 4},
+    "image": {"score_threshold": 0.5, "min_area": 100, "priority": 2},
+    "background": {"score_threshold": 0.25, "min_area": 500, "priority": 1},
+}
+
+SAM3_IMAGE_RECALL_SCORE_THRESHOLD = 0.38
+SAM3_IMAGE_RECALL_MIN_AREA_BASE = 40
+SAM3_IMAGE_RECALL_MIN_AREA_RATIO = 0.00003
+SAM3_IMAGE_RECALL_TRIGGER_MAX_IMAGES = 2
+SAM3_DEDUP_IOU = 0.7
+SAM3_ARROW_DEDUP_IOU = 0.85
+SAM3_SHAPE_IMAGE_IOU = 0.6
+MAX_IMAGE_BBOX_AREA_RATIO = 0.88
+
+
+def _bbox_area_px(b: List[int]) -> int:
+    return max(0, b[2] - b[0]) * max(0, b[3] - b[1])
+
+
+def _sam3_predict_groups(client: Any, image_path: str) -> List[Dict[str, Any]]:
+    image_area: Optional[int] = None
+    try:
+        with Image.open(image_path) as img:
+            image_area = int(img.width * img.height)
+    except Exception:
+        image_area = None
+
+    try:
+        base_runs: List[Sam3PredictRun] = []
+        for group, prompts in SAM3_GROUPS.items():
+            cfg = SAM3_GROUP_CONFIG.get(group, {})
+            base_runs.append(
+                Sam3PredictRun(
+                    group=group,
+                    prompts=prompts,
+                    score_threshold=cfg.get("score_threshold"),
+                    min_area=cfg.get("min_area"),
+                )
+            )
+
+        all_results = run_sam3_predict_runs(
+            client=client,
+            image_path=image_path,
+            runs=base_runs,
+        )
+        all_results = dedup_sam3_results_across_groups(
+            all_results,
+            group_config=SAM3_GROUP_CONFIG,
+            dedup_iou=SAM3_DEDUP_IOU,
+            arrow_dedup_iou=SAM3_ARROW_DEDUP_IOU,
+            shape_image_iou=SAM3_SHAPE_IMAGE_IOU,
+        )
+        all_results = filter_sam3_items_contained_by_images(
+            all_results,
+            image_groups=["image"],
+            contain_threshold=0.85,
+        )
+
+        safe_image_area = image_area if image_area and image_area > 0 else 1
+        core_image_hits = 0
+        for item in all_results:
+            if item.get("group") != "image":
+                continue
+            bbox = item.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            bbox_ratio = float(_bbox_area_px(bbox)) / float(safe_image_area)
+            if bbox_ratio <= MAX_IMAGE_BBOX_AREA_RATIO:
+                core_image_hits += 1
+
+        should_recall = core_image_hits <= SAM3_IMAGE_RECALL_TRIGGER_MAX_IMAGES
+        if should_recall and IMAGE_PROMPT_RECALL:
+            recall_min_area = SAM3_IMAGE_RECALL_MIN_AREA_BASE
+            if image_area and image_area > 0:
+                recall_min_area = max(
+                    SAM3_IMAGE_RECALL_MIN_AREA_BASE,
+                    int(image_area * SAM3_IMAGE_RECALL_MIN_AREA_RATIO),
+                )
+
+            recall_results = run_sam3_predict_runs(
+                client=client,
+                image_path=image_path,
+                runs=[
+                    Sam3PredictRun(
+                        group="image",
+                        prompts=IMAGE_PROMPT_RECALL,
+                        score_threshold=SAM3_IMAGE_RECALL_SCORE_THRESHOLD,
+                        min_area=recall_min_area,
+                    )
+                ],
+            )
+            if recall_results:
+                all_results.extend(recall_results)
+                all_results = dedup_sam3_results_across_groups(
+                    all_results,
+                    group_config=SAM3_GROUP_CONFIG,
+                    dedup_iou=SAM3_DEDUP_IOU,
+                    arrow_dedup_iou=SAM3_ARROW_DEDUP_IOU,
+                    shape_image_iou=SAM3_SHAPE_IMAGE_IOU,
+                )
+                all_results = filter_sam3_items_contained_by_images(
+                    all_results,
+                    image_groups=["image"],
+                    contain_threshold=0.85,
+                )
+
+        return all_results
+    except Exception as e:
+        log.warning(f"[pdf2ppt_qwenvl][SAM3] grouped predict failed: {e}")
+        return []
+
+
+def _save_sam3_crop(
+    image_bgr: np.ndarray,
+    bbox: List[int],
+    mask: Optional[np.ndarray],
+    out_path: Path,
+) -> bool:
+    x1, y1, x2, y2 = bbox
+    if x2 <= x1 or y2 <= y1:
+        return False
+
+    crop = image_bgr[y1:y2, x1:x2]
+    if crop.size == 0:
+        return False
+
+    if mask is not None and mask.shape[:2] == image_bgr.shape[:2]:
+        mask_u8 = (mask > 0).astype(np.uint8)
+        alpha = (mask_u8[y1:y2, x1:x2] * 255).astype(np.uint8)
+        rgba = np.dstack((crop, alpha))
+        return bool(cv2.imwrite(str(out_path), rgba))
+
+    return bool(cv2.imwrite(str(out_path), crop))
 
 def get_closest_aspect_ratio(w: int, h: int) -> str:
     """
@@ -258,23 +381,6 @@ def get_closest_aspect_ratio(w: int, h: int) -> str:
             
     return best_ratio
 
-# Helper to construct URLs
-def get_sam_urls():
-    if os.environ.get("SAM_SERVER_URLS"):
-        return os.environ.get("SAM_SERVER_URLS").split(",")
-    sam_cfg = SERVER_CONFIG.get("sam", {})
-    instances = sam_cfg.get("instances", [])
-    if instances:
-        urls = []
-        for inst in instances:
-            for port in inst.get("ports", []):
-                urls.append(f"http://127.0.0.1:{port}")
-        if urls:
-            return urls
-    return ["http://localhost:8021", "http://localhost:8022","http://localhost:8023"]
-
-SAM_SERVER_URLS = get_sam_urls()
-
 def _ensure_result_path(state: Paper2FigureState) -> str:
     raw = getattr(state, "result_path", None)
     if raw:
@@ -287,99 +393,79 @@ def _ensure_result_path(state: Paper2FigureState) -> str:
     return state.result_path
 
 def _process_single_sam_page(page_idx: int, img_path: str, base_dir: str) -> Dict[str, Any]:
-    sam_ckpt = f"{get_project_root()}/sam_b.pt"
-    log.info(f"[pdf2ppt_qwenvl][SAM] processing page#{page_idx+1}: {img_path}")
+    log.info(f"[pdf2ppt_qwenvl][SAM3] processing page#{page_idx+1}: {img_path}")
     img_path_obj = Path(img_path)
     if not img_path_obj.exists():
-        log.warning(f"[pdf2ppt_qwenvl][SAM] page#{page_idx+1} image not found")
+        log.warning(f"[pdf2ppt_qwenvl][SAM3] page#{page_idx+1} image not found")
         return {"page_idx": page_idx, "layout_items": []}
 
     out_dir = Path(base_dir) / "layout_items" / f"page_{page_idx+1:03d}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    layout_items = []
-    try:
-        # 尝试远程调用，增加显式日志
-        log.info(f"[pdf2ppt_qwenvl][SAM] page#{page_idx+1} calling segment_layout_boxes_server urls={SAM_SERVER_URLS}")
-        layout_items = segment_layout_boxes_server(
-            image_path=str(img_path_obj),
-            output_dir=str(out_dir),
-            server_urls=SAM_SERVER_URLS,
-            checkpoint=sam_ckpt,
-            min_area=200,
-            min_score=0.0,
-            iou_threshold=0.4,
-            top_k=15,
-            nms_by="mask",
-        )
-        log.info(f"[pdf2ppt_qwenvl][SAM] page#{page_idx+1} server returned {len(layout_items)} items")
-    except Exception as e:
-        log.error(f"[pdf2ppt_qwenvl][SAM] page#{page_idx+1} Remote SAM failed: {e}. Fallback to local.")
-        try:
-            layout_items = segment_layout_boxes(
-                image_path=str(img_path_obj),
-                output_dir=str(out_dir),
-                checkpoint=sam_ckpt,
-                min_area=200,
-                min_score=0.0,
-                iou_threshold=0.4,
-                top_k=15,
-                nms_by="mask",
-            )
-            log.info(f"[pdf2ppt_qwenvl][SAM] page#{page_idx+1} local SAM returned {len(layout_items)} items")
-        except Exception as e_local:
-             log.error(f"[pdf2ppt_qwenvl][SAM] page#{page_idx+1} Local SAM failed: {e_local}")
-             layout_items = []
-        
-    try:
-        pil_img = Image.open(str(img_path_obj))
-        w, h = pil_img.size
-    except Exception:
-        w, h = 1024, 768
+    image_bgr = cv2.imread(str(img_path_obj), cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        log.warning(f"[pdf2ppt_qwenvl][SAM3] page#{page_idx+1} read image failed")
+        return {"page_idx": page_idx, "layout_items": []}
 
-    for it in layout_items:
-        bbox = it.get("bbox")
-        if bbox and len(bbox) == 4:
-            x1n, y1n, x2n, y2n = bbox
-            x1 = int(round(x1n * w))
-            y1 = int(round(y1n * h))
-            x2 = int(round(x2n * w))
-            y2 = int(round(y2n * h))
-            if x2 > x1 and y2 > y1:
-                it["bbox_px"] = [x1, y1, x2, y2]
+    h, w = image_bgr.shape[:2]
+    client = get_sam3_client()
+    if client is None:
+        log.error("[pdf2ppt_qwenvl][SAM3] endpoints not configured")
+        return {"page_idx": page_idx, "layout_items": []}
+
+    layout_items: List[Dict[str, Any]] = []
+    try:
+        sam3_results = _sam3_predict_groups(client, str(img_path_obj))
+        for idx, item in enumerate(sam3_results):
+            group = item.get("group") or ""
+            if group == "background":
+                continue
+
+            bbox_raw = item.get("bbox")
+            if not bbox_raw or len(bbox_raw) != 4:
+                continue
+
+            x1, y1, x2, y2 = [int(v) for v in bbox_raw]
+            x1 = max(0, min(w, x1))
+            x2 = max(0, min(w, x2))
+            y1 = max(0, min(h, y1))
+            y2 = max(0, min(h, y2))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            mask = decode_sam3_mask(item.get("mask") or {})
+            crop_path = out_dir / f"sam3_{group}_{idx}.png"
+            if not _save_sam3_crop(image_bgr, [x1, y1, x2, y2], mask, crop_path):
+                continue
+
+            layout_items.append(
+                {
+                    "bbox": [x1 / max(1, w), y1 / max(1, h), x2 / max(1, w), y2 / max(1, h)],
+                    "bbox_px": [x1, y1, x2, y2],
+                    "score": item.get("score"),
+                    "area": max(0, (x2 - x1) * (y2 - y1)),
+                    "prompt": item.get("prompt"),
+                    "group": group,
+                    "png_path": str(crop_path),
+                    "type": "layout_box",
+                }
+            )
+        log.info(f"[pdf2ppt_qwenvl][SAM3] page#{page_idx+1} returned {len(layout_items)} items")
+    except Exception as e:
+        log.error(f"[pdf2ppt_qwenvl][SAM3] page#{page_idx+1} failed: {e}")
+        layout_items = []
 
     return {"page_idx": page_idx, "layout_items": layout_items}
 
 def _run_sam_on_pages(image_paths: List[str], base_dir: str) -> List[Dict[str, Any]]:
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    
     results: List[Dict[str, Any]] = []
-    # 限制并发数
-    max_workers = min(len(image_paths), 6)
-    
-    log.info(f"[pdf2ppt_qwenvl][SAM] starting parallel processing with {max_workers} workers")
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_idx = {
-            executor.submit(_process_single_sam_page, idx, path, base_dir): idx 
-            for idx, path in enumerate(image_paths)
-        }
-        
-        for future in as_completed(future_to_idx):
-            try:
-                res = future.result()
-                results.append(res)
-            except Exception as e:
-                idx = future_to_idx[future]
-                log.error(f"[pdf2ppt_qwenvl][SAM] page#{idx+1} task exception: {e}")
-                results.append({"page_idx": idx, "layout_items": []})
-
-    # 清理本地可能加载的模型
-    sam_ckpt = f"{get_project_root()}/sam_b.pt"
-    try:
-        free_sam_model(checkpoint=sam_ckpt)
-    except Exception:
-        pass
+    log.info(f"[pdf2ppt_qwenvl][SAM3] start, images={len(image_paths)}")
+    for idx, path in enumerate(image_paths):
+        try:
+            results.append(_process_single_sam_page(idx, path, base_dir))
+        except Exception as e:
+            log.error(f"[pdf2ppt_qwenvl][SAM3] page#{idx+1} task exception: {e}")
+            results.append({"page_idx": idx, "layout_items": []})
 
     return sorted(results, key=lambda x: x["page_idx"])
 
@@ -438,39 +524,37 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                 max_retries = 3
                 bbox_res = []
                 
-                if _use_local_ocr(state):
-                    log.info(f"[pdf2ppt_qwenvl][OCR] page#{page_idx+1} using local PaddleOCR (comfly)")
-                    ocr_res = await asyncio.to_thread(ppt_tool.paddle_ocr_page_with_layout, img_path)
-                    bbox_res = _paddle_ocr_lines_to_vlm_items(
-                        ocr_res.get("lines", []),
-                        ocr_res.get("image_size", (0, 0))[0] or 1,
-                        ocr_res.get("image_size", (0, 0))[1] or 1,
-                    )
-                else:
-                    for attempt in range(max_retries):
-                        try:
-                            agent = create_vlm_agent(
-                                name="ImageTextBBoxAgent",
-                                model_name=getattr(state.request, "vlm_model", "qwen-vl-ocr-2025-11-20"),
-                                chat_api_url=getattr(state.request, "chat_api_url", None),
-                                vlm_mode="ocr",
-                                additional_params={
-                                    "input_image": img_path
-                                }
-                            )
+                for attempt in range(max_retries):
+                    try:
+                        ocr_api_url, ocr_api_key = get_ocr_api_credentials()
+                        if getattr(temp_state, "request", None):
+                            temp_state.request = copy.copy(state.request)
+                            temp_state.request.chat_api_url = ocr_api_url
+                            temp_state.request.api_key = ocr_api_key
+                            temp_state.request.chat_api_key = ocr_api_key
 
-                            log.info(f"[pdf2ppt_qwenvl][VLM] page#{page_idx+1} attempt {attempt+1}/{max_retries}...")
-                            new_state = await agent.execute(temp_state)
-                            bbox_res = getattr(new_state, "bbox_result", [])
-                            
-                            if isinstance(bbox_res, list):
-                                break
-                            log.warning(f"[pdf2ppt_qwenvl][VLM] page#{page_idx+1} attempt {attempt+1} got invalid result: {type(bbox_res)}")
-                        except Exception as e:
-                            log.warning(f"[pdf2ppt_qwenvl][VLM] page#{page_idx+1} attempt {attempt+1} failed: {e}")
-                            if attempt == max_retries - 1:
-                                raise e
-                            await asyncio.sleep(1)
+                        agent = create_vlm_agent(
+                            name="ImageTextBBoxAgent",
+                            model_name=getattr(state.request, "vlm_model", "qwen-vl-ocr-2025-11-20"),
+                            chat_api_url=ocr_api_url,
+                            vlm_mode="ocr",
+                            additional_params={
+                                "input_image": img_path
+                            }
+                        )
+
+                        log.info(f"[pdf2ppt_qwenvl][VLM] page#{page_idx+1} attempt {attempt+1}/{max_retries}...")
+                        new_state = await agent.execute(temp_state)
+                        bbox_res = getattr(new_state, "bbox_result", [])
+                        
+                        if isinstance(bbox_res, list):
+                            break
+                        log.warning(f"[pdf2ppt_qwenvl][VLM] page#{page_idx+1} attempt {attempt+1} got invalid result: {type(bbox_res)}")
+                    except Exception as e:
+                        log.warning(f"[pdf2ppt_qwenvl][VLM] page#{page_idx+1} attempt {attempt+1} failed: {e}")
+                        if attempt == max_retries - 1:
+                            raise e
+                        await asyncio.sleep(1)
 
                 if not isinstance(bbox_res, list):
                     bbox_res = []
@@ -559,75 +643,8 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
         state.vlm_pages = results
         return state
 
-    async def slides_mineru_node(state: Paper2FigureState) -> Paper2FigureState:
-        """MinerU 版面分析 (并行优化)"""
-        image_paths: List[str] = getattr(state, "slide_images", []) or []
-        log.info(f"[pdf2ppt_qwenvl][MinerU] start, images={len(image_paths)}")
-        if not image_paths:
-            return state
-
-        base_dir = Path(_ensure_result_path(state))
-        mineru_dir = base_dir / "mineru_pages"
-        mineru_dir.mkdir(parents=True, exist_ok=True)
-        port = getattr(getattr(state, "request", None), "mineru_port", 8010)
-
-        async def _process_mineru_page(page_idx: int, img_path: str) -> Dict[str, Any]:
-            try:
-                out_dir = mineru_dir / f"page_{page_idx+1:03d}"
-                out_dir.mkdir(parents=True, exist_ok=True)
-                log.info(f"[pdf2ppt_qwenvl][MinerU] page#{page_idx+1} calling recursive_mineru_layout, port={port}")
-
-                # 加超时保护，避免挂死
-                try:
-                    mineru_items = await asyncio.wait_for(
-                        recursive_mineru_layout(
-                            image_path=str(img_path),
-                            port=port,
-                            max_depth=3,
-                            output_dir=str(out_dir),
-                        ),
-                        timeout=120.0,
-                    )
-                except asyncio.TimeoutError:
-                    log.error(f"[pdf2ppt_qwenvl][MinerU] page#{page_idx+1} MinerU timeout (>120s)")
-                    mineru_items = []
-                except Exception as inner_e:
-                    log.error(f"[pdf2ppt_qwenvl][MinerU] page#{page_idx+1} MinerU exception: {inner_e}")
-                    mineru_items = []
-
-                log.info(f"[pdf2ppt_qwenvl][MinerU] page#{page_idx+1} got {len(mineru_items)} blocks")
-                return {
-                    "page_idx": page_idx,
-                    "blocks": mineru_items,
-                    "path": img_path,
-                    "mineru_output_dir": str(out_dir)
-                }
-            except Exception as e:
-                log.error(f"[pdf2ppt_qwenvl][MinerU] page#{page_idx+1} failed: {e}")
-                return {
-                    "page_idx": page_idx,
-                    "blocks": [],
-                    "path": img_path
-                }
-
-        tasks = [_process_mineru_page(i, p) for i, p in enumerate(image_paths)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # 过滤异常并打印
-        cleaned_results: List[Dict[str, Any]] = []
-        for r in results:
-            if isinstance(r, Exception):
-                log.error(f"[pdf2ppt_qwenvl][MinerU] task exception: {r}")
-                continue
-            cleaned_results.append(r)
-        
-        # 按 page_idx 排序确保顺序
-        state.mineru_pages = sorted(cleaned_results, key=lambda x: x["page_idx"])
-        log.info(f"[pdf2ppt_qwenvl][MinerU] done, pages={len(state.mineru_pages)}")
-        return state
-
     async def slides_sam_node(state: Paper2FigureState) -> Paper2FigureState:
-        """SAM 图标分割"""
+        """SAM3 图标分割"""
         vlm_pages: List[Dict[str, Any]] = getattr(state, "vlm_pages", []) or []
         slide_images: List[str] = getattr(state, "slide_images", []) or []
         image_paths: List[str] = []
@@ -636,9 +653,6 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
             for idx, fallback in enumerate(slide_images):
                 pinfo = page_dict.get(idx, {})
                 candidates = [
-                    pinfo.get("clean_bg_lite_path"),
-                    pinfo.get("clean_bg_path"),
-                    pinfo.get("no_text_path"),
                     pinfo.get("path"),
                     fallback,
                 ]
@@ -654,15 +668,15 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                 image_paths.append(chosen)
         else:
             image_paths = slide_images
-        log.info(f"[pdf2ppt_qwenvl][SAM] start, images={len(image_paths)}")
+        log.info(f"[pdf2ppt_qwenvl][SAM3] start, images={len(image_paths)}")
         if not image_paths:
             return state
         base_dir = _ensure_result_path(state)
         try:
             sam_pages = await asyncio.to_thread(_run_sam_on_pages, image_paths, base_dir)
-            log.info(f"[pdf2ppt_qwenvl][SAM] done, pages={len(sam_pages)}")
+            log.info(f"[pdf2ppt_qwenvl][SAM3] done, pages={len(sam_pages)}")
         except Exception as e:
-            log.error(f"[pdf2ppt_qwenvl][SAM] SAM processing failed: {e}")
+            log.error(f"[pdf2ppt_qwenvl][SAM3] processing failed: {e}")
             sam_pages = []
         state.sam_pages = sam_pages
         return state
@@ -726,8 +740,8 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
             return state
 
         base_dir = Path(_ensure_result_path(state))
-        mineru_pages = getattr(state, "mineru_pages", []) or []
-        mineru_dict = {p.get("page_idx", 0): p for p in mineru_pages}
+        sam_pages = getattr(state, "sam_pages", []) or []
+        sam_dict = {p.get("page_idx", 0): (p.get("layout_items", []) or []) for p in sam_pages}
         
         # API 配置
         req_cfg = getattr(state, "request", None) or {}
@@ -750,6 +764,85 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                     await asyncio.sleep(1)
             return False
 
+        def _cleanup_bg_overlay(
+            page_idx: int,
+            pinfo: Dict[str, Any],
+            bg_path: str,
+            img_w: int,
+            img_h: int,
+        ) -> Optional[str]:
+            if not bg_path or not os.path.exists(bg_path) or img_w <= 0 or img_h <= 0:
+                return None
+
+            bg_img = cv2.imread(bg_path, cv2.IMREAD_COLOR)
+            if bg_img is None:
+                return None
+
+            if bg_img.shape[1] != img_w or bg_img.shape[0] != img_h:
+                bg_img = cv2.resize(bg_img, (img_w, img_h), interpolation=cv2.INTER_CUBIC)
+
+            overlap_mask = np.zeros((img_h, img_w), dtype=np.uint8)
+
+            for item in pinfo.get("vlm_data", []) or []:
+                bbox_n = item.get("bbox")
+                if not bbox_n or len(bbox_n) != 4:
+                    continue
+                y1n, x1n, y2n, x2n = bbox_n
+                x1 = int(x1n * img_w)
+                y1 = int(y1n * img_h)
+                x2 = int(x2n * img_w)
+                y2 = int(y2n * img_h)
+                box_h = max(1, y2 - y1)
+                pad = max(4, int(0.15 * box_h))
+                x1 = max(0, x1 - pad)
+                y1 = max(0, y1 - pad)
+                x2 = min(img_w, x2 + pad)
+                y2 = min(img_h, y2 + pad)
+                if x2 > x1 and y2 > y1:
+                    cv2.rectangle(overlap_mask, (x1, y1), (x2, y2), 255, -1)
+
+            for item in sam_dict.get(page_idx, []) or []:
+                bbox_px = item.get("bbox_px")
+                if bbox_px and len(bbox_px) == 4:
+                    x1, y1, x2, y2 = [int(v) for v in bbox_px]
+                else:
+                    bbox_n = item.get("bbox")
+                    if not bbox_n or len(bbox_n) != 4:
+                        continue
+                    x1 = int(float(bbox_n[0]) * img_w)
+                    y1 = int(float(bbox_n[1]) * img_h)
+                    x2 = int(float(bbox_n[2]) * img_w)
+                    y2 = int(float(bbox_n[3]) * img_h)
+
+                pad = 3
+                x1 = max(0, x1 - pad)
+                y1 = max(0, y1 - pad)
+                x2 = min(img_w, x2 + pad)
+                y2 = min(img_h, y2 + pad)
+                if x2 > x1 and y2 > y1:
+                    cv2.rectangle(overlap_mask, (x1, y1), (x2, y2), 255, -1)
+
+            text_mask_path = pinfo.get("text_mask_path")
+            if text_mask_path and os.path.exists(text_mask_path):
+                text_mask = cv2.imread(text_mask_path, cv2.IMREAD_GRAYSCALE)
+                if text_mask is not None:
+                    if text_mask.shape[:2] != (img_h, img_w):
+                        text_mask = cv2.resize(text_mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
+                    overlap_mask = np.maximum(overlap_mask, text_mask)
+
+            if not np.any(overlap_mask):
+                return None
+
+            overlap_mask = cv2.dilate(overlap_mask, np.ones((5, 5), dtype=np.uint8), iterations=1)
+            cleaned_bg = cv2.inpaint(bg_img, overlap_mask, 3, cv2.INPAINT_TELEA)
+
+            out_dir = base_dir / "clean_bg_overlay_free"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"bg_{page_idx+1:03d}.png"
+            if cv2.imwrite(str(out_path), cleaned_bg):
+                return str(out_path)
+            return None
+
         async def _process_inpainting(pinfo):
             page_idx = pinfo.get("page_idx", 0)
             img_path = pinfo.get("path")
@@ -765,7 +858,7 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
             pinfo["clean_bg_path"] = str(clean_bg_path)
             pinfo["clean_bg_lite_path"] = str(clean_bg_lite_path)
 
-            # 1) 合并 OCR + MinerU 文本框，生成更完整的 no_text 图 + text mask
+            # 1) 基于 OCR 文本框生成 no_text 图 + text mask
             merged_no_text_path = None
             merged_mask_path = None
             img_w = img_h = 0
@@ -783,17 +876,6 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                             bbox_n = it.get("bbox")
                             if bbox_n and len(bbox_n) == 4:
                                 merged_boxes.append(bbox_n)
-
-                        # MinerU 文本框（[x1, y1, x2, y2]）
-                        mineru_blocks = mineru_dict.get(page_idx, {}).get("blocks", [])
-                        for blk in mineru_blocks or []:
-                            btype = (blk.get("type") or "").lower()
-                            if btype not in {"text", "title"}:
-                                continue
-                            bbox = blk.get("bbox")
-                            if bbox and len(bbox) == 4:
-                                x1n, y1n, x2n, y2n = bbox
-                                merged_boxes.append([y1n, x1n, y2n, x2n])
 
                         if merged_boxes:
                             for bbox_n in merged_boxes:
@@ -837,16 +919,6 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                     bbox_n = it.get("bbox")
                     if bbox_n and len(bbox_n) == 4:
                         text_boxes.append(bbox_n)
-                mineru_blocks = mineru_dict.get(page_idx, {}).get("blocks", [])
-                for blk in mineru_blocks or []:
-                    btype = (blk.get("type") or "").lower()
-                    if btype not in {"text", "title"}:
-                        continue
-                    bbox = blk.get("bbox")
-                    if bbox and len(bbox) == 4:
-                        x1n, y1n, x2n, y2n = bbox
-                        text_boxes.append([y1n, x1n, y2n, x2n])
-                skip_boxes = _collect_mineru_skip_bboxes(mineru_blocks)
                 expanded_boxes = []
                 if text_boxes and img_w > 0 and img_h > 0:
                     for bbox_n in text_boxes:
@@ -862,7 +934,7 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                             img_path=img_path,
                             text_boxes_norm=expanded_boxes,
                             output_path=str(clean_bg_lite_path),
-                            skip_boxes_norm=skip_boxes,
+                            skip_boxes_norm=None,
                             pad=0,
                         )
                     except Exception as e:
@@ -906,7 +978,8 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                 final_bg_path = str(img_path)
 
             if final_bg_path:
-                pinfo["clean_bg_path"] = final_bg_path
+                cleaned_bg_path = _cleanup_bg_overlay(page_idx, pinfo, final_bg_path, img_w, img_h)
+                pinfo["clean_bg_path"] = cleaned_bg_path or final_bg_path
 
         tasks = [_process_inpainting(p) for p in vlm_pages]
         if tasks:
@@ -915,65 +988,34 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
             
         return state
 
-    # --- 并行处理节点 ---
+    # --- 主处理节点 ---
     async def parallel_processing_node(state: Paper2FigureState) -> Paper2FigureState:
         """
-        并行 + 串行结合：
-        1. VLM (OCR) & MinerU 并行
-        2. Inpainting（依赖 VLM + 可选 MinerU）
-        3. SAM（依赖 Inpainting 产物）
-        4. SAM BgRemove
+        串行流程：
+        1. VLM OCR
+        2. SAM3 分割 + 图标去背
+        3. AI 背景编辑
         """
-        import copy
         import time
         start_time = time.time()
-        
-        async def vlm_branch():
-            branch_state = copy.copy(state)
-            branch_state = await vlm_recognition_node(branch_state)
-            return ("vlm", branch_state)
-        
-        async def mineru_branch():
-            branch_state = copy.copy(state)
-            result = await slides_mineru_node(branch_state)
-            return ("mineru", result)
 
-        results = await asyncio.gather(
-            vlm_branch(),
-            mineru_branch(),
-            return_exceptions=True
-        )
-
-        log.info(f"[pdf2ppt_qwenvl] parallel branches returned: {results}")
-        
-        for r in results:
-            if isinstance(r, Exception):
-                log.error(f"[pdf2ppt_qwenvl] Branch failed: {r}")
-                continue
-            branch_name, branch_state = r
-            if branch_name == "vlm":
-                state.vlm_pages = getattr(branch_state, "vlm_pages", [])
-            elif branch_name == "mineru":
-                state.mineru_pages = getattr(branch_state, "mineru_pages", [])
-        
-        # 串行阶段：Inpainting -> SAM -> BgRemove
-        state = await slides_inpainting_node(state)
+        state = await vlm_recognition_node(state)
         state = await slides_sam_node(state)
         sam_pages = getattr(state, "sam_pages", [])
         state = await slides_layout_bg_remove_node(state, sam_pages=sam_pages)
+        state = await slides_inpainting_node(state)
         
-        log.info(f"[pdf2ppt_qwenvl] Parallel processing finished in {time.time() - start_time:.2f}s")
+        log.info(f"[pdf2ppt_qwenvl] Processing finished in {time.time() - start_time:.2f}s")
         return state
 
     async def slides_ppt_generation_node(state: Paper2FigureState) -> Paper2FigureState:
         """
         生成 PPT：
-        1. 整合 VLM, MinerU, SAM 结果
+        1. 整合 VLM, SAM3 结果
         2. 渲染页面 (Inpainting 已经在上一步并行完成)
         """
         vlm_pages = getattr(state, "vlm_pages", []) or []
         sam_pages = getattr(state, "sam_pages", []) or []
-        mineru_pages = getattr(state, "mineru_pages", []) or []
 
         if not vlm_pages:
             log.error("[pdf2ppt_qwenvl] no vlm_pages, abort PPT generation")
@@ -981,9 +1023,6 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
 
         # Indexing
         sam_dict = {p.get("page_idx", 0): p.get("layout_items", []) for p in sam_pages}
-        mineru_dict = {}
-        for p in mineru_pages:
-            mineru_dict[p.get("page_idx", 0)] = p
 
         prs = Presentation()
         prs.slide_width = Inches(ppt_tool.SLIDE_W_IN)
@@ -1023,44 +1062,7 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
             scale_x = slide_w_emu / w0
             scale_y = slide_h_emu / h0
 
-            # 1. MinerU Image Zones
-            mineru_data = mineru_dict.get(page_idx, {})
-            mineru_blocks = mineru_data.get("blocks", [])
-            image_zones = []
-            
-            sub_images_dir = None
-            if mineru_data.get("mineru_output_dir"):
-                try:
-                    # 简单尝试找 sub_images
-                    possibles = list(Path(mineru_data["mineru_output_dir"]).rglob("sub_images"))
-                    if possibles: sub_images_dir = possibles[0]
-                except Exception: pass
-
-            for idx, blk in enumerate(mineru_blocks):
-                btype = (blk.get("type") or "").lower()
-                bbox = blk.get("bbox") # norm
-                if not bbox or len(bbox)!=4: continue
-                if btype in ['image', 'figure', 'table', 'formula']:
-                    x1, y1, x2, y2 = int(bbox[0]*w0), int(bbox[1]*h0), int(bbox[2]*w0), int(bbox[3]*h0)
-                    px_bbox = [x1, y1, x2, y2]
-                    
-                    img_path_found = None
-                    if blk.get("img_path") and os.path.exists(blk["img_path"]):
-                        img_path_found = blk["img_path"]
-                    
-                    if not img_path_found:
-                        fb_dir = base_dir / "mineru_fallback" / f"p{page_idx}"
-                        fb_dir.mkdir(parents=True, exist_ok=True)
-                        save_p = fb_dir / f"blk_{idx}.png"
-                        if not save_p.exists():
-                            try: pil_img.crop((x1,y1,x2,y2)).save(save_p)
-                            except: pass
-                        img_path_found = str(save_p)
-                    
-                    if img_path_found:
-                        image_zones.append({"bbox": px_bbox, "type": btype, "img_path": img_path_found})
-
-            # 2. VLM Text Filtering (Filter text inside images)
+            # 2. VLM Text Filtering
             final_text_lines = []
             for it in vlm_data:
                 # it: {'bbox': [y1n, x1n, y2n, x2n], 'text': ...}  (0-1 norm)
@@ -1070,33 +1072,24 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
                 x1, y1, x2, y2 = int(x1n*w0), int(y1n*h0), int(x2n*w0), int(y2n*h0)
                 l_bbox = [x1, y1, x2, y2]
                 
-                is_in_image = False
-                # for z in image_zones:
-                #     if _is_inside(l_bbox, z["bbox"]): 
-                #         is_in_image = True
-                #         break
-                
-                if not is_in_image:
-                    # 估算字号
-                    raw_pt_obj = ppt_tool.estimate_font_pt(l_bbox, img_h_px=h0, body_h_px=None)
-                    raw_pt = raw_pt_obj.pt if hasattr(raw_pt_obj, "pt") else raw_pt_obj
-                    
-                    # 简单判断 title (基于字号或位置，这里简化)
-                    l_type = "body"
-                    if raw_pt > 18: l_type = "title" # 简单阈值，可改进
-                    
-                    final_text_lines.append((l_bbox, it.get("text",""), 1.0, l_type, raw_pt))
+                raw_pt_obj = ppt_tool.estimate_font_pt(l_bbox, img_h_px=h0, body_h_px=None)
+                raw_pt = raw_pt_obj.pt if hasattr(raw_pt_obj, "pt") else raw_pt_obj
 
-            # 3. SAM Icons Filtering
+                l_type = "body"
+                if raw_pt > 18:
+                    l_type = "title"
+
+                final_text_lines.append((l_bbox, it.get("text", ""), 1.0, l_type, raw_pt))
+
+            # 3. SAM3 Icons Filtering
             raw_sam = sam_dict.get(page_idx, [])
             final_sam = []
             for item in raw_sam:
                 s_bbox = item.get("bbox_px")
-                if not s_bbox: continue
-                # Filter if inside Image Zone
-                if any(_is_inside(s_bbox, z["bbox"], 0.6) for z in image_zones): continue
-                # Filter if overlaps with Text
-                if any(_is_inside(line[0], s_bbox) for line in final_text_lines): continue
+                if not s_bbox:
+                    continue
+                if any(_is_inside(line[0], s_bbox) for line in final_text_lines):
+                    continue
                 
                 final_sam.append(item)
 
@@ -1107,14 +1100,6 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
             if clean_bg_path and os.path.exists(clean_bg_path):
                 try: slide.shapes.add_picture(clean_bg_path, 0, 0, prs.slide_width, prs.slide_height)
                 except: pass
-            
-            # MinerU Images
-            for z in image_zones:
-                if os.path.exists(z["img_path"]):
-                    bx = z["bbox"]
-                    slide.shapes.add_picture(z["img_path"], 
-                        ppt_tool.px_to_emu(bx[0], scale_x), ppt_tool.px_to_emu(bx[1], scale_y),
-                        ppt_tool.px_to_emu(bx[2]-bx[0], scale_x), ppt_tool.px_to_emu(bx[3]-bx[1], scale_y))
             
             # SAM Icons
             for s in final_sam:

@@ -406,8 +406,9 @@ SUPABASE_JWT_SECRET=your-jwt-secret
   - **实例配置**: 脚本默认在 GPU 0 和 GPU 4 上各启动 4 个实例 (共 8 个)，端口范围 8011-8018。
   - **Load Balancer**: 端口 8010，自动分发请求。
 
-- **SAM (Segment Anything Model)**
-  - **实例配置**: 默认在 GPU 2 和 GPU 3 上各启动 1 个实例，端口 8021-8022。
+- **SAM3 (Segment Anything Model 3)**
+  - **实例配置**: 默认每个配置 GPU 启动 1 个实例，起始端口 8021。
+  - **模型路径**: 默认使用 `/data/users/pzw/models/sam3/sam3.pt` 与 `/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz`。
   - **Load Balancer**: 端口 8020。
 
 - **OCR (PaddleOCR)**
@@ -415,6 +416,19 @@ SUPABASE_JWT_SECRET=your-jwt-secret
   - **端口**: 8003。
 
 > 使用前请根据实际 GPU 数量和显存情况修改脚本中的 `gpu_id` 和实例数量。
+
+若需将 SAM3 资产迁移到本仓库内，可执行：
+
+```bash
+bash script/setup_sam3_assets.sh link
+# 或：bash script/setup_sam3_assets.sh copy
+```
+
+如果你要在单张 GPU 上一条命令联调（SAM3 + 后端 + 前端），可执行：
+
+```bash
+bash script/start_local_sam3_dev.sh
+```
 
 </details>
 

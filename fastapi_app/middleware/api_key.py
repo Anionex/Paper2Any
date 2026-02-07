@@ -49,6 +49,11 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
+        # CORS preflight requests do not include custom auth headers.
+        # Let CORSMiddleware handle them.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Skip excluded paths
         if path in EXCLUDED_PATHS:
             return await call_next(request)

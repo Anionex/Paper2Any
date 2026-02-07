@@ -1695,7 +1695,7 @@ def _build_elements_from_sam3(
 
 
 # ==================== WORKFLOW ====================
-@register("paper2drawio_sam3")
+@register("paper2drawio_sam3_back")
 def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
     builder = GenericGraphBuilder(state_model=Paper2DrawioState, entry_point="_start_")
 

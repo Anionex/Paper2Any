@@ -418,8 +418,9 @@ Script location: `/DataFlow-Agent/script/start_model_servers.sh`
   - **Instance configuration**: By default, 4 instances are started on GPU 0 and GPU 4 respectively (8 in total), ports 8011-8018.
   - **Load Balancer**: Port 8010, automatically dispatches requests.
 
-- **SAM (Segment Anything Model)**
-  - **Instance configuration**: By default, 1 instance is started on GPU 2 and GPU 3 respectively, ports 8021-8022.
+- **SAM3 (Segment Anything Model 3)**
+  - **Instance configuration**: By default, one instance per configured GPU, ports start from 8021.
+  - **Model assets**: default paths are `/data/users/pzw/models/sam3/sam3.pt` and `/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz`.
   - **Load Balancer**: Port 8020.
 
 - **OCR (PaddleOCR)**
@@ -427,6 +428,19 @@ Script location: `/DataFlow-Agent/script/start_model_servers.sh`
   - **Port**: 8003.
 
 > Before using, please modify `gpu_id` and the number of instances in the script according to your actual GPU count and memory.
+
+For SAM3 assets migration into this repository, run:
+
+```bash
+bash script/setup_sam3_assets.sh link
+# or: bash script/setup_sam3_assets.sh copy
+```
+
+For local one-command development test on a single GPU (SAM3 + backend + frontend), run:
+
+```bash
+bash script/start_local_sam3_dev.sh
+```
 
 </details>
 
