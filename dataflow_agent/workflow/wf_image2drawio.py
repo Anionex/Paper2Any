@@ -459,7 +459,7 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
 
         sam_ckpt = os.environ.get(
             "SAM3_CHECKPOINT_PATH",
-            "/data/users/pzw/models/sam3/sam3.pt",
+            str(get_project_root() / "models" / "sam3" / "sam3.pt"),
         )
         # optional server URLs (set SAM3_SERVER_URLS or SAM_SERVER_URLS env, comma-separated)
         sam_server_env = os.getenv("SAM3_SERVER_URLS", "").strip() or os.getenv("SAM_SERVER_URLS", "").strip()

@@ -408,7 +408,7 @@ SUPABASE_JWT_SECRET=your-jwt-secret
 
 - **SAM3 (Segment Anything Model 3)**
   - **实例配置**: 默认每个配置 GPU 启动 1 个实例，起始端口 8021。
-  - **模型路径**: 默认使用 `/data/users/pzw/models/sam3/sam3.pt` 与 `/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz`。
+  - **模型路径**: 默认使用 `./models/sam3/sam3.pt` 与 `./models/sam3/bpe_simple_vocab_16e6.txt.gz`。
   - **Load Balancer**: 端口 8020。
 
 - **OCR (PaddleOCR)**

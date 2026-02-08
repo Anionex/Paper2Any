@@ -32,8 +32,8 @@ MINERU_START_PORT=8011
 # SAM3 Config
 SAM3_GPUS=(4 5 6)
 SAM3_START_PORT=8021
-SAM3_CHECKPOINT_PATH="/data/users/pzw/models/sam3/sam3.pt"
-SAM3_BPE_PATH="/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz"
+SAM3_CHECKPOINT_PATH="$ROOT_DIR/models/sam3/sam3.pt"
+SAM3_BPE_PATH="$ROOT_DIR/models/sam3/bpe_simple_vocab_16e6.txt.gz"
 
 # ------------------------------------------------------------------------------
 #  🛠️ Helper Functions

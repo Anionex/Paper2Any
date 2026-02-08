@@ -127,11 +127,11 @@ def start_sam(config):
     instance_count = 0
     sam3_checkpoint = os.environ.get(
         "SAM3_CHECKPOINT_PATH",
-        "/data/users/pzw/models/sam3/sam3.pt",
+        str(ROOT_DIR / "models" / "sam3" / "sam3.pt"),
     )
     sam3_bpe = os.environ.get(
         "SAM3_BPE_PATH",
-        "/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz",
+        str(ROOT_DIR / "models" / "sam3" / "bpe_simple_vocab_16e6.txt.gz"),
     )
     
     for instance_group in sam_cfg.get("instances", []):

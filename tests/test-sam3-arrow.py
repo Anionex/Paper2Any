@@ -10,9 +10,9 @@ import numpy as np
 from dataflow_agent.toolkits.multimodaltool.sam_tool import run_sam_auto, free_sam_model
 
 # -------------------------- 配置参数（只改这3行！）--------------------------
-IMAGE_PATH = "/data/users/pzw/Paper2Any/tests/ori.png"  # 你的图片路径
-CHECKPOINT_PATH = "/data/users/pzw/models/sam3/sam3.pt"  # SAM3权重路径
-SAVE_RESULT_PATH = "/data/users/pzw/Paper2Any/tests/arrow_detect_result.png"  # 结果保存路径
+IMAGE_PATH = str(project_root / "tests" / "ori.png")  # 你的图片路径
+CHECKPOINT_PATH = str(project_root / "models" / "sam3" / "sam3.pt")  # SAM3权重路径
+SAVE_RESULT_PATH = str(project_root / "tests" / "arrow_detect_result.png")  # 结果保存路径
 # ---------------------------------------------------------------------------
 
 # 1. 使用SAM3按文本提示分割【仅所有箭头】（核心改动：添加text_prompt参数）

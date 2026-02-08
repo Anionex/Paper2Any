@@ -28,7 +28,6 @@ def _ensure_sam3_importable() -> None:
 
     project_root = Path(__file__).resolve().parents[3]
     candidates.append(project_root / "models" / "sam3-official" / "sam3")
-    candidates.append(Path("/data/users/pzw/models/sam3-official/sam3"))
 
     for path in candidates:
         if path.exists() and path.is_dir():
@@ -282,12 +281,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8001, help="Port to bind")
     parser.add_argument(
         "--checkpoint",
-        default=os.getenv("SAM3_CHECKPOINT_PATH", "/data/users/pzw/models/sam3/sam3.pt"),
+        default=os.getenv("SAM3_CHECKPOINT_PATH", str(Path(__file__).resolve().parents[3] / "models" / "sam3" / "sam3.pt")),
         help="Path to SAM3 checkpoint",
     )
     parser.add_argument(
         "--bpe",
-        default=os.getenv("SAM3_BPE_PATH", "/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz"),
+        default=os.getenv("SAM3_BPE_PATH", str(Path(__file__).resolve().parents[3] / "models" / "sam3" / "bpe_simple_vocab_16e6.txt.gz")),
         help="Path to SAM3 BPE file",
     )
     parser.add_argument("--score-threshold", type=float, default=0.5)

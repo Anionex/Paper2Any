@@ -396,8 +396,8 @@ MINERU_START_PORT=8011                      # 起始端口号
 # SAM3 Config
 SAM3_GPUS=(4 5 6)                           # 使用的 GPU ID
 SAM3_START_PORT=8021                        # 起始端口号
-SAM3_CHECKPOINT_PATH=/data/users/pzw/models/sam3/sam3.pt
-SAM3_BPE_PATH=/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz
+SAM3_CHECKPOINT_PATH=./models/sam3/sam3.pt
+SAM3_BPE_PATH=./models/sam3/bpe_simple_vocab_16e6.txt.gz
 ```
 
 **配置说明**：

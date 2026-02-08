@@ -271,7 +271,7 @@ def create_p2fig_graph() -> GenericGraphBuilder:  # noqa: N802
 
             sam_ckpt = os.environ.get(
                 "SAM3_CHECKPOINT_PATH",
-                "/data/users/pzw/models/sam3/sam3.pt",
+                str(get_project_root() / "models" / "sam3" / "sam3.pt"),
             )
             # SAM LB Port 8020
             sam_server_env = os.environ.get("SAM3_SERVER_URLS") or os.environ.get("SAM_SERVER_URLS")

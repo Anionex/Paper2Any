@@ -420,7 +420,7 @@ Script location: `/DataFlow-Agent/script/start_model_servers.sh`
 
 - **SAM3 (Segment Anything Model 3)**
   - **Instance configuration**: By default, one instance per configured GPU, ports start from 8021.
-  - **Model assets**: default paths are `/data/users/pzw/models/sam3/sam3.pt` and `/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz`.
+  - **Model assets**: default paths are `./models/sam3/sam3.pt` and `./models/sam3/bpe_simple_vocab_16e6.txt.gz`.
   - **Load Balancer**: Port 8020.
 
 - **OCR (PaddleOCR)**

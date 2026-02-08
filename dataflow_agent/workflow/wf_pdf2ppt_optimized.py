@@ -139,7 +139,7 @@ def _run_sam_on_pages(image_paths: List[str], base_dir: str) -> List[Dict[str, A
     results: List[Dict[str, Any]] = []
     sam_ckpt = os.environ.get(
         "SAM3_CHECKPOINT_PATH",
-        "/data/users/pzw/models/sam3/sam3.pt",
+        str(get_project_root() / "models" / "sam3" / "sam3.pt"),
     )
 
     for page_idx, img_path in enumerate(image_paths):

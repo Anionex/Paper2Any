@@ -175,7 +175,6 @@ def _ensure_sam3_available() -> None:
     try:
         project_root = get_project_root()
         candidates.append(project_root / "models" / "sam3-official" / "sam3")
-        candidates.append(Path("/data/users/pzw/models/sam3-official/sam3"))
     except Exception:
         pass
     # Legacy absolute path fallback (kept as last resort only)
@@ -325,7 +324,7 @@ def _resolve_layout_checkpoint(checkpoint: str) -> str:
     if Path(str(checkpoint)).name.lower() in {"sam_b.pt", "sam_l.pt", "sam_h.pt"}:
         return os.environ.get(
             "SAM3_CHECKPOINT_PATH",
-            "/data/users/pzw/models/sam3/sam3.pt",
+            str(get_project_root() / "models" / "sam3" / "sam3.pt"),
         )
     return checkpoint
 

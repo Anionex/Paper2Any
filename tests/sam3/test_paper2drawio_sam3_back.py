@@ -22,7 +22,7 @@ from urllib.error import URLError
 
 def _ensure_repo_on_path() -> Path:
     here = Path(__file__).resolve()
-    repo_root = here.parents[2]  # /data/users/pzw/Paper2Any
+    repo_root = here.parents[2]  # Paper2Any project root
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
     return repo_root

@@ -8,7 +8,7 @@ set -euo pipefail
 MODE="${1:-link}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-SRC_OFFICIAL_DIR="/data/users/pzw/models/sam3-official/sam3"
+SRC_OFFICIAL_DIR="$ROOT_DIR/models/sam3-official/sam3"
 
 DST_OFFICIAL_DIR="$ROOT_DIR/models/sam3-official/sam3"
 

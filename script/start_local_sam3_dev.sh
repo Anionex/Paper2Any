@@ -10,16 +10,14 @@ SAM3_PORT="${SAM3_PORT:-8001}"
 BACKEND_PORT="${BACKEND_PORT:-8009}"
 FRONTEND_PORT="${FRONTEND_PORT:-3001}"
 
-SAM3_CHECKPOINT_PATH="${SAM3_CHECKPOINT_PATH:-/data/users/pzw/models/sam3/sam3.pt}"
-SAM3_BPE_PATH="${SAM3_BPE_PATH:-/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz}"
-SAM3_HOME="${SAM3_HOME:-/data/users/pzw/models/sam3-official/sam3}"
+SAM3_CHECKPOINT_PATH="${SAM3_CHECKPOINT_PATH:-$ROOT_DIR/models/sam3/sam3.pt}"
+SAM3_BPE_PATH="${SAM3_BPE_PATH:-$ROOT_DIR/models/sam3/bpe_simple_vocab_16e6.txt.gz}"
+SAM3_HOME="${SAM3_HOME:-$ROOT_DIR/models/sam3-official/sam3}"
 SAM3_SERVER_URLS="${SAM3_SERVER_URLS:-http://127.0.0.1:${SAM3_PORT}}"
 
 PAPER2ANY_PYTHON="${PAPER2ANY_PYTHON:-}"
 if [[ -z "$PAPER2ANY_PYTHON" ]]; then
-  if [[ -x "/root/miniconda3/envs/pzw-dev/bin/python" ]]; then
-    PAPER2ANY_PYTHON="/root/miniconda3/envs/pzw-dev/bin/python"
-  elif command -v python3 >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1; then
     PAPER2ANY_PYTHON="$(command -v python3)"
   elif command -v python >/dev/null 2>&1; then
     PAPER2ANY_PYTHON="$(command -v python)"

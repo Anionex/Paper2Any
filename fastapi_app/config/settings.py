@@ -9,8 +9,13 @@ This module provides a centralized configuration system with three layers:
 All settings can be overridden via environment variables in .env file.
 """
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent
 
 
 class AppSettings(BaseSettings):
@@ -38,10 +43,10 @@ class AppSettings(BaseSettings):
     DEFAULT_LLM_API_URL: str = "http://123.129.219.111:3000/v1/"
 
     # Paper2Drawio SAM3 + OCR service configuration
-    PAPER2DRAWIO_SAM3_CHECKPOINT_PATH: str = "/data/users/pzw/models/sam3/sam3.pt"
-    PAPER2DRAWIO_SAM3_BPE_PATH: str = "/data/users/pzw/models/sam3/bpe_simple_vocab_16e6.txt.gz"
+    PAPER2DRAWIO_SAM3_CHECKPOINT_PATH: str = str(_project_root() / "models" / "sam3" / "sam3.pt")
+    PAPER2DRAWIO_SAM3_BPE_PATH: str = str(_project_root() / "models" / "sam3" / "bpe_simple_vocab_16e6.txt.gz")
     PAPER2DRAWIO_OCR_API_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    PAPER2DRAWIO_OCR_API_KEY: str = "sk-a82b5555d635416a95f4c2d7d0394174"
+    PAPER2DRAWIO_OCR_API_KEY: str = ""
 
     # ============================================
     # Layer 2: Workflow-level Default Models
