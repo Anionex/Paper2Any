@@ -7,10 +7,12 @@ import { OutputView } from './OutputView';
 import { SettingsView } from './SettingsView';
 import { RightPanel } from './RightPanel';
 import { MermaidPreview } from './tools/MermaidPreview';
+import { MindMapFlowEditor } from './tools/MindMapFlowEditor';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { X, Eye, Trash2, FileText, Image, Video, Link as LinkIcon, Headphones } from 'lucide-react';
 import { API_KEY } from '../../config/api';
+import ReactMarkdown from 'react-markdown';
 
 const KnowledgeBase = () => {
   const { user } = useAuthStore();
@@ -34,6 +36,20 @@ const KnowledgeBase = () => {
   const [mindmapSaving, setMindmapSaving] = useState(false);
   const [mindmapStatus, setMindmapStatus] = useState<string | null>(null);
   const [mindmapError, setMindmapError] = useState<string | null>(null);
+  const [mindmapViewMode, setMindmapViewMode] = useState<'visual' | 'code'>('visual');
+  const [markdownContent, setMarkdownContent] = useState('');
+  const [markdownLoading, setMarkdownLoading] = useState(false);
+  const [markdownError, setMarkdownError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('kb_sidebar_collapsed') === '1';
+  });
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    if (typeof window === 'undefined') return 400;
+    const saved = window.localStorage.getItem('kb_right_panel_width');
+    const parsed = saved ? parseInt(saved, 10) : 400;
+    return Number.isNaN(parsed) ? 400 : parsed;
+  });
 
   // Fetch files from Supabase on load
   useEffect(() => {
@@ -75,6 +91,16 @@ const KnowledgeBase = () => {
     if (!key || !outputsLoaded) return;
     localStorage.setItem(key, JSON.stringify(outputFiles));
   }, [outputFiles, user?.id, outputsLoaded]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('kb_right_panel_width', String(rightPanelWidth));
+  }, [rightPanelWidth]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('kb_sidebar_collapsed', sidebarCollapsed ? '1' : '0');
+  }, [sidebarCollapsed]);
 
   const fetchLibraryFiles = async () => {
     try {
@@ -159,6 +185,18 @@ const KnowledgeBase = () => {
     const name = (file.name || '').toLowerCase();
     const url = (file.url || '').toLowerCase();
     return name.endsWith('.mmd') || name.endsWith('.mermaid') || url.includes('.mmd') || url.includes('.mermaid');
+  };
+
+  const isMarkdownFile = (file?: KnowledgeFile | null) => {
+    if (!file) return false;
+    const name = (file.name || '').toLowerCase();
+    const url = (file.url || '').toLowerCase();
+    return name.endsWith('.md') || url.includes('.md');
+  };
+
+  const getStreamUrl = (url?: string) => {
+    if (!url) return '';
+    return `/api/v1/files/stream?url=${encodeURIComponent(url)}`;
   };
 
   // Handlers
@@ -260,6 +298,8 @@ const KnowledgeBase = () => {
       return;
     }
 
+    setMindmapViewMode('visual');
+
     if (!previewFile.url) {
       setMindmapError('无法获取思维导图文件路径。');
       return;
@@ -268,7 +308,7 @@ const KnowledgeBase = () => {
     let canceled = false;
     const loadMindmap = async () => {
       const tryFetch = async (url: string) => {
-        const res = await fetch(url);
+        const res = await fetch(getStreamUrl(url));
         if (!res.ok) {
           throw new Error(`读取失败: ${res.status}`);
         }
@@ -310,6 +350,46 @@ const KnowledgeBase = () => {
     };
   }, [previewFile?.id, previewFile?.url]);
 
+  useEffect(() => {
+    if (!previewFile || !isMarkdownFile(previewFile) || isMindmapFile(previewFile)) {
+      setMarkdownContent('');
+      setMarkdownError(null);
+      setMarkdownLoading(false);
+      return;
+    }
+
+    if (!previewFile.url) {
+      setMarkdownError('无法获取文件路径。');
+      return;
+    }
+
+    let canceled = false;
+    const loadMarkdown = async () => {
+      try {
+        setMarkdownLoading(true);
+        setMarkdownError(null);
+        const res = await fetch(getStreamUrl(previewFile.url));
+        if (!res.ok) {
+          throw new Error(`读取失败: ${res.status}`);
+        }
+        const text = await res.text();
+        if (canceled) return;
+        setMarkdownContent(text);
+      } catch (err: any) {
+        if (canceled) return;
+        setMarkdownError(err?.message || '读取 Markdown 失败。');
+      } finally {
+        if (!canceled) {
+          setMarkdownLoading(false);
+        }
+      }
+    };
+    loadMarkdown();
+    return () => {
+      canceled = true;
+    };
+  }, [previewFile?.id, previewFile?.url]);
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'doc': return <FileText size={20} className="text-blue-400" />;
@@ -330,6 +410,8 @@ const KnowledgeBase = () => {
         onSectionChange={setActiveSection}
         filesCount={files.length}
         outputCount={outputFiles.length}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
       />
 
       {/* 2. Main Content */}
@@ -403,6 +485,8 @@ const KnowledgeBase = () => {
         selectedIds={selectedIds}
         knowledgeBases={knowledgeBases}
         onGenerateSuccess={handleGenerateSuccess}
+        width={rightPanelWidth}
+        onWidthChange={setRightPanelWidth}
       />
 
       {/* Preview Drawer - Rendered at top level to be on top of RightPanel */}
@@ -435,7 +519,7 @@ const KnowledgeBase = () => {
               <div className="flex flex-col items-center text-center mb-8">
                 {previewFile.type === 'image' && previewFile.url ? (
                   <div className="w-full aspect-video rounded-xl overflow-hidden bg-black/40 border border-white/10 mb-4 group relative">
-                    <img src={previewFile.url} alt={previewFile.name} className="w-full h-full object-contain" />
+                    <img src={getStreamUrl(previewFile.url)} alt={previewFile.name} className="w-full h-full object-contain" />
                   </div>
                 ) : (
                   <div className="w-24 h-24 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
@@ -466,7 +550,7 @@ const KnowledgeBase = () => {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">存储路径</span>
-                      <a href={previewFile.url} target="_blank" className="text-purple-400 hover:text-purple-300 truncate max-w-[200px] hover:underline" rel="noreferrer">
+                      <a href={previewFile.url ? getStreamUrl(previewFile.url) : undefined} target="_blank" className="text-purple-400 hover:text-purple-300 truncate max-w-[200px] hover:underline" rel="noreferrer">
                         查看源文件
                       </a>
                     </div>
@@ -481,7 +565,7 @@ const KnowledgeBase = () => {
                     </h4>
                     <div className="bg-white/5 rounded-xl overflow-hidden border border-white/10">
                       <img
-                        src={previewFile.url}
+                        src={getStreamUrl(previewFile.url)}
                         alt={previewFile.name}
                         className="w-full h-auto object-contain max-h-[500px]"
                         onError={(e) => {
@@ -509,7 +593,7 @@ const KnowledgeBase = () => {
                         controls
                         autoPlay
                         preload="metadata"
-                        src={`/api/v1/files/stream?url=${encodeURIComponent(previewFile.url)}`}
+                        src={getStreamUrl(previewFile.url)}
                       />
                     </div>
                   </div>
@@ -549,11 +633,44 @@ const KnowledgeBase = () => {
                               )}
                             </div>
 
-                            <textarea
-                              value={mindmapDraft}
-                              onChange={(e) => setMindmapDraft(e.target.value)}
-                              className="w-full min-h-[180px] bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 font-mono outline-none focus:border-cyan-500"
-                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setMindmapViewMode('visual')}
+                                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                                  mindmapViewMode === 'visual'
+                                    ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300'
+                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                }`}
+                              >
+                                可视化编辑
+                              </button>
+                              <button
+                                onClick={() => setMindmapViewMode('code')}
+                                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                                  mindmapViewMode === 'code'
+                                    ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300'
+                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                }`}
+                              >
+                                Mermaid 代码
+                              </button>
+                            </div>
+
+                            {mindmapViewMode === 'visual' ? (
+                              <MindMapFlowEditor
+                                mermaidCode={mindmapDraft}
+                                onApply={(code) => {
+                                  setMindmapDraft(code);
+                                  setMindmapPreviewCode(code);
+                                }}
+                              />
+                            ) : (
+                              <textarea
+                                value={mindmapDraft}
+                                onChange={(e) => setMindmapDraft(e.target.value)}
+                                className="w-full min-h-[180px] bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 font-mono outline-none focus:border-cyan-500"
+                              />
+                            )}
 
                             {mindmapPreviewCode ? (
                               <MermaidPreview mermaidCode={mindmapPreviewCode} title="思维导图预览" />
@@ -565,10 +682,22 @@ const KnowledgeBase = () => {
                       </div>
                     ) : (
                       <>
-                        {previewFile.name.toLowerCase().endsWith('.pdf') && previewFile.url ? (
+                        {isMarkdownFile(previewFile) ? (
+                          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                            {markdownLoading ? (
+                              <div className="text-sm text-gray-400">正在加载 Markdown...</div>
+                            ) : markdownError ? (
+                              <div className="text-sm text-red-400">{markdownError}</div>
+                            ) : (
+                              <div className="text-sm text-gray-200 leading-relaxed">
+                                <ReactMarkdown>{markdownContent || ''}</ReactMarkdown>
+                              </div>
+                            )}
+                          </div>
+                        ) : previewFile.name.toLowerCase().endsWith('.pdf') && previewFile.url ? (
                           <div className="bg-white/5 rounded-xl overflow-hidden border border-white/10">
                             <iframe
-                              src={previewFile.url}
+                              src={getStreamUrl(previewFile.url)}
                               className="w-full h-[600px]"
                               title="PDF Preview"
                             />
@@ -599,7 +728,7 @@ const KnowledgeBase = () => {
                         className="w-full"
                         controls
                         preload="metadata"
-                        src={previewFile.url}
+                        src={getStreamUrl(previewFile.url)}
                       >
                         您的浏览器不支持视频播放
                       </video>
@@ -611,7 +740,7 @@ const KnowledgeBase = () => {
 
             <div className="pt-6 mt-6 border-t border-white/10 flex gap-3">
               <a 
-                href={previewFile.url} 
+                href={previewFile.url ? getStreamUrl(previewFile.url) : undefined} 
                 target="_blank" 
                 rel="noreferrer"
                 className="flex-1 py-3 bg-white text-black hover:bg-gray-200 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-white/10"

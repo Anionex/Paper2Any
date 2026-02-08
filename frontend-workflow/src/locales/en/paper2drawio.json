@@ -71,5 +71,16 @@
       "textToDiagramTitle": "Text to Diagram",
       "textToDiagramDesc": "Enter text description and quickly generate visual diagrams"
     }
+  },
+  "cases": {
+    "title": "Flow / Architecture Cases",
+    "subtitle": "Examples are editable and exportable",
+    "feishu": "View Feishu Doc",
+    "items": {
+      "case1Title": "Flowchart Example",
+      "case1Desc": "Generate editable flowcharts from text or PDF",
+      "case2Title": "Architecture Example",
+      "case2Desc": "Great for system architecture and module relations"
+    }
   }
 }

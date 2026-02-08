@@ -84,7 +84,7 @@ export const OutputView = ({ files, onGoToTool, onPreview }: OutputViewProps) =>
               </div>
               <div className="flex gap-2">
                 <a
-                  href={file.url}
+                  href={file.url ? getStreamUrl(file.url) : undefined}
                   download={file.name || 'download'}
                   onClick={(e) => e.stopPropagation()}
                   className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"

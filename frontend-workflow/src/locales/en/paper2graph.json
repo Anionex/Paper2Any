@@ -155,5 +155,16 @@
       "tableTextToExpDataTitle": "Experimental table text → data charts in PPT",
       "tableTextToExpDataDesc": "Extract metrics and baselines from textual experimental descriptions and generate presentation-ready experimental result PPTX."
     }
+  },
+  "cases": {
+    "title": "Model Architecture Cases",
+    "subtitle": "Examples can be converted to DrawIO for online editing",
+    "feishu": "View Feishu Doc",
+    "items": {
+      "case1Title": "Model Architecture Case 1",
+      "case1Desc": "Clear hierarchy for easy refinement",
+      "case2Title": "Model Architecture Case 2",
+      "case2Desc": "Module relations and data flow"
+    }
   }
 }

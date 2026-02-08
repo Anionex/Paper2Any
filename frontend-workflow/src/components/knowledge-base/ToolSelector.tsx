@@ -1,4 +1,4 @@
-import { MessageSquare, Presentation, BrainCircuit, Headphones, PlayCircle, Search } from 'lucide-react';
+import { MessageSquare, Presentation, BrainCircuit, Headphones, PlayCircle, Search, FlaskConical, FileBarChart } from 'lucide-react';
 import { ToolType } from './types';
 
 interface ToolSelectorProps {
@@ -10,6 +10,8 @@ export const ToolSelector = ({ activeTool, onToolChange }: ToolSelectorProps) =>
   const tools = [
     { id: 'chat', icon: MessageSquare, label: '智能问答' },
     { id: 'search', icon: Search, label: '语义检索' },
+    { id: 'deepresearch', icon: FlaskConical, label: '深度研究' },
+    { id: 'report', icon: FileBarChart, label: '报告生成' },
     { id: 'ppt', icon: Presentation, label: 'PPT 生成' },
     { id: 'mindmap', icon: BrainCircuit, label: '思维导图' },
     { id: 'podcast', icon: Headphones, label: '知识播客' },
