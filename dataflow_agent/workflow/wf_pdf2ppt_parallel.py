@@ -68,6 +68,8 @@ SERVER_CONFIG = load_server_config()
 # Helper to construct URLs
 def get_sam_urls():
     # Check env var first
+    if os.environ.get("SAM3_SERVER_URLS"):
+        return os.environ.get("SAM3_SERVER_URLS").split(",")
     if os.environ.get("SAM_SERVER_URLS"):
         return os.environ.get("SAM_SERVER_URLS").split(",")
     
@@ -128,7 +130,10 @@ def _run_sam_on_pages(image_paths: List[str], base_dir: str) -> List[Dict[str, A
     对每一页图片运行 SAM，输出 layout_items。
     """
     results: List[Dict[str, Any]] = []
-    sam_ckpt = f"{get_project_root()}/sam_b.pt"
+    sam_ckpt = os.environ.get(
+        "SAM3_CHECKPOINT_PATH",
+        "/data/users/pzw/models/sam3/sam3.pt",
+    )
 
     for page_idx, img_path in enumerate(image_paths):
         img_path_obj = Path(img_path)

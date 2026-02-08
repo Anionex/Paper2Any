@@ -107,6 +107,8 @@ def _resize_image_for_ppt(img_path: str, max_w: int = 1920, max_h: int = 1080) -
 
 # Helper to construct URLs
 def get_sam_urls():
+    if os.environ.get("SAM3_SERVER_URLS"):
+        return os.environ.get("SAM3_SERVER_URLS").split(",")
     if os.environ.get("SAM_SERVER_URLS"):
         return os.environ.get("SAM_SERVER_URLS").split(",")
     sam_cfg = SERVER_CONFIG.get("sam", {})
@@ -135,7 +137,10 @@ def _ensure_result_path(state: Paper2FigureState) -> str:
 
 def _run_sam_on_pages(image_paths: List[str], base_dir: str) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
-    sam_ckpt = f"{get_project_root()}/sam_b.pt"
+    sam_ckpt = os.environ.get(
+        "SAM3_CHECKPOINT_PATH",
+        "/data/users/pzw/models/sam3/sam3.pt",
+    )
 
     for page_idx, img_path in enumerate(image_paths):
         img_path_obj = Path(img_path)

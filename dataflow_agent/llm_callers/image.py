@@ -8,6 +8,7 @@ from dataflow_agent.logger import get_logger
 
 # Import new tools
 from dataflow_agent.toolkits.multimodaltool.req_ocr import call_ocr_async
+from dataflow_agent.toolkits.multimodaltool.ocr_config import get_ocr_api_credentials
 from dataflow_agent.toolkits.multimodaltool.req_understanding import call_image_understanding_async
 from dataflow_agent.toolkits.multimodaltool.req_videos import call_video_understanding_async
 from dataflow_agent.toolkits.multimodaltool.req_img import generate_or_edit_and_save_image_async
@@ -68,12 +69,13 @@ class VisionLLMCaller(BaseLLMCaller):
         # 转换 LangChain 消息为 list[dict]
         msgs = self._convert_messages(messages)
         image_path = self.vlm_config.get("input_image")
+        ocr_api_url, ocr_api_key = get_ocr_api_credentials()
         
         content = await call_ocr_async(
             model=self.model_name,
             messages=msgs,
-            api_url=self.state.request.chat_api_url,
-            api_key=self.state.request.api_key,
+            api_url=ocr_api_url,
+            api_key=ocr_api_key,
             image_path=image_path,
             max_tokens=self.max_tokens,
             temperature=0.01, # OCR usually needs low temp
