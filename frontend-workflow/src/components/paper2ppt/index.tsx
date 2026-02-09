@@ -391,15 +391,20 @@ const Paper2PptPage = () => {
           msg = '邀请码不正确或已失效';
         } else if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
       console.log('API Response:', JSON.stringify(data, null, 2));
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
       
       const currentResultPath = data.result_path || '';
@@ -573,13 +578,18 @@ const Paper2PptPage = () => {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
 
       const data = await res.json();
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
 
       if (!data.pagecontent || data.pagecontent.length === 0) {
@@ -648,21 +658,26 @@ const Paper2PptPage = () => {
         headers: { 'X-API-Key': API_KEY },
         body: formData,
       });
-      
+
       if (!res.ok) {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
-      
+
       const updatedResults = results.map((result, index) => {
         const pageNumStr = String(index).padStart(3, '0');
         let afterImage = '';
@@ -878,16 +893,21 @@ const Paper2PptPage = () => {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
-      
+
       const pageNumStr = String(currentSlideIndex).padStart(3, '0');
       let afterImage = updatedResults[currentSlideIndex].afterImage;
       
@@ -972,21 +992,26 @@ const Paper2PptPage = () => {
         headers: { 'X-API-Key': API_KEY },
         body: formData,
       });
-      
+
       if (!res.ok) {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
-      
+
       // 优先使用后端直接返回的路径
       if (data.ppt_pptx_path) {
         setDownloadUrl(data.ppt_pptx_path);
@@ -1015,7 +1040,16 @@ const Paper2PptPage = () => {
         }
       }
 
-      // Record usage
+      // 校验是否有有效的输出文件
+      const hasOutput = data.ppt_pptx_path || data.ppt_pdf_path ||
+        (data.all_output_files && data.all_output_files.some((url: string) =>
+          url.endsWith('.pptx') || (url.endsWith('.pdf') && !url.includes('input'))
+        ));
+      if (!hasOutput) {
+        throw new Error('生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
+      }
+
+      // 校验通过后才扣积分
       await recordUsage(user?.id || null, 'paper2ppt');
       refreshQuota();
 
