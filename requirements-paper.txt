@@ -45,4 +45,4 @@ img2pdf
 reportlab
 imgkit==1.2.3
 
-seaborn-0.13.2
+seaborn==0.13.2
