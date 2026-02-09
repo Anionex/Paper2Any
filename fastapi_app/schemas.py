@@ -198,6 +198,63 @@ class OutlineRefineRequest(BaseModel):
     pagecontent: str
 
 
+# ===================== KB Deep Research 相关 =====================
+
+class DeepResearchRequest(BaseModel):
+    mode: Literal["llm", "web"] = "llm"
+    topic: str = ""
+    file_paths: List[str] = []
+    api_url: str
+    api_key: str
+    model: str = settings.MODEL_GPT_4O
+    language: str = "zh"
+    email: Optional[str] = None
+    user_id: Optional[str] = None
+    search_provider: Literal["serpapi", "google_cse", "brave"] = "serpapi"
+    search_api_key: str = ""
+    search_engine: Literal["google", "baidu"] = "google"
+    search_num: int = 10
+    google_cse_id: str = ""
+    brave_summarizer: bool = True
+    search_depth: int = 2
+    max_queries: int = 6
+    top_k_per_query: int = 5
+    fetch_top_n: int = 8
+    max_page_chars: int = 8000
+    enable_agentic: bool = True
+
+
+class DeepResearchResponse(BaseModel):
+    success: bool
+    report_markdown: str = ""
+    report_path: str = ""
+    search_results: List[Dict[str, Any]] = []
+    sources: List[Dict[str, Any]] = []
+    summaries: List[Dict[str, Any]] = []
+    output_file_id: str = ""
+
+
+# ===================== KB Report 相关 =====================
+
+class KBReportRequest(BaseModel):
+    file_paths: List[str] = []
+    api_url: str
+    api_key: str
+    model: str = "gpt-5.1"
+    language: str = "zh"
+    report_style: Literal["insight", "analysis"] = "insight"
+    length: Literal["short", "standard", "long"] = "standard"
+    email: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+class KBReportResponse(BaseModel):
+    success: bool
+    report_markdown: str = ""
+    report_path: str = ""
+    output_file_id: str = ""
+
+
 class PPTGenerationRequest(BaseModel):
     """专用于PPT生成/编辑的请求模型"""
     img_gen_model_name: str

@@ -34,12 +34,17 @@ def _to_outputs_url(abs_path: str, request: Request | None = None) -> str:
     try:
         rel = p.relative_to(outputs_root)
 
-        # 构造完整 URL（包含协议、域名和端口）
+        # 构造 URL（优先使用反向代理透传的 Host/Proto，否则降级为相对路径）
         if request is not None:
-            base_url = str(request.base_url).rstrip("/")
-            url = f"{base_url}/outputs/{rel.as_posix()}"
+            xf_proto = request.headers.get("x-forwarded-proto")
+            xf_host = request.headers.get("x-forwarded-host")
+            if xf_proto and xf_host:
+                base_url = f"{xf_proto}://{xf_host}"
+                url = f"{base_url}/outputs/{rel.as_posix()}"
+            else:
+                # 没有透传头时，用相对路径避免 http/https 混合内容问题
+                url = f"/outputs/{rel.as_posix()}"
         else:
-            # 降级：使用相对路径
             url = f"/outputs/{rel.as_posix()}"
 
         log.warning(f"[DEBUG] generated URL: {url}")

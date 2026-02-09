@@ -20,6 +20,7 @@ from .wa_paper2ppt import (
     run_paper2ppt_wf_api,
     run_paper2ppt_full_pipeline,
 )
+from .wa_kb_deepresearch import run_kb_deepresearch_wf_api
 
 __all__ = [
     "run_paper_to_video_api",
@@ -28,4 +29,5 @@ __all__ = [
     "run_paper2page_content_refine_wf_api",
     "run_paper2ppt_wf_api",
     "run_paper2ppt_full_pipeline",
+    "run_kb_deepresearch_wf_api",
 ]

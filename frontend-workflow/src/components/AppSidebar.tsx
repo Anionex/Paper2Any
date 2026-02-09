@@ -8,7 +8,7 @@ import {
   ImagePlus,
   Image,
   Wand2,
-  BookOpen,
+  // BookOpen,
   FolderOpen,
   Network,
   MessageSquare,
@@ -114,13 +114,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       icon: ImagePlus,
       gradient: 'from-cyan-500 to-blue-500'
     },
-    {
-      id: 'knowledge',
-      labelKey: t('app.nav.knowledge'),
-      tooltipKey: t('app.navTooltip.knowledge'),
-      icon: BookOpen,
-      gradient: 'from-indigo-500 to-purple-500'
-    },
+    // {
+    //   id: 'knowledge',
+    //   labelKey: t('app.nav.knowledge'),
+    //   tooltipKey: t('app.navTooltip.knowledge'),
+    //   icon: BookOpen,
+    //   gradient: 'from-indigo-500 to-purple-500'
+    // },
     {
       id: 'files',
       labelKey: t('app.nav.files'),

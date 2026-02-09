@@ -27,10 +27,11 @@ async def _post_raw(
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as e:
-            log.error(f"OCR Request failed: {e.response.text}")
+            log.error(f"OCR Request failed with status {e.response.status_code}: {e.response.text[:500]}")
             raise
         except Exception as e:
-            log.error(f"OCR Error: {e}")
+            log.error(f"OCR Error: {type(e).__name__}: {e}")
+            log.error(f"Request URL: {url}")
             raise
 
 async def call_ocr_async(

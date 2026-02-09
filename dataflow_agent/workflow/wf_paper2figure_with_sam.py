@@ -269,9 +269,16 @@ def create_p2fig_graph() -> GenericGraphBuilder:  # noqa: N802
             out_dir = base_dir / "layout_items"
             out_dir.mkdir(parents=True, exist_ok=True)
 
-            sam_ckpt = f'{get_project_root()}/sam_b.pt'
+            sam_ckpt = os.environ.get(
+                "SAM3_CHECKPOINT_PATH",
+                str(get_project_root() / "models" / "sam3" / "sam3.pt"),
+            )
             # SAM LB Port 8020
-            sam_server_urls = ["http://localhost:8020"]
+            sam_server_env = os.environ.get("SAM3_SERVER_URLS") or os.environ.get("SAM_SERVER_URLS")
+            if sam_server_env:
+                sam_server_urls = [u.strip() for u in sam_server_env.split(",") if u.strip()]
+            else:
+                sam_server_urls = ["http://localhost:8020"]
 
             # 1. SAM 分割 + 过滤 + 裁剪子图 (优先使用远程服务)
             try:
