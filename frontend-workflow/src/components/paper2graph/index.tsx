@@ -1033,13 +1033,39 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
           {enableDrawio && drawioXml && (
             <div className="mb-10">
-              <DrawioInlineEditor
-                title="DrawIO 在线编辑 / Editor"
-                subtitle="可直接在下方编辑图形，支持复制或下载 .drawio / Edit below and download .drawio"
-                xmlContent={drawioXml}
-                onXmlChange={setDrawioXml}
-                loadingLabel={drawioXml === emptyDrawioXml ? '等待生成 / Pending' : undefined}
-              />
+              {drawioXml === emptyDrawioXml ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">DrawIO 在线编辑 / Editor</h3>
+                      <p className="text-xs text-slate-400">可直接在下方编辑图形，支持复制或下载 .drawio / Edit below and download .drawio</p>
+                    </div>
+                    <span className="text-[11px] text-slate-500">等待生成 / Pending</span>
+                  </div>
+                  <div
+                    className="mt-4 flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-[#0b0f17]"
+                    style={{ height: '560px' }}
+                  >
+                    <svg className="w-16 h-16 text-slate-600 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" />
+                      <rect x="14" y="14" width="7" height="7" rx="1" />
+                      <line x1="10" y1="6.5" x2="14" y2="6.5" />
+                      <line x1="6.5" y1="10" x2="6.5" y2="14" />
+                    </svg>
+                    <p className="text-sm text-slate-500">请先上传论文并生成模型架构图</p>
+                    <p className="text-xs text-slate-600 mt-1">Upload a paper and generate the model architecture first</p>
+                  </div>
+                </div>
+              ) : (
+                <DrawioInlineEditor
+                  title="DrawIO 在线编辑 / Editor"
+                  subtitle="可直接在下方编辑图形，支持复制或下载 .drawio / Edit below and download .drawio"
+                  xmlContent={drawioXml}
+                  onXmlChange={setDrawioXml}
+                />
+              )}
             </div>
           )}
 
