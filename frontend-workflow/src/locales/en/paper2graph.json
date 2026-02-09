@@ -70,7 +70,12 @@
       "cartoon": "Cartoon",
       "realistic": "Photorealistic",
       "lowPoly": "Low poly 3D",
-      "lego": "LEGO-style"
+      "lego": "LEGO-style",
+      "3d": "3D Rendering",
+      "flat_2.5d": "Flat 2.5D",
+      "line_art": "Line Art",
+      "low_poly": "Low Poly",
+      "neon_glow": "Neon Glow"
     },
     "resolutionLabel": "Resolution",
     "resolution": {

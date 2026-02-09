@@ -297,3 +297,9 @@ tests/debug_frames/
 # 静态资源中的大图片（可选：如果这些图片需要版本控制，请删除此行）
 # static/new_readme/*.png
 # static/paper2any_imgs/
+
+# 进程监控脚本和清理脚本（自动生成，不需要版本控制）
+deploy/monitor.sh
+deploy/stop_monitor.sh
+deploy/clean_git_history.sh
+deploy/precise_clean.sh

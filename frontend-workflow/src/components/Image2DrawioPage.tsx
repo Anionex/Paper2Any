@@ -211,6 +211,16 @@ const Image2DrawioPage = () => {
         },
         body: formData,
       });
+
+      if (!res.ok) {
+        let msg = t('errors.apiFail');
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) msg = errBody.error;
+        } catch { /* ignore parse error */ }
+        throw new Error(msg);
+      }
+
       const data = await res.json();
 
       if (!data?.success || !data?.xml_content) {

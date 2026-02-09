@@ -33,10 +33,39 @@ class FigureDescGenerator(BaseAgent):
 
     def get_task_prompt_params(self, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         paper_idea = pre_tool_results.get("paper_idea")
-        return {
+        style = self.state.request.style
+        figure_complex = getattr(self.state.request, "figure_complex", "mid")
+        if not figure_complex or figure_complex == "":
+            figure_complex = "easy"
+
+        params = {
             "paper_idea": paper_idea,
-            "style": self.state.request.style
+            "style": style
         }
+
+        # 根据复杂度注入风格配置
+        if figure_complex in ["easy", "mid"]:
+            try:
+                from dataflow_agent.promptstemplates.resources.pt_technical_route_desc_generator_repo import FIGURE_STYLE_CONFIGS
+                style_config = FIGURE_STYLE_CONFIGS.get(style, FIGURE_STYLE_CONFIGS.get("cartoon", {}))
+
+                if figure_complex == "easy":
+                    params.update(style_config)
+                else:
+                    params.update({
+                        "style_desc": style_config.get("style_desc", ""),
+                        "color_palette": style_config.get("color_palette", ""),
+                        "rendering": style_config.get("rendering", ""),
+                        "font": style_config.get("font", "")
+                    })
+
+            except Exception as e:
+                log.error(f"[get_task_prompt_params] Failed to load style config: {e}")
+        else:
+            log.info(f"[get_task_prompt_params] Hard complexity, no style config injection")
+
+
+        return params
 
     def get_default_pre_tool_results(self) -> Dict[str, Any]:
         return {

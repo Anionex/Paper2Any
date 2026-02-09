@@ -585,16 +585,21 @@ const Ppt2PolishPage = () => {
           msg = '邀请码不正确或已失效';
         } else if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
-      
+
       console.log('API Response:', JSON.stringify(data, null, 2)); // 调试信息
-      
+
       if (!data.success) {
-        throw new Error(t('errors.serverBusy'));
+        throw new Error(data.error || t('errors.serverBusy'));
       }
       
       // 保存 result_path
@@ -871,15 +876,20 @@ const Ppt2PolishPage = () => {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
       console.log('Initial PPT generation response:', JSON.stringify(data, null, 2));
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
       
       // 更新美化结果，使用生成的 ppt_pages/page_*.png 作为 afterImage
@@ -1013,16 +1023,21 @@ const Ppt2PolishPage = () => {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
       console.log('美化响应:', JSON.stringify(data, null, 2));
       console.log('all_output_files:', data.all_output_files);
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
       
       // 从 all_output_files 中找到对应的页面图片
@@ -1217,16 +1232,21 @@ const Ppt2PolishPage = () => {
         let msg = '服务器繁忙，请稍后再试';
         if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       const data = await res.json();
-      
+
       if (!data.success) {
-        throw new Error('服务器繁忙，请稍后再试');
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
       }
-      
+
       // 从 all_output_files 中找到 PPTX 和 PDF 文件
       const pptxUrl = data.all_output_files?.find((url: string) => url.endsWith('.pptx')) || data.ppt_pptx_path;
       const pdfUrl = data.all_output_files?.find((url: string) => 

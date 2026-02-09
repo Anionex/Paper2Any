@@ -70,7 +70,12 @@
       "cartoon": "卡通",
       "realistic": "写实",
       "lowPoly": "低多边形",
-      "lego": "乐高风"
+      "lego": "乐高风",
+      "3d": "3D渲染",
+      "flat_2.5d": "扁平2.5D",
+      "line_art": "线稿",
+      "low_poly": "低多边形",
+      "neon_glow": "科技"
     },
     "resolutionLabel": "分辨率",
     "resolution": {
