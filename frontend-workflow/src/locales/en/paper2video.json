@@ -1,0 +1,75 @@
+{
+  "steps": {
+    "upload": "Upload Paper",
+    "script": "Confirm Script",
+    "complete": "Complete & Download"
+  },
+  "upload": {
+    "subtitle": "PAPER → VIDEO",
+    "title": "Paper2Video",
+    "desc": "Upload PDF paper, optional avatar and voice. AI generates voice script per page, then video.",
+    "instruction": {
+      "pdf": "Upload PDF paper (required)"
+    },
+    "optional": "optional",
+    "avatarLabel": "Digital human",
+    "avatarUseNone": "No digital human",
+    "avatarUseYes": "Use digital human",
+    "avatarTipTime": "Using a digital human will add about 5–10 minutes to generation time",
+    "avatarUpload": "Click to upload avatar (JPG/PNG)",
+    "avatarSystemLabel": "System avatars",
+    "avatarUploadOwn": "Upload your own",
+    "avatarChoiceHint": "Choose system avatar or upload your own (choose one)",
+    "voiceLabel": "Voice",
+    "voiceUseTts": "Use TTS model (Gemini TTS)",
+    "voiceUseFile": "Use voice file",
+    "voiceChoiceHint": "Use system voice or upload your own (choose one)",
+    "voiceSystemLabel": "System voice",
+    "voiceWoman": "woman",
+    "voiceMan": "man",
+    "voiceUploadOwn": "Upload my own voice",
+    "voicePreview": "Preview",
+    "voiceUpload": "Click to upload voice (.wav)",
+    "dropzone": {
+      "dragText": "Drag PDF here",
+      "supportText": "PDF only",
+      "button": "Select PDF"
+    },
+    "config": {
+      "title": "Configuration",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "sk-...",
+      "scriptApiUrl": "Script API URL",
+      "scriptModel": "Script model",
+      "ttsModel": "TTS model",
+      "ttsFixed": "Fixed to gemini-2.5-pro-preview-tts",
+      "language": "Language",
+      "startParse": "Start parsing",
+      "parsing": "Parsing..."
+    }
+  },
+  "script": {
+    "title": "Confirm voice script",
+    "desc": "Check and edit the script for each page. Layout: all pages listed vertically.",
+    "page": "Page",
+    "pageWithNum": "Page {{num}}",
+    "scriptLabel": "Voice script",
+    "scriptPlaceholder": "Edit script for this page...",
+    "loadingImage": "Loading image...",
+    "back": "Back to upload",
+    "confirmAndGenerate": "Confirm and generate video",
+    "generating": "Generating video..."
+  },
+  "complete": {
+    "title": "Video ready",
+    "desc": "Preview and download your video.",
+    "generating": "Generating video, please wait...",
+    "progressPreparing": "Preparing...",
+    "progressTts": "Synthesizing speech...",
+    "progressVideo": "Generating talking video...",
+    "noVideo": "No video URL yet.",
+    "download": "Download video",
+    "videoNotSupported": "Your browser does not support the video tag.",
+    "newTask": "Process new paper"
+  }
+}
