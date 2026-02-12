@@ -272,15 +272,43 @@ class ApiYiGeminiProvider(AIProviderStrategy):
             log.error(f"Response preview: {str(data)[:500]}")
             raise
 
+    # Gemini TTS 无 speakingRate 参数，通过文本前加 Pacing 指令控制语速
+    # steady：不论长短都保持稳定、自然的语速（避免短句偏慢、fast 偏快）
+    _TTS_PACE_PREFIX = {
+        "slow": "Say at a slow, relaxed pace. Transcript: ",
+        "normal": "",  # 不加指令，模型可能随文本长短自行调节（短句易偏慢）
+        "steady": (
+            "Speak at a natural conversational pace, like an adult speaking in everyday dialogue. "
+            "Avoid slow, careful, or narrated delivery. "
+            "Transcript: "
+        ),
+        "fast": "Say at a little bit faster pace than natural pace. Transcript: ",
+    }
+
     def build_tts_request(self, api_url: str, model: str, text: str, **kwargs) -> Tuple[str, Dict[str, Any], bool]:
         base = self._get_base_url(api_url)
         url = f"{base}/v1beta/models/{model}:generateContent"
-        
+
         voice_name = kwargs.get("voice_name", "Kore")
-        
+        speech_speed = kwargs.get("speech_speed")
+        if speech_speed == "normal":
+            prefix = self._TTS_PACE_PREFIX["normal"]
+        elif speech_speed is None or speech_speed == "steady":
+            prefix = self._TTS_PACE_PREFIX["steady"]
+        elif isinstance(speech_speed, (int, float)):
+            if speech_speed >= 1.25:
+                prefix = self._TTS_PACE_PREFIX["fast"]
+            elif speech_speed <= 0.75:
+                prefix = self._TTS_PACE_PREFIX["slow"]
+            else:
+                prefix = self._TTS_PACE_PREFIX["steady"]
+        else:
+            prefix = self._TTS_PACE_PREFIX.get(str(speech_speed).lower(), self._TTS_PACE_PREFIX["steady"])
+        content_text = (prefix + text) if prefix else text
+
         payload = {
             "contents": [{
-                "parts": [{"text": text}]
+                "parts": [{"text": content_text}]
             }],
             "generationConfig": {
                 "responseModalities": ["AUDIO"],

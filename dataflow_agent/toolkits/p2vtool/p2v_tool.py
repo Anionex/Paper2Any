@@ -3,15 +3,23 @@ from __future__ import annotations
 from dataflow_agent.logger import get_logger
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional, List
-import torch
+from typing import Dict, Any, Tuple, Optional, List, Union, Optional
+import os
+os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
+import json
+from PIL import Image, ImageFont, ImageDraw
+import shutil
+import multiprocessing
+import string
+import cv2
+import numpy as np
 
 log = get_logger(__name__)
 import re
 
 def get_image_paths(directory_path: str) -> List[str]:
     """
-    遍历指定目录及其子目录，查找所有常见的图片文件，并返回它们的路径字符串列表。
+    遍历指定目录及其子目录，查找所有常见的图片文件，并按照日期排序，返回它们的路径字符串列表。
     """
     # 1. 常用图片文件扩展名列表
     image_extensions = [
@@ -20,29 +28,389 @@ def get_image_paths(directory_path: str) -> List[str]:
     
     base_path = Path(directory_path)
     if not base_path.is_dir():
-        # 如果目录不存在，返回空列表并打印错误
-        log.warning(f"Error: Directory not found at {directory_path}")
+        print(f"Error: Directory not found at {directory_path}")
         return []
 
     found_image_paths: List[Path] = []
     
     # 2. 递归遍历目录并收集路径
     for ext in image_extensions:
-        # rglob(ext) 查找所有匹配该扩展名的文件，无论嵌套多深
-        # extend() 将迭代器的所有元素添加到列表中
-        found_image_paths.extend(base_path.rglob(ext))
+        found_image_paths.extend(base_path.glob(ext))
 
     #3. 对找到的图片路径按照文件名日期进行排序，确保顺序
     def natural_sort_key(path: Path):
-        file_name = path.name
-        numbers = re.findall(r'(\d+)', file_name)
-        return tuple(int(n) for n in numbers)
+        numbers = re.findall(r'(\d+)', path.name)
+        return tuple(int(n) for n in numbers) if numbers else (float('inf'),)
     
     found_image_paths.sort(key=natural_sort_key)
     return [str(p.resolve()) for p in found_image_paths]
 
+def create_subtitle_image(text, font_size=32, font_path="arial.ttf"):
+    if font_path == "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc":
+        try:
+            font = ImageFont.truetype(font_path, font_size, index=2)
+        except Exception as e:
+            print(f"[Warning] Failed to load font from '{font_path}': {e}")
+            print("Using default font (fixed size, font_size will be ignored!)")
+            font = ImageFont.load_default()
 
-def parse_script(script_text):
+    dummy_img = Image.new("RGBA", (70, 70))
+    draw = ImageDraw.Draw(dummy_img)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+
+    padding = 20
+    box_w = text_w + 2*padding
+    box_h = text_h + 2*padding
+    img = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 160))  # semi-transparent black
+
+    draw = ImageDraw.Draw(img)
+    draw.text((padding, padding), text, font=font, fill=(255, 255, 255, 255))
+
+    return img
+
+# 根据语音识别结果（带时间戳），生成对应的视频字幕片段
+def generate_subtitle_clips(sentence_timesteps_file, video_w, video_h, font_size):
+    from moviepy.editor import ImageClip
+    clips = []
+    with open(sentence_timesteps_file, 'r', encoding='utf-8') as f:
+        datas = json.load(f)
+    for sentence_timestep in datas:
+        # fixme:这里的绝对路径是 支持英文的字体，如果是中文的，需要进行修改
+        img = create_subtitle_image(sentence_timestep["text"], font_size=font_size, font_path="/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
+        img_array = np.array(img)
+        clip = (ImageClip(img_array, ismask=False)
+                .set_duration(sentence_timestep["end"] - sentence_timestep["start"])
+                .set_start(sentence_timestep["start"])
+                .set_position(("center", video_h - font_size*2)))
+        clips.append(clip)
+    return clips
+
+# 从sentece_timesteps_path中读取有关的sentence的时间和文本，实际上就是保存的cursor.json文件中的内容
+def add_subtitles(video_path, output_path, sentence_timesteps_path, font_size):
+    from moviepy.editor import VideoFileClip, CompositeVideoClip
+    print("[Step 1] Generating subtitle clips...")
+    video = VideoFileClip(video_path)
+    subs = generate_subtitle_clips(sentence_timesteps_path, video.w, video.h, font_size)
+
+    print("[Step 2] Rendering final video...")
+    final = CompositeVideoClip([video] + subs)
+    # 使用cpu
+    final.write_videofile(output_path, codec="libx264", audio_codec="aac", threads=12, preset="veryfast")
+    # 使用GPU加速
+    # final.write_videofile(output_path, codec="h264_nvenc", audio_codec="aac")
+
+def render_cursor_on_video(
+    input_video: str,
+    output_video: str,
+    cursor_points: list,          # list of (time, x, y)
+    transition_duration: float = 0.1,
+    cursor_size: int = 10,
+    cursor_img_path: str = "cursor.png"):
+
+    img = Image.open(cursor_img_path)
+    img_resized = img.resize((cursor_size, cursor_size))
+    img_resized.save(cursor_img_path)
+
+
+    def get_video_resolution(path):
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "json", path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        info = json.loads(result.stdout)
+        width = info["streams"][0]["width"]
+        height = info["streams"][0]["height"]
+        return width, height
+
+    w, h = get_video_resolution(input_video)
+    print(f"Video resolution: {w}x{h}")
+
+    # 记录了鼠标的移动位置信息，以一个列表的形式
+    filters = []
+
+    t_first, _, _ = cursor_points[0]
+    # 在视频正式开始时，记录光标轨迹之前，让光标静止悬浮在屏幕的正中央
+    if t_first > transition_duration:
+        cx = w / 2 - cursor_size / 2
+        cy = h / 2 - cursor_size / 2
+        global_hold = (
+            f"overlay=x={cx}:y={cy-20}:"
+            f"enable='between(t,0,{round(t_first - transition_duration, 3)})'"
+        )
+        filters.append(global_hold)
+        
+    for i in range(1, len(cursor_points)):
+        t0, x0, y0 = cursor_points[i - 1]
+        t1, x1, y1 = cursor_points[i]
+
+        hold_start = round(t0, 3)
+        hold_end = round(t1 - transition_duration, 3)
+        if hold_end > hold_start:
+            x_hold = x0 - cursor_size / 2
+            y_hold = y0 - cursor_size / 2
+            hold_expr = (
+                f"overlay=x={x_hold}:y={y_hold}:"
+                f"enable='between(t,{hold_start},{hold_end})'"
+            )
+            filters.append(hold_expr)
+
+        move_start = round(t1 - transition_duration, 3)
+        move_end = t1
+        dx = x1 - x0
+        dy = y1 - y0
+        x_expr = f"{x0 - cursor_size/2} + ({dx})*(t-{move_start})/{transition_duration}"
+        y_expr = f"{y0 - cursor_size/2} + ({dy})*(t-{move_start})/{transition_duration}"
+        move_expr = (
+            f"overlay=x={x_expr}:y={y_expr}:"
+            f"enable='between(t,{move_start},{move_end})'"
+        )
+        filters.append(move_expr)
+
+    filter_lines = []
+    stream_in = "[0][1]"
+    for i, expr in enumerate(filters):
+        stream_out = f"[tmp{i}]" if i < len(filters) - 1 else "[vout]"
+        filter_lines.append(f"{stream_in} {expr} {stream_out}")
+        stream_in = f"{stream_out}[1]"
+
+    filter_complex = "; ".join(filter_lines)
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_video,
+        "-i", cursor_img_path,
+        "-filter_complex", filter_complex,
+        "-map", "[vout]",
+        "-map", "0:a?",
+        "-c:v", "libx264",
+        "-c:a", "copy",
+        output_video
+    ]
+    subprocess.run(cmd, check=True)
+    print(f"\n✅ Done! Output saved to: {output_video}")
+
+
+def render_video_with_cursor_from_json(
+    video_path,
+    out_video_path,
+    json_path,
+    cursor_img_path,
+    transition_duration=0.1,
+    cursor_size=16
+):
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    cursor_points = []
+    for idx, slide in enumerate(data):
+        if idx == 0: start_time = slide["start"]
+        else: start_time = slide["start"] + 0.5
+        x, y = slide["cursor"]
+        cursor_points.append((start_time, x, y))
+    
+    render_cursor_on_video(
+        input_video=video_path,
+        output_video=out_video_path,
+        cursor_points=cursor_points,
+        transition_duration=transition_duration,
+        cursor_size=cursor_size,
+        cursor_img_path=cursor_img_path
+    )
+'''========================== 解析生成 数字人 相关的函数  =================================='''
+def run_echomimic_inference(args):
+    from ruamel.yaml import YAML
+    source_image, driving_audio, save_video_dir, config_path, script_path, talking_head_env, gpu_id = args
+    
+    # 处理可能的 PYTHONSHASHSEED 问题
+    env = os.environ.copy()
+    keys_to_clear = ["PYTHONHASHSEED", "PYTHONPATH"] 
+    for key in keys_to_clear:
+        if key in env:
+            del env[key]
+    
+    env["PYTHONHASHSEED"] = "random"
+    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+    audio_basename = os.path.splitext(os.path.basename(driving_audio))[0]
+    save_path = os.path.join(save_video_dir, f"{audio_basename}")
+    config_bak = config_path.replace(".yaml", "_{}.yaml".format(audio_basename))
+    
+    # 修改原来配置文件中的内容，因为原有文件内容中保存文件的地址不对
+    yaml_rt = YAML()
+    yaml_rt.preserve_quotes = True  # 保留引号
+    yaml_rt.indent(mapping=2, sequence=4, offset=2) # 保持缩进风格
+
+    # 1. 读取原始配置
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config_data = yaml_rt.load(f)
+
+    # 2. 修改 test_cases
+    config_data['test_cases'] = {
+        source_image: [driving_audio]
+    }
+    with open(config_bak, 'w', encoding='utf-8') as f:
+        yaml_rt.dump(config_data, f)
+    
+    cmd = [
+        talking_head_env, "-u", script_path,
+        "--config", config_bak,
+        "--save_path", save_path,
+    ]
+    log.info(f"Starting Task on GPU {gpu_id}: {audio_basename}")
+    result = subprocess.run(cmd, cwd="/data/users/ligang/EchoMimic", env=env)
+
+    if os.path.exists(config_bak):
+        os.remove(config_bak)
+    return result
+
+def talking_gen_per_slide(model_name, input_list, project_root, save_dir, env_path):
+    import multiprocessing as mp
+    save_dir = Path(save_dir)
+
+    # fixme: 这里可能需要修改
+    gpu_list = [4,5,6,4,5,6,4,5,6]
+    num_gpus = len(gpu_list)
+    task_list = []
+    if model_name == "hallo2":
+        # fixme：这个文件路径被硬编码了
+        config_path = "/data/users/ligang/models/hallo2/configs/inference/long.yaml"
+        script_path = "/data/users/ligang/models/hallo2/scripts/inference_long.py"
+    elif model_name == "echomimic":
+        config_path = "/data/users/ligang/EchoMimic/configs/prompts/animation.yaml"
+        script_path = "/data/users/ligang/EchoMimic/infer_audio2vid.py"
+    for idx, (ref_img_path, audio_path) in enumerate(input_list):
+        ref_img_path = Path(ref_img_path)
+        audio_path = Path(audio_path)
+        gpu_id = gpu_list[len(task_list) % num_gpus]
+        # target_path = save_dir / str(idx) / "digit_person_withaudio.mp4"
+        # if not target_path.exists():
+        task_list.append([
+            str(ref_img_path), 
+            str(audio_path), 
+            str(save_dir), 
+            str(config_path), 
+            str(script_path), 
+            env_path,
+            gpu_id,
+        ])
+
+    results = []
+    
+    if num_gpus > 1:
+        ctx = mp.get_context("spawn")
+        # fixme: 这个错误很致命！！！在这段代码之前，某处执行的代码错误的将“PYTHONHASHSEED”设置为了一个64位整数
+        # 而python只支持32位的整数，所以会导致使用ctx.Pool时发生错误，无法初始化一个python解释器
+        os.environ["PYTHONHASHSEED"] = "0"
+        with ctx.Pool(processes=max(num_gpus, len(task_list))) as pool:
+            results = pool.map(run_echomimic_inference, task_list)
+    else:
+        for task_args in task_list:
+            result = run_echomimic_inference(task_args)
+            results.append(result)
+    return results
+
+
+def get_audio_paths(slide_audio_dir: Optional[str | Path]):
+    '''获取 slide_audio_dir 目录下的所有音频文件路径，并按数字顺序排序返回'''
+    if isinstance(slide_audio_dir, str):
+        slide_audio_dir = Path(slide_audio_dir)
+    slide_audio_paths = [
+        p for p in slide_audio_dir.iterdir()
+        if p.is_file() and re.search(r'\d+', p.name)
+    ]
+
+    def get_sort_key(file_path: Path):
+        match = re.search(r'(\d+)', file_path.name)
+        return int(match.group()) if match else float('inf')
+    
+    slide_audio_paths.sort(key=get_sort_key)
+    slide_audio_paths = [str(p) for p in slide_audio_paths]
+    return slide_audio_paths
+
+def clean_text(text):
+    text = text.lower()
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    return text
+
+def get_audio_length(audio_path):
+    '''获取音频文件(.wav)的总时长（秒）'''
+    import wave
+    with wave.open(audio_path, "rb") as wf:
+        frames = wf.getnframes()
+        rate = wf.getframerate()
+        return frames / rate
+    
+def get_mp4_duration_ffprobe(path):
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(path)
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+    return float(result.stdout.strip())
+
+'''========================== 解析生成cursor位置信息相关的函数  =================================='''
+_GLOBAL_PIPE_BYTEDANCE_SEED = None
+def _infer_cursor(instruction, image_path):
+    global _GLOBAL_PIPE_BYTEDANCE_SEED
+    from transformers import pipeline
+    from ui_tars.action_parser import parse_action_to_structure_output, parsing_response_to_pyautogui_code
+
+    # fixme：修改一下这段代码，最好不要从hf上下载，而是在本地就下载好了，但是这个路径或许需要处理！！！
+    if _GLOBAL_PIPE_BYTEDANCE_SEED is None:
+        _GLOBAL_PIPE_BYTEDANCE_SEED = pipeline("image-text-to-text", model="/data/users/ligang/models/bytedance-seed")
+    prompt = "You are a GUI agent. You are given a task and your action history, with screenshots. You must to perform the next action to complete the task. \n\n## Output Format\n\nAction: ...\n\n\n## Action Space\nclick(point='<point>x1 y1</point>'')\n\n## User Instruction {}".format(instruction)
+    messages = [{"role": "user", "content": [{"type": "image", "url": image_path}, {"type": "text", "text": prompt}]},]
+    result = _GLOBAL_PIPE_BYTEDANCE_SEED(text=messages)[0]
+    response = result['generated_text'][1]["content"]
+    
+    ori_image = cv2.imread(image_path)
+    #fixme: OpenCV 的 shape 返回的是 (height, width, channels)
+    original_image_height, original_image_width = ori_image.shape[:2]
+    parsed_dict = parse_action_to_structure_output(
+        response,
+        factor=1000,
+        origin_resized_height=original_image_height,
+        origin_resized_width=original_image_width,
+        model_type="qwen25vl"
+    )
+
+    parsed_pyautogui_code = parsing_response_to_pyautogui_code(
+        responses=parsed_dict,
+        image_height=original_image_height,
+        image_width=original_image_width
+    )
+
+    match = re.search(r'pyautogui\.click\(([\d.]+),\s*([\d.]+)', parsed_pyautogui_code)
+    if match:
+        x = float(match.group(1))
+        y = float(match.group(2))
+    else:
+        print(instruction)
+    return (x, y)
+
+def cursor_infer(args):
+    '''根据说话的内容，得到cursor应该指向的位置'''
+    slide_idx, sentence_idx, prompt, cursor_prompt, image_path, gpu_id = args
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    import torch
+    
+    point= _infer_cursor(cursor_prompt, image_path)
+    torch.cuda.empty_cache()
+    result = {
+        'slide': slide_idx, 'sentence': sentence_idx, 'speech_text': prompt, 
+        'cursor_prompt': cursor_prompt, 'cursor': point,
+    }
+    return result
+
+'''========================== 解析生成speech相关的函数  =================================='''
+def parse_script_with_cursor(script_text):
     '''
     解析脚本的内容，将其分割成（prompt, cursor_prompt）两部分
     '''
@@ -60,24 +428,203 @@ def parse_script(script_text):
         result.append(page_data)
     return result
 
-def transcribe_with_whisperx(audio_path, lang="en", device="cuda" if torch.cuda.is_available() else "cpu"):
-    '''根据ref_audio生成对应的ref_text，从而在后续使用f5模型时，提供对齐文本，更好的提高最后audio的效果'''
+def parse_script(script_text):
+    '''
+    解析脚本的内容，将多个句子合并成一个句子
+    '''
+    pages = script_text.strip().split("###\n")
+    result = []
+    for page in pages:
+        if not page.strip(): continue   
+        lines = page.strip().split("\n")
+        result.append(" ".join(lines))
+    return result
+
+# fixme: 这里需要判断device，可能需要多加考虑
+def _transcribe_with_whisperx_impl(audio_path: str, lang: str = "en") -> str:
+    """
+    子进程内实际执行 whisperx 转写。假定 CUDA_VISIBLE_DEVICES 已由调用方在子进程 env 中设置。
+    """
+    import torch
     import whisperx
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     log.info(f"transcribe_with_whisperx 使用了 device: {device}")
     model = whisperx.load_model("large-v2", device=device, compute_type="float16" if device == "cuda" else "int8")
     result = model.transcribe(audio_path, language=lang)
-    model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+    model_a, metadata = whisperx.load_align_model(language_code=lang, device=device)
     result_aligned = whisperx.align(result["segments"], model_a, metadata, audio_path, device)
     segments = result_aligned["segments"]
-    text = " ".join(seg["text"].strip() for seg in segments)
+    if lang == "zh":
+        text = "".join(seg["text"].strip() for seg in segments)
+    else:
+        text = " ".join(seg["text"].strip() for seg in segments)
     return text
 
+
+def transcribe_with_whisperx(audio_path, lang="en", device_id=None):
+    '''根据ref_audio生成对应的ref_text，从而在后续使用f5模型时，提供对齐文本，更好的提高最后audio的效果。
+    device_id: 指定 GPU 编号时，在子进程中运行 whisperx（CUDA_VISIBLE_DEVICES 在子进程生效）；None 表示当前进程默认 GPU。
+    '''
+    if device_id is None:
+        return _transcribe_with_whisperx_impl(audio_path, lang)
+
+    # 主进程已指定 GPU/CUDA，改 env 无效；在子进程中设置 CUDA_VISIBLE_DEVICES 后执行
+    import sys
+    import tempfile
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(device_id)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        out_path = f.name
+    try:
+        cmd = [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from pathlib import Path; "
+                "from dataflow_agent.toolkits.p2vtool.p2v_tool import _transcribe_with_whisperx_impl; "
+                "text = _transcribe_with_whisperx_impl(sys.argv[1], sys.argv[2]); "
+                "Path(sys.argv[3]).write_text(text, encoding='utf-8')"
+            ),
+            audio_path,
+            lang,
+            out_path,
+        ]
+        log.info(f"transcribe_with_whisperx 在子进程运行，device_id={device_id}")
+        subprocess.run(cmd, env=env, check=True, timeout=300)
+        return Path(out_path).read_text(encoding="utf-8")
+    finally:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+
+def _run_f5_in_subprocess(text_prompt: str, save_path: str, ref_audio_path: str, ref_text: str, gpu_id: int) -> None:
+    """
+    在未初始化 CUDA 的子进程中运行 F5-TTS，以便 CUDA_VISIBLE_DEVICES 生效。
+    主进程可能已固定 GPU，直接改 os.environ 无效。
+    """
+    import sys
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    cmd = [
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "from dataflow_agent.toolkits.p2vtool.p2v_tool import inference_f5; "
+            "inference_f5(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])"
+        ),
+        text_prompt,
+        save_path,
+        ref_audio_path,
+        ref_text,
+    ]
+    subprocess.run(cmd, env=env, check=True, timeout=300)
+
+
 def inference_f5(text_prompt, save_path, ref_audio, ref_text):
+    '''使用 F5-TTS 模型做语音生成/克隆。通过一段参考音频及其对应的文本，克隆其音色并生成目标文本的语音'''
     from f5_tts.api import F5TTS
-    f5tts = F5TTS()
+    import torch
+    try:
+        from omegaconf.listconfig import ListConfig
+        from omegaconf.dictconfig import DictConfig
+        
+        # 即使 weights_only=True，这两个类也会被放行
+        with torch.serialization.safe_globals([ListConfig, DictConfig]):
+            f5tts = F5TTS()
+    except ImportError:
+        # 如果没有 omegaconf 库，回退到普通实例化
+        f5tts = F5TTS()
     f5tts.infer(ref_file=ref_audio, ref_text=ref_text, gen_text=text_prompt, file_wave=save_path, seed=None,)
 
+def merge_wav_files(file_list, output_path):
+    '''将多个wav文件合并为一个wav文件，实际上是将一张ppt中的多个sentence wav合并为一个wav'''
+    from pydub import AudioSegment
+    combined = AudioSegment.empty()
+    for file in file_list:
+        audio = AudioSegment.from_wav(file)
+        combined += audio
+    combined.export(output_path, format="wav")
 
+def speech_task_wrapper_with_f5(task_args):
+    """
+    单个句子的语音生成任务, 使用 F5-TTS 模型
+    """
+    (slide_idx, idx, prompt, ref_audio_path, ref_text, speech_result_path, gpu_id) = task_args
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    
+    # 2. 调用 F5-TTS 推理
+    inference_f5(prompt, str(speech_result_path), ref_audio_path, ref_text)
+    
+    # 3. 获取时长
+    duration = get_audio_length(str(speech_result_path))
+    return slide_idx, idx, duration, str(speech_result_path)
+
+def speech_task_wrapper_with_gemini(task_args):
+    """
+    单个句子的语音生成任务，优先使用 Gemini TTS；若 5 次内均失败则回退到 F5-TTS（需提供 ref_audio_path、ref_text、gpu_list）。
+    task_args 可为 7 元组或 10 元组：
+    - 7 元组: (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url)
+    - 10 元组: 上述 7 项 + (ref_audio_path, ref_text, gpu_list)，用于 Gemini 失败后 F5 回退
+    """
+    from dataflow_agent.toolkits.multimodaltool.req_tts import (
+        generate_speech_and_save_async,
+        TTSFallbackToF5Error,
+    )
+    import asyncio
+
+    if len(task_args) >= 9:
+        (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url,
+         gpu_list, speech_language) = task_args[:9]
+        can_fallback_f5 = bool(gpu_list)
+    else:
+        (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url) = task_args
+        ref_audio_path = ref_text = gpu_list = None
+        can_fallback_f5 = False
+
+    async def _run_gemini():
+        return await generate_speech_and_save_async(
+            prompt,
+            str(speech_result_path),
+            api_url=chat_api_url,
+            api_key=api_key,
+            model=tts_model,
+            voice_name="Kore",
+            max_attempts=5,
+        )
+
+    try:
+        speech_result_path = asyncio.run(_run_gemini())
+    except TTSFallbackToF5Error:
+        if not can_fallback_f5:
+            raise
+        log.warning(f"Gemini TTS 5 次均失败，回退 F5-TTS: slide_idx={slide_idx}, idx={idx}")
+        # 从 speech_result_path 的父目录中任选一个 .wav 作为 ref_audio
+        parent_dir = Path(speech_result_path).resolve().parent
+        current_name = Path(speech_result_path).name
+        wav_files = [p for p in parent_dir.glob("*.wav") if p.name != current_name]
+        if not wav_files:
+            log.error(f"回退 F5 时父目录下无其他 .wav 可作 ref_audio: {parent_dir}")
+            raise
+        ref_audio_path = str(wav_files[0])
+        ref_text = transcribe_with_whisperx(ref_audio_path, lang=speech_language)
+        gpu_id = gpu_list[(slide_idx * 100 + idx) % len(gpu_list)]
+        _run_f5_in_subprocess(
+            prompt,
+            str(speech_result_path),
+            ref_audio_path,
+            ref_text,
+            gpu_id,
+        )
+        speech_result_path = str(speech_result_path)
+
+    duration = get_audio_length(speech_result_path)
+    return slide_idx, idx, duration, speech_result_path
+
+
+'''========================== 使用beamer生成ppt的函数  =================================='''
 def extract_beamer_code(text_str):
     match = re.search(r"(\\documentclass(?:\[[^\]]*\])?\{beamer\}.*?\\end\{document\})", text_str, re.DOTALL)
     return match.group(1) if match else None
@@ -144,3 +691,45 @@ def beamer_code_validator(content: str, parsed_result: Dict[str, Any]) -> Tuple[
         except subprocess.CalledProcessError as e:
             code_debug_result = f"STDOUT:\n{e.stdout}\n\nSTDERR:\n{e.stderr}"
             return False, code_debug_result
+
+
+def parser_beamer_latex(code: str):
+    # 1. 提取 Head: 从 \documentclass 到 \begin{document} 之间的内容
+    head_pattern = r'\\documentclass(?:\[[^\]]*\])?\{beamer\}(.*?)\\begin\{document\}'
+    head_match = re.search(head_pattern, code, flags=re.DOTALL)
+    head_content = head_match.group(1).strip() if head_match else "未找到导言区"
+
+    # 2. 提取所有 Frame (Slides)
+    # 逻辑：匹配 \begin{frame} 和 \end{frame} 之间的所有内容
+    # 注意：beamer 的 frame 可能带有参数，如 \begin{frame}{标题} 或 \begin{frame}[fragile]
+    frame_pattern = r'\\begin\{frame\}.*?(.*?)\\end\{frame\}'
+    frames = re.findall(frame_pattern, code, flags=re.DOTALL)
+    
+    frames_cleaned = [f.strip() for f in frames]
+
+    return head_content, frames_cleaned
+
+def resize_latex_image(code: Union[str, List[str]]):
+    # 改进正则：
+    # 1. 允许 width= 后面有空格
+    # 2. 捕获数值后的单位（如 \textwidth, \linewidth, \columnwidth）
+    pattern = r'(\\includegraphics\[[^\]]*width\s*=\s*)([\d.]+)\s*(\\[a-z]+|cm|mm|pt|in)?'
+    
+    def shrink_width_logic(match):
+        prefix = match.group(1)
+        current_val = float(match.group(2))
+        unit = match.group(3) if match.group(3) else "" # 捕获单位
+        
+        new_val = max(0.1, current_val - 0.2)
+        return f"{prefix}{new_val:.1f}{unit}"
+    
+    if isinstance(code, str):
+        return re.sub(pattern, shrink_width_logic, code)
+
+    if isinstance(code, list):
+        new_code = code.copy()
+        for i, line in enumerate(new_code):
+            if isinstance(line, str) and "includegraphics" in line:
+                new_code[i] = re.sub(pattern, shrink_width_logic, line)
+        return new_code
+    raise TypeError(f"Unsupported code type: {type(code)}")

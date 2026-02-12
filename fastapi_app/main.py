@@ -46,11 +46,12 @@ def create_app() -> FastAPI:
     app.add_middleware(APIKeyMiddleware)
 
     # 路由挂载
-    app.include_router(paper2video.router, prefix="/paper2video", tags=["paper2video"])
     # Paper2Graph / System
     app.include_router(paper2any.router, prefix="/api/v1", tags=["paper2any"])
     # Paper2PPT
     app.include_router(paper2ppt.router, prefix="/api/v1", tags=["paper2ppt"])
+    # paper2video
+    app.include_router(paper2video.router, prefix="/api/v1", tags=["paper2video"])
     # PDF2PPT
     app.include_router(pdf2ppt.router, prefix="/api/v1", tags=["pdf2ppt"])
     # Image2PPT

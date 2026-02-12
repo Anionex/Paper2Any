@@ -24,17 +24,54 @@ class ErrorResponse(BaseModel):
 
 
 class FeaturePaper2VideoRequest(BaseModel):
-    model: str = settings.PAPER2VIDEO_DEFAULT_MODEL,
-    chat_api_url: str = settings.DEFAULT_LLM_API_URL,
-    api_key: str = "",
-    pdf_path: str = "",
-    img_path: str = "",
-    language: str = "",
+    model: str = settings.PAPER2VIDEO_DEFAULT_MODEL
+    chat_api_url: str = settings.DEFAULT_LLM_API_URL
+    api_key: str = ""
+    pdf_path: str = ""
+    img_path: str = ""
+    language: str = ""
 
 
 class FeaturePaper2VideoResponse(BaseModel):
     success: bool
     ppt_path: str
+
+
+# --------------- paper2video 两步流程：生成脚本 + 生成视频 ---------------
+
+
+class ScriptPageItem(BaseModel):
+    """单页脚本项，用于 generate-subtitle 响应与 generate-video 请求。"""
+    page_num: int = 0
+    image_url: str = ""   # 前端展示用 URL；generate-video 请求可不传或传空
+    script_text: str = ""  # 该页语音脚本正文（用户可编辑）
+
+
+class GenerateSubtitleResponse(BaseModel):
+    """generate-subtitle 接口响应：解析论文后得到的脚本页列表、任务目录与 state_snapshot（供第二步复用 state）。"""
+    success: bool = True
+    message: Optional[str] = None
+    result_path: str = ""   # 本次任务输出根目录（后端路径，前端后续原样回传）
+    script_pages: List[Dict[str, Any]] = []  # [{ "page_num", "image_url", "script_text" }, ...]
+    state_snapshot: Optional[Dict[str, Any]] = None  # 第一步 state 序列化，第二步请求时原样回传以复用 state
+    all_output_files: List[str] = []  # 可选，本次任务产出文件 URL 列表，便于前端预加载
+
+
+class GenerateVideoRequest(BaseModel):
+    """generate-video 接口请求体（从 Form 解析后组装）。"""
+    result_path: str = ""
+    script_pages: str = ""  # JSON 字符串，列表 [{ "page_num", "script_text" }, ...]
+    state_snapshot: Optional[str] = None  # 第一步返回的 state_snapshot 的 JSON 字符串，可选
+    email: Optional[str] = None
+
+
+class GenerateVideoResponse(BaseModel):
+    """generate-video 接口响应：最终视频地址。"""
+    success: bool = True
+    message: Optional[str] = None
+    video_url: str = ""   # 浏览器可访问的完整 URL，优先返回
+    video_path: str = ""  # 后端本地路径，当 video_url 为空时前端可据此拼 URL
+
 
 
 # ===================== LLM Verification =====================
