@@ -279,6 +279,11 @@ const SettingsCard: React.FC<SettingsCardProps> = ({
               >
                 <option value="cartoon">{t('advanced.style.cartoon')}</option>
                 {graphType !== 'exp_data' && <option value="realistic">{t('advanced.style.realistic')}</option>}
+                {graphType !== 'exp_data' && <option value="3d">{t('advanced.style.3d')}</option>}
+                {graphType !== 'exp_data' && <option value="flat_2.5d">{t('advanced.style.flat_2.5d')}</option>}
+                {graphType !== 'exp_data' && <option value="line_art">{t('advanced.style.line_art')}</option>}
+                {graphType !== 'exp_data' && <option value="low_poly">{t('advanced.style.low_poly')}</option>}
+                {graphType !== 'exp_data' && <option value="neon_glow">{t('advanced.style.neon_glow')}</option>}
                 {graphType === 'exp_data' && <option value="Low Poly 3D">{t('advanced.style.lowPoly')}</option>}
                 {graphType === 'exp_data' && <option value="blocky LEGO aesthetic">{t('advanced.style.lego')}</option>}
               </select>

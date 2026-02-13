@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
 from fastapi_app.services.image2drawio_service import Image2DrawioService
+from fastapi_app.config.settings import settings
 
 router = APIRouter(prefix="/image2drawio", tags=["image2drawio"])
 
@@ -20,8 +21,8 @@ class Image2DrawioResponse(BaseModel):
 @router.post("/generate", response_model=Image2DrawioResponse)
 async def generate_image2drawio(
     image_file: UploadFile = File(...),
-    chat_api_url: str = Form(""),
-    api_key: str = Form(""),
+    chat_api_url: str = Form(settings.PAPER2DRAWIO_OCR_API_URL),
+    api_key: str = Form(settings.PAPER2DRAWIO_OCR_API_KEY),
     model: str = Form("gpt-4o"),
     gen_fig_model: str = Form("gemini-3-pro-image-preview"),
     vlm_model: str = Form("qwen-vl-ocr-2025-11-20"),

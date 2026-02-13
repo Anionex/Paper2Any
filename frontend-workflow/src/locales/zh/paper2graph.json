@@ -70,7 +70,12 @@
       "cartoon": "卡通",
       "realistic": "写实",
       "lowPoly": "低多边形",
-      "lego": "乐高风"
+      "lego": "乐高风",
+      "3d": "3D渲染",
+      "flat_2.5d": "扁平2.5D",
+      "line_art": "线稿",
+      "low_poly": "低多边形",
+      "neon_glow": "科技"
     },
     "resolutionLabel": "分辨率",
     "resolution": {
@@ -79,7 +84,7 @@
     }
   },
   "submit": {
-    "buttonIdle": "生成可编辑 PPTX",
+    "buttonIdle": "生成",
     "buttonLoading": "生成中...",
     "hintTitle": "提示",
     "hintText": "提示：如果长时间无响应或生成失败，可能是 API 服务商不稳定。建议稍后再试，或尝试更换模型/服务商。"
@@ -155,6 +160,17 @@
       "pdfToExpDataDesc": "从论文实验部分 PDF 中提取表格与结果描述，自动生成对比柱状图 / 折线图 PPTX，便于直观展示结果。",
       "tableTextToExpDataTitle": "论文实验表格文本 → 自动整理实验数据 绘制成 PPT",
       "tableTextToExpDataDesc": "从文本形式的实验结果描述中抽取指标与对照组，一键生成适合汇报的实验结果 PPTX。"
+    }
+  },
+  "cases": {
+    "title": "模型架构图案例",
+    "subtitle": "示例可直接转为 DrawIO 在线编辑",
+    "feishu": "查看飞书文档",
+    "items": {
+      "case1Title": "模型架构示例一",
+      "case1Desc": "结构层级清晰，便于二次编辑",
+      "case2Title": "模型架构示例二",
+      "case2Desc": "模块关系与数据流展示"
     }
   }
 }

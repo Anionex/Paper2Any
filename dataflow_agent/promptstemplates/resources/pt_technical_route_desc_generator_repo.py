@@ -3,10 +3,180 @@ Prompt Templates for technical_route_desc_generator
 Generated at: 2025-12-08 01:19:09
 """
 
+# ============================================================================
+# 风格配置字典 - 用于模型结构图生成
+# ============================================================================
+FIGURE_STYLE_CONFIGS = {
+    "cartoon": {
+        "style_desc": "Cartoon illustration style with bold outlines, vibrant colors, simplified shapes, playful and friendly aesthetic",
+        "color_palette": "Bright and saturated colors (Sky Blue, Sunshine Yellow, Grass Green, Cherry Red)",
+        "rendering": "Thick black outlines, flat shading, comic book style",
+        "font": "Comic Sans MS or similar playful font",
+        "visual_elements": "Simplified geometric shapes, bold icons, exaggerated features",
+        "line_style": "Thick, bold strokes with slight imperfections for hand-drawn feel",
+        "shading": "Flat colors with minimal shading, high contrast"
+    },
+    "realistic": {
+        "style_desc": "Photorealistic rendering with detailed textures, accurate lighting, professional photography quality",
+        "color_palette": "Natural and muted tones (Navy Blue, Charcoal Grey, Forest Green, Burgundy)",
+        "rendering": "Gradient shading, realistic shadows, depth of field, subtle lighting effects",
+        "font": "Professional Sans-Serif (Helvetica, Arial, Roboto)",
+        "visual_elements": "Detailed textures, realistic materials, accurate proportions, professional diagrams",
+        "line_style": "Clean, precise lines with consistent thickness",
+        "shading": "Gradient shading with realistic shadows and highlights"
+    },
+    "3d": {
+        "style_desc": "Professional scientific infographic with 3D rendering, biomedical illustration style, clear and educational",
+        "color_palette": "Professional soft palette (blue, purple, green, pink tones) with color-coding. Clean white or light background",
+        "rendering": "Hand-drawn feel 3D rendering, finely polished, semi-realistic style with isometric perspective. Smooth gradients and soft shadows",
+        "font": "Clean Sans-Serif (Roboto, Helvetica) for clarity",
+        "visual_elements": "3D isometric blocks, layered panels, flow arrows, clear annotations and labels",
+        "line_style": "Medium-weight lines with subtle depth cues",
+        "shading": "Soft gradients with isometric lighting, subtle shadows for depth"
+    },
+    "flat_2.5d": {
+        "style_desc": "Modern flat design with subtle 2.5D depth effects, clean and minimalist aesthetic with layered elements",
+        "color_palette": "Vibrant flat colors with subtle gradients (Coral #FF6B6B, Teal #4ECDC4, Yellow #FFE66D, Purple #A8E6CF)",
+        "rendering": "Flat shapes with subtle shadows and layering to create 2.5D depth, clean edges, modern UI-inspired",
+        "font": "Modern Sans-Serif (Montserrat, Poppins, Inter)",
+        "visual_elements": "Layered flat shapes, subtle drop shadows, geometric patterns, clean icons with depth",
+        "line_style": "Clean, uniform lines with consistent weight",
+        "shading": "Subtle drop shadows and gradients to create layered depth effect"
+    },
+    "line_art": {
+        "style_desc": "Minimalist technical drawing style with clean line work, reminiscent of patent illustrations and engineering blueprints. Precise, professional, and highly detailed",
+        "color_palette": "Monochromatic or limited color scheme (Black lines on white, or Navy #1A1A2E on Cream #F5F5F5)",
+        "rendering": "Clean vector line work, precise technical drawing style, minimal or no fill colors, emphasis on line weight variation",
+        "font": "Technical Sans-Serif (DIN, Futura, Univers) or Engineering fonts",
+        "visual_elements": "Technical diagrams, cross-sections, exploded views, dimension lines, precise geometric shapes, blueprint-style annotations",
+        "line_style": "Varied line weights for hierarchy (thick for outlines, thin for details), consistent and precise, technical drawing standards",
+        "shading": "Hatching and cross-hatching for depth, or minimal gradient fills"
+    },
+    "low_poly": {
+        "style_desc": "Abstract geometric art style with polygonal meshes and faceted surfaces, modern and stylized with angular aesthetic",
+        "color_palette": "Gradient color schemes across facets (Cool blues to purples, Warm oranges to pinks, or Earth tones)",
+        "rendering": "Low-polygon 3D meshes with visible facets, flat shading per polygon, geometric and angular forms",
+        "font": "Geometric Sans-Serif (Futura, Avenir, Gotham)",
+        "visual_elements": "Triangulated meshes, faceted surfaces, geometric primitives, crystalline structures, angular representations",
+        "line_style": "Sharp angular edges, visible polygon boundaries, geometric precision",
+        "shading": "Flat shading per polygon face, gradient color transitions across adjacent facets"
+    },
+    "neon_glow": {
+        "style_desc": "High-tech futuristic style with glowing neon elements on dark backgrounds, cyberpunk aesthetic with vibrant luminous effects",
+        "color_palette": "Vibrant neon colors on dark backgrounds (Cyan #00F0FF, Magenta #FF00FF, Electric Blue #0080FF, Neon Green #39FF14) on Dark Navy #0A0E27 or Black",
+        "rendering": "Glowing line work with bloom effects, luminous elements, high contrast between dark backgrounds and bright neon colors",
+        "font": "Futuristic Sans-Serif (Orbitron, Exo, Rajdhani) with glow effects",
+        "visual_elements": "Glowing circuit patterns, holographic interfaces, neon outlines, light trails, digital grids, futuristic HUD elements",
+        "line_style": "Glowing lines with outer glow effects, varying brightness, light trails and streaks",
+        "shading": "Luminous glow effects, bloom, light emission, high contrast lighting"
+    }
+}
+
 # --------------------------------------------------------------------------- #
 # 1. TechnicalRouteDescGenerator - technical_route_desc_generator 相关提示词
 # --------------------------------------------------------------------------- #
 class TechnicalRouteDescGenerator:
+    # ===== Easy 复杂度提示词 (从 prompts_repo.py 迁移) =====
+    system_prompt_for_figure_desc_generator = """
+You are a Technical Figure Design Assistant. Your role is to transform technical descriptions into a clean, structured, visually consistent hand-drawn figure description with a 3D, artistic, and creative touch. Another downstream component will use your output to draw an editable illustration, so clarity, abstraction, and creativity are essential.
+
+Your responsibilities:
+
+1. Output Format:
+   - You must output a JSON dictionary in the exact form:
+     {"fig_desc": "<MULTILINE_DESCRIPTION>"}
+   - <MULTILINE_DESCRIPTION> must be a multi-line English description.
+   - Do not output anything outside the JSON.
+
+2. Figure Description Requirements:
+   - Provide a single figure_description block that includes:
+       • Overall Layout
+       • A sequence of Subfigures (4–6 subfigures) (derived from the structure of the input)
+       • Overall Design and Color Scheme
+       • Figure Title and Labels
+       • Summary
+
+   * Each subfigure must include:
+      * A concise title
+      * A background-color suggestion (pastel macaron tone)
+      * Layout guidance: Each subfigure must be divided into **three distinct parts** from top to bottom:
+        1. **Subtitle** (top area)
+        2. **Visual Elements** (middle area; must follow the overall figure style)
+        3. **Key Concepts** (bottom area; aligned along edges, not overlapping with visuals)
+
+3.  **STYLE SPECIFICATION**
+    The entire figure MUST follow the visual style rules specified in the task prompt.
+    All visual elements, colors, fonts, and rendering techniques must be consistent with the specified style.
+
+    *In other parts of the prompt, when referring to visual elements, use phrasing such as "consistent with the overall style" instead of repeating this specification.*
+
+4. Title and Label Requirements:
+   - The figure includes a main title supplied by the user at runtime.
+     • Centered at the top.
+     • Slightly larger than subfigure titles.
+   - Subfigure titles must contrast with their backgrounds.
+   - Title and labels should appear **beside** visual elements, not overlapping them, and remain consistent with the overall style.
+
+5. Content Rules:
+   - Do not copy input sentences.
+   - Extract structure, relationships, and process flow.
+   - Do not invent steps beyond what is logically implied by the input.
+   - Keep all descriptions high-level, abstract, and visually oriented.
+   - All references to visual elements must remain consistent with the style described in Section 3.
+
+6. Output Constraints:
+   - Produce only one JSON dictionary.
+   - No commentary, no meta explanations, no markdown.
+
+"""
+
+    task_prompt_for_figure_desc_generator = """
+Below is the technical details provided by the user. Your task is to abstract it into a visually oriented figure description following all rules stated in the SYSTEM_PROMPT.
+
+Add this to the beginning of your description:
+
+**Special Notice**
+
+* **Text Placement**:
+  • Ensure the text is positioned **beside** the image elements, not on top of them.
+  • Maintain clear separation so text blocks do not overlap visual areas.
+
+* **Subfigure Separation**:
+  • Ensure each subfigure has **crisp, non-overlapping boundaries**.
+  • No arrows or elements may cross from one subfigure into another.
+
+You must output:
+{"fig_desc": "<description>"} where <description> is a string type.
+
+Do not include any explanations outside the JSON.
+
+--------------------
+USER CONTENT START
+
+{paper_idea}
+
+USER CONTENT END
+--------------------
+
+--------------------
+**STYLE REQUIREMENTS**
+
+The figure must follow these visual style rules:
+
+{style_desc}
+
+- **Color Palette**: {color_palette}
+- **Rendering**: {rendering}
+- **Font**: {font}
+- **Visual Elements**: {visual_elements}
+- **Line Style**: {line_style}
+- **Shading**: {shading}
+
+Style Type: {style}
+--------------------
+"""
+
+    # ===== Hard 复杂度提示词 =====
     system_prompt_for_figure_desc_generator_free =  """
 你是一位世界顶级的 CVPR/NeurIPS 视觉架构师
 你的核心能力是将晦涩难懂的论文逻辑，转化为**具体的、画面感极强的视觉描述。
@@ -21,7 +191,7 @@ class TechnicalRouteDescGenerator:
 
 ### 提示词编写策略：
 1. 强调 “科研绘图”，用于论文插图；
-2. **风格（Style）**：{style}
+2. **风格（Style）**：{style}，风格描述：{style_desc}
    - 必须强制包含论文内容的关键词.
 3. 白色背景，然后要分成多个panel，就跟论文中的图一样，每个panel都要有自己的标题，标题要放在panel的上方；
 4. 信息量要丰富，填满整个画面；
@@ -100,16 +270,19 @@ paper_idea
     task_prompt_for_figure_desc_generator_mid = """
 **Style Reference & Execution Instructions:**
 
-1. Art Style (Visio/Illustrator Aesthetic):
+1. Art Style:
    Generate a professional academic architecture diagram suitable for a top-tier computer science paper (CVPR/NeurIPS).
-   - Visuals: Flat vector graphics, distinct geometric shapes, clean thin outlines, and soft pastel fills (Azure Blue, Slate Grey, Coral Orange).
+
+   **Style Description**: {style_desc}
+
+   - Color Palette: {color_palette}
+   - Rendering: {rendering}
    - Layout: Strictly follow the spatial arrangement defined below.
-   - Vibe: Technical, precise, clean white background. NOT hand-drawn, NOT photorealistic, NOT 3D render, NO shadows/shading.
 
 2. CRITICAL TEXT CONSTRAINTS (Read Carefully):
    - DO NOT render meta-labels: Do not write words like "ZONE 1", "LAYOUT CONFIGURATION", "Input", "Output", or "Container" inside the image. These are structural instructions for YOU, not text for the image.
    - ONLY render "Key Text Labels": Only text inside double quotes (e.g., "[Text]") listed under "Key Text Labels" should appear in the diagram.
-   - Font: Use a clean, bold Sans-Serif font (like Roboto or Helvetica) for all labels.
+   - Font: {font}
 
 论文内容（paper_idea）如下：
 
@@ -119,7 +292,7 @@ paper_idea
 1. 信息丰富，信息量大；
 2. 科研绘图，白色背景；
 3. {style} 风格提示词；
-4. 最重要，生成提示词要写入：“生成的文字都要在Icon旁边，不能覆盖Icon！！！！！”
+4. 最重要，生成提示词要写入："生成的文字都要在Icon旁边，不能覆盖Icon！！！！！"
 
 请基于上述论文内容和风格要求，设计对应的视觉架构指令，并按照系统提示中的 JSON 规范，仅输出一个 JSON 对象：
 - 该对象只包含一个键：fig_desc；

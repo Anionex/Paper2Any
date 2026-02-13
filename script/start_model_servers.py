@@ -125,6 +125,14 @@ def start_sam(config):
     # 1. Start Backends
     backends = []
     instance_count = 0
+    sam3_checkpoint = os.environ.get(
+        "SAM3_CHECKPOINT_PATH",
+        str(ROOT_DIR / "models" / "sam3" / "sam3.pt"),
+    )
+    sam3_bpe = os.environ.get(
+        "SAM3_BPE_PATH",
+        str(ROOT_DIR / "models" / "sam3" / "bpe_simple_vocab_16e6.txt.gz"),
+    )
     
     for instance_group in sam_cfg.get("instances", []):
         gpu_id = instance_group["gpu_id"]
@@ -139,9 +147,12 @@ def start_sam(config):
             # Using env to set CUDA_VISIBLE_DEVICES
             cmd = [
                 f"CUDA_VISIBLE_DEVICES={gpu_id}",
-                "nohup", "uvicorn", "dataflow_agent.toolkits.model_servers.sam_server:app",
+                "nohup", "python3", "-m", "dataflow_agent.toolkits.model_servers.sam3_server",
                 "--port", str(port),
-                "--host", "0.0.0.0"
+                "--host", "0.0.0.0",
+                "--checkpoint", sam3_checkpoint,
+                "--bpe", sam3_bpe,
+                "--device", "cuda",
             ]
             
             full_cmd = " ".join(cmd)
@@ -158,7 +169,7 @@ def start_sam(config):
     if lb_cfg and backends:
         lb_port = lb_cfg["port"]
         lb_host = lb_cfg.get("host", "127.0.0.1")
-        lb_name = lb_cfg.get("name", "SAM LB")
+        lb_name = lb_cfg.get("name", "SAM3 LB")
         
         kill_process_on_port(lb_port)
         
@@ -174,7 +185,7 @@ def start_sam(config):
         ]
         
         full_cmd = " ".join(cmd)
-        print(f"Starting SAM LB on {lb_host}:{lb_port}...")
+        print(f"Starting SAM3 LB on {lb_host}:{lb_port}...")
         
         with open(log_file, "w") as f:
             subprocess.Popen(full_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT_DIR)

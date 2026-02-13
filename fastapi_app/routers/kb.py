@@ -19,9 +19,11 @@ from dataflow_agent.utils import get_project_root
 from dataflow_agent.workflow import run_workflow
 from dataflow_agent.logger import get_logger
 from fastapi_app.config import settings
-from fastapi_app.schemas import Paper2PPTRequest
+from fastapi_app.schemas import Paper2PPTRequest, DeepResearchRequest, DeepResearchResponse, KBReportRequest, KBReportResponse
 from fastapi_app.utils import _from_outputs_url, _to_outputs_url
 from fastapi_app.workflow_adapters.wa_paper2ppt import _init_state_from_request
+from fastapi_app.services.kb_deepresearch_service import KBDeepResearchService
+from fastapi_app.services.kb_report_service import KBReportService
 
 router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
 log = get_logger(__name__)
@@ -35,6 +37,91 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg", ".mp4"}
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 DOC_EXTENSIONS = {".pdf", ".docx", ".doc", ".pptx", ".ppt"}
+
+try:
+    from docx import Document
+except ImportError:
+    Document = None
+
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
+
+
+def _extract_text_result(state, role_name: str) -> str:
+    try:
+        result = getattr(state, "agent_results", {}).get(role_name, {}).get("results", {})
+        if isinstance(result, dict):
+            return result.get("text") or result.get("raw") or result.get("content") or ""
+        if isinstance(result, str):
+            return result
+    except Exception:
+        return ""
+    return ""
+
+
+def _extract_file_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".pdf":
+            doc = fitz.open(path)
+            text = ""
+            for page in doc:
+                text += page.get_text() + "\n"
+            return text
+        if suffix in {".docx", ".doc"}:
+            if Document is None:
+                return ""
+            doc = Document(path)
+            return "\n".join([p.text for p in doc.paragraphs])
+        if suffix in {".pptx", ".ppt"}:
+            if Presentation is None:
+                return ""
+            prs = Presentation(path)
+            text = ""
+            for i, slide in enumerate(prs.slides):
+                text += f"--- Slide {i+1} ---\n"
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        text += shape.text + "\n"
+            return text
+        if suffix in {".md", ".txt"}:
+            return path.read_text(encoding="utf-8", errors="ignore")
+        return ""
+    except Exception:
+        return ""
+
+
+def _build_text_context(file_paths: List[str], max_chars: int = 60000) -> str:
+    if not file_paths:
+        return ""
+    chunks: List[str] = []
+    for raw in file_paths:
+        try:
+            local_path = _resolve_local_path(raw)
+            _ensure_under_outputs(local_path)
+            text = _extract_file_text(local_path)
+            if not text:
+                continue
+            chunks.append(f"=== {local_path.name} ===\n{text}")
+        except Exception:
+            continue
+
+    combined = "\n\n".join(chunks)
+    if len(combined) > max_chars:
+        combined = combined[:max_chars] + "\n\n[...content truncated]"
+    return combined
+
+
+def _get_deepresearch_service() -> KBDeepResearchService:
+    return KBDeepResearchService()
+
+
+def _get_report_service() -> KBReportService:
+    return KBReportService()
 
 
 def _safe_zip_stem(name: str) -> str:
@@ -756,6 +843,35 @@ async def generate_mindmap_from_kb(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/deep-research", response_model=DeepResearchResponse)
+async def deep_research_from_kb(
+    req: DeepResearchRequest,
+):
+    """
+    Deep research workflow入口（router -> service -> wa -> wf）
+    """
+    if req.mode == "web" and not req.search_api_key:
+        raise HTTPException(status_code=400, detail="Search API key required")
+    if req.mode == "web" and req.search_provider == "google_cse" and not req.google_cse_id:
+        raise HTTPException(status_code=400, detail="google_cse_id required")
+    if not req.topic and not req.file_paths:
+        raise HTTPException(status_code=400, detail="Topic or files required")
+    service = _get_deepresearch_service()
+    return await service.run(req)
+
+
+@router.post("/generate-report", response_model=KBReportResponse)
+async def generate_report_from_kb(
+    req: KBReportRequest,
+):
+    """
+    Generate a report with insights/analysis from KB documents (workflow).
+    """
+    if not req.file_paths:
+        raise HTTPException(status_code=400, detail="No valid files provided")
+    service = _get_report_service()
+    return await service.run(req)
 
 
 @router.post("/save-mindmap")

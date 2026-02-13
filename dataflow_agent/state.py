@@ -506,6 +506,76 @@ class KBMindMapState(MainState):
     mindmap_svg_path: str = ""  # SVG输出路径（可选）
 
 
+# ==================== KBDeepResearch 相关 State ====================
+
+@dataclass
+class KBDeepResearchRequest(MainRequest):
+    """
+    知识库深度研究请求
+    """
+    mode: str = "llm"  # llm | web
+    topic: str = ""
+    file_paths: List[str] = field(default_factory=list)
+    search_provider: str = "serpapi"
+    search_api_key: str = ""
+    search_engine: str = "google"
+    search_num: int = 10
+    google_cse_id: str = ""
+    brave_summarizer: bool = True
+    search_depth: int = 2
+    max_queries: int = 6
+    top_k_per_query: int = 5
+    fetch_top_n: int = 8
+    max_page_chars: int = 8000
+    enable_agentic: bool = True
+    email: str = ""
+    user_id: str = ""
+
+
+@dataclass
+class KBDeepResearchState(MainState):
+    """
+    知识库深度研究状态
+    """
+    request: KBDeepResearchRequest = field(default_factory=KBDeepResearchRequest)
+    result_path: str = ""
+    context_text: str = ""
+    sub_reports: List[Dict[str, Any]] = field(default_factory=list)
+    search_results: List[Dict[str, Any]] = field(default_factory=list)
+    plan_queries: List[str] = field(default_factory=list)
+    sources: List[Dict[str, Any]] = field(default_factory=list)
+    page_texts: List[Dict[str, Any]] = field(default_factory=list)
+    summaries: List[Dict[str, Any]] = field(default_factory=list)
+    report_markdown: str = ""
+
+
+# ==================== KBReport 相关 State ====================
+
+@dataclass
+class KBReportRequest(MainRequest):
+    """
+    知识库报告生成请求
+    """
+    file_paths: List[str] = field(default_factory=list)
+    report_style: str = "insight"  # insight | analysis
+    length: str = "standard"       # short | standard | long
+    email: str = ""
+    user_id: str = ""
+
+
+@dataclass
+class KBReportState(MainState):
+    """
+    知识库报告生成状态
+    """
+    request: KBReportRequest = field(default_factory=KBReportRequest)
+    result_path: str = ""
+    file_entries: List[Dict[str, Any]] = field(default_factory=list)
+    file_summaries: List[Dict[str, Any]] = field(default_factory=list)
+    report_outline: str = ""
+    report_markdown: str = ""
+
+
 # ==================== Paper2Drawio 相关 State ====================
 
 @dataclass

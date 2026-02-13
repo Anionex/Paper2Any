@@ -57,7 +57,6 @@ def create_paper2video_graph() -> GenericGraphBuilder:
     def get_markdown(state: Paper2VideoState):
         import subprocess
         paper_pdf_path = Path(state.request.get("paper_pdf_path", ""))
-        # paper_pdf_path = Path("/mnt/DataFlow/lz/proj/agentgroup/ligang/DataFlow-Agent/data/2510.05096v2.pdf")
         if not paper_pdf_path.exists():
             log.error(f"PDF 文件不存在: {paper_pdf_path}")
             return ""

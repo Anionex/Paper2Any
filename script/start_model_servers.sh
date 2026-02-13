@@ -29,9 +29,11 @@ MINERU_MAX_SEQS=64
 MINERU_GPUS=(7 1 2 3)
 MINERU_START_PORT=8011
 
-# SAM Config
-SAM_GPUS=(4 5 6)
-SAM_START_PORT=8021
+# SAM3 Config
+SAM3_GPUS=(4 5 6)
+SAM3_START_PORT=8021
+SAM3_CHECKPOINT_PATH="$ROOT_DIR/models/sam3/sam3.pt"
+SAM3_BPE_PATH="$ROOT_DIR/models/sam3/bpe_simple_vocab_16e6.txt.gz"
 
 # ------------------------------------------------------------------------------
 #  🛠️ Helper Functions
@@ -144,21 +146,25 @@ done
 
 # --- Step 3: Launch SAM ---
 echo "------------------------------------------------------------"
-log_info "Launching SAM Cluster"
+log_info "Launching SAM3 Cluster"
 
-SAM_BACKENDS=""
+SAM3_BACKENDS=""
 
-for i in "${!SAM_GPUS[@]}"; do
-    gpu_id=${SAM_GPUS[$i]}
-    port=$((SAM_START_PORT + i))
+for i in "${!SAM3_GPUS[@]}"; do
+    gpu_id=${SAM3_GPUS[$i]}
+    port=$((SAM3_START_PORT + i))
     
-    log_info "Booting SAM on GPU $gpu_id @ Port $port..."
+    log_info "Booting SAM3 on GPU $gpu_id @ Port $port..."
     
-    env CUDA_VISIBLE_DEVICES=$gpu_id nohup uvicorn dataflow_agent.toolkits.model_servers.sam_server:app \
-        --port $port --host 0.0.0.0 \
+    env CUDA_VISIBLE_DEVICES=$gpu_id nohup python3 -m dataflow_agent.toolkits.model_servers.sam3_server \
+        --port $port \
+        --host 0.0.0.0 \
+        --checkpoint "$SAM3_CHECKPOINT_PATH" \
+        --bpe "$SAM3_BPE_PATH" \
+        --device cuda \
         > "$LOG_DIR/sam_${gpu_id}.log" 2>&1 &
         
-    SAM_BACKENDS+="http://127.0.0.1:$port "
+    SAM3_BACKENDS+="http://127.0.0.1:$port "
 done
 
 # --- Step 4: Launch Load Balancers ---
@@ -173,13 +179,13 @@ nohup python3 dataflow_agent/toolkits/model_servers/generic_lb.py \
     > "$LOG_DIR/mineru_lb.log" 2>&1 &
 log_success "MinerU LB running on :8010 -> [ $MINERU_BACKENDS]"
 
-# SAM LB
+# SAM3 LB
 nohup python3 dataflow_agent/toolkits/model_servers/generic_lb.py \
     --port 8020 \
-    --name "SAM LB" \
-    --backends $SAM_BACKENDS \
+    --name "SAM3 LB" \
+    --backends $SAM3_BACKENDS \
     > "$LOG_DIR/sam_lb.log" 2>&1 &
-log_success "SAM LB running on :8020 -> [ $SAM_BACKENDS]"
+log_success "SAM3 LB running on :8020 -> [ $SAM3_BACKENDS]"
 
 # --- Step 5: Launch OCR ---
 echo "------------------------------------------------------------"

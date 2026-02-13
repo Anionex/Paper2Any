@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import os
 import time
 from pathlib import Path
@@ -33,6 +34,7 @@ from dataflow_agent.state import Paper2FigureState
 from dataflow_agent.agentroles import create_vlm_agent
 
 from dataflow_agent.toolkits.multimodaltool.req_img import generate_or_edit_and_save_image_async
+from dataflow_agent.toolkits.multimodaltool.ocr_config import get_ocr_api_credentials
 from dataflow_agent.toolkits.multimodaltool.sam_tool import (
     run_sam_auto,
     run_sam_auto_server,
@@ -40,7 +42,6 @@ from dataflow_agent.toolkits.multimodaltool.sam_tool import (
     filter_sam_items_by_area_and_score,
     free_sam_model,
 )
-from dataflow_agent.toolkits.multimodaltool import ppt_tool
 from dataflow_agent.toolkits.drawio_tools import wrap_xml
 from dataflow_agent.toolkits.image2drawio import (
     classify_shape,
@@ -295,84 +296,72 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
         return state
 
     async def _ocr_node(state: Paper2FigureState) -> Paper2FigureState:
-        """VLM OCR preferred; fallback to PaddleOCR."""
+        """Use unified remote OCR service for text + bbox extraction."""
         img_path = state.fig_draft_path
         if not img_path or not os.path.exists(img_path):
             state.ocr_items = []
             return state
 
         ocr_items: List[Dict[str, Any]] = []
-        api_key = getattr(state.request, "api_key", None) or getattr(state.request, "chat_api_key", None)
-        use_vlm = bool(getattr(state.request, "chat_api_url", None)) and bool(api_key)
-        if use_vlm:
-            try:
-                agent = create_vlm_agent(
-                    name="ImageTextBBoxAgent",
-                    model_name=getattr(state.request, "vlm_model", "qwen-vl-ocr-2025-11-20"),
-                    chat_api_url=getattr(state.request, "chat_api_url", None),
-                    vlm_mode="ocr",
-                    additional_params={"input_image": img_path},
-                )
-                new_state = await agent.execute(state)
-                bbox_res = getattr(new_state, "bbox_result", [])
-            except Exception as e:
-                log.warning(f"[image2drawio][VLM] OCR failed: {e}")
-                bbox_res = []
+        try:
+            ocr_api_url, ocr_api_key = get_ocr_api_credentials()
+            temp_state = copy.copy(state)
+            if getattr(temp_state, "request", None):
+                temp_state.request = copy.copy(state.request)
+                temp_state.request.chat_api_url = ocr_api_url
+                temp_state.request.api_key = ocr_api_key
+                temp_state.request.chat_api_key = ocr_api_key
 
-            # Normalize to px
-            try:
-                pil_img = Image.open(img_path)
-                w, h = pil_img.size
-                VLM_SCALE = 1000.0
-                for it in bbox_res or []:
-                    if "rotate_rect" in it and "bbox" not in it:
-                        rr = it.get("rotate_rect")
-                        if isinstance(rr, list) and len(rr) == 5:
-                            cx, cy, rw, rh, angle = rr
-                            rect = ((float(cx), float(cy)), (float(rw), float(rh)), float(angle))
-                            box = cv2.boxPoints(rect)
-                            x_min = np.min(box[:, 0])
-                            x_max = np.max(box[:, 0])
-                            y_min = np.min(box[:, 1])
-                            y_max = np.max(box[:, 1])
-                            it["bbox"] = [
-                                max(0.0, min(1.0, y_min / VLM_SCALE)),
-                                max(0.0, min(1.0, x_min / VLM_SCALE)),
-                                max(0.0, min(1.0, y_max / VLM_SCALE)),
-                                max(0.0, min(1.0, x_max / VLM_SCALE)),
-                            ]
-                    if "bbox" in it:
-                        y1_n, x1_n, y2_n, x2_n = it["bbox"]
-                        x1 = int(x1_n * w)
-                        y1 = int(y1_n * h)
-                        x2 = int(x2_n * w)
-                        y2 = int(y2_n * h)
-                        if x2 <= x1 or y2 <= y1:
-                            continue
-                        ocr_items.append({
-                            "text": it.get("text", "").strip(),
-                            "bbox_px": [x1, y1, x2, y2],
-                        })
-            except Exception as e:
-                log.warning(f"[image2drawio][VLM] normalize failed: {e}")
-                ocr_items = []
+            agent = create_vlm_agent(
+                name="ImageTextBBoxAgent",
+                model_name=getattr(state.request, "vlm_model", "qwen-vl-ocr-2025-11-20"),
+                chat_api_url=ocr_api_url,
+                vlm_mode="ocr",
+                additional_params={"input_image": img_path},
+            )
+            new_state = await agent.execute(temp_state)
+            bbox_res = getattr(new_state, "bbox_result", [])
+        except Exception as e:
+            log.warning(f"[image2drawio][VLM] OCR failed: {e}")
+            bbox_res = []
 
-        # fallback to PaddleOCR if VLM unavailable or empty
-        if not ocr_items:
-            try:
-                res = ppt_tool.paddle_ocr_page_with_layout(img_path)
-                for bbox, text, _conf in res.get("lines", []):
-                    if not bbox or not text:
-                        continue
-                    x1, y1, x2, y2 = [int(round(v)) for v in bbox]
+        # Normalize to px
+        try:
+            pil_img = Image.open(img_path)
+            w, h = pil_img.size
+            VLM_SCALE = 1000.0
+            for it in bbox_res or []:
+                if "rotate_rect" in it and "bbox" not in it:
+                    rr = it.get("rotate_rect")
+                    if isinstance(rr, list) and len(rr) == 5:
+                        cx, cy, rw, rh, angle = rr
+                        rect = ((float(cx), float(cy)), (float(rw), float(rh)), float(angle))
+                        box = cv2.boxPoints(rect)
+                        x_min = np.min(box[:, 0])
+                        x_max = np.max(box[:, 0])
+                        y_min = np.min(box[:, 1])
+                        y_max = np.max(box[:, 1])
+                        it["bbox"] = [
+                            max(0.0, min(1.0, y_min / VLM_SCALE)),
+                            max(0.0, min(1.0, x_min / VLM_SCALE)),
+                            max(0.0, min(1.0, y_max / VLM_SCALE)),
+                            max(0.0, min(1.0, x_max / VLM_SCALE)),
+                        ]
+                if "bbox" in it:
+                    y1_n, x1_n, y2_n, x2_n = it["bbox"]
+                    x1 = int(x1_n * w)
+                    y1 = int(y1_n * h)
+                    x2 = int(x2_n * w)
+                    y2 = int(y2_n * h)
                     if x2 <= x1 or y2 <= y1:
                         continue
                     ocr_items.append({
-                        "text": text.strip(),
+                        "text": it.get("text", "").strip(),
                         "bbox_px": [x1, y1, x2, y2],
                     })
-            except Exception as e:
-                log.error(f"[image2drawio][PaddleOCR] failed: {e}")
+        except Exception as e:
+            log.warning(f"[image2drawio][VLM] normalize failed: {e}")
+            ocr_items = []
 
         # Build no_text image
         try:
@@ -468,9 +457,12 @@ def create_image2drawio_graph() -> GenericGraphBuilder:
         out_dir = base_dir / "sam_items"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        sam_ckpt = f"{get_project_root()}/sam_b.pt"
-        # optional server URLs (set SAM_SERVER_URLS env, comma-separated)
-        sam_server_env = os.getenv("SAM_SERVER_URLS", "").strip()
+        sam_ckpt = os.environ.get(
+            "SAM3_CHECKPOINT_PATH",
+            str(get_project_root() / "models" / "sam3" / "sam3.pt"),
+        )
+        # optional server URLs (set SAM3_SERVER_URLS or SAM_SERVER_URLS env, comma-separated)
+        sam_server_env = os.getenv("SAM3_SERVER_URLS", "").strip() or os.getenv("SAM_SERVER_URLS", "").strip()
         sam_server_urls = [u.strip() for u in sam_server_env.split(",") if u.strip()]
         layout_items: List[Dict[str, Any]] = []
 

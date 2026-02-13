@@ -44,5 +44,16 @@
     "sizeLimit": "图片大小不能超过 15MB",
     "apiFail": "转换失败，请稍后再试",
     "quotaFull": "额度已用完，请稍后再试"
+  },
+  "cases": {
+    "title": "使用案例",
+    "subtitle": "示例图可直接转换为可编辑 DrawIO",
+    "feishu": "查看飞书文档",
+    "items": {
+      "case1Title": "示例一",
+      "case1Desc": "复杂图像转为可编辑 DrawIO",
+      "case2Title": "示例二",
+      "case2Desc": "细节结构自动识别与还原"
+    }
   }
 }

@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from fastapi import UploadFile, HTTPException
-from fastapi_app.schemas import Paper2FigureRequest
-from dataflow_agent.state import Paper2FigureState
+from dataflow_agent.state import Paper2DrawioRequest, Paper2DrawioState
+from fastapi_app.config.settings import settings
 from dataflow_agent.logger import get_logger
 from dataflow_agent.utils import get_project_root
 from dataflow_agent.workflow import run_workflow
@@ -56,27 +56,33 @@ class Image2DrawioService:
         input_path.write_bytes(content_bytes)
         abs_img_path = input_path.resolve()
 
-        # Build request (reuse Paper2FigureRequest schema)
-        req = Paper2FigureRequest(
-            input_type="FIGURE",
-            input_content=str(abs_img_path),
-            chat_api_url=chat_api_url or "",
-            api_key=api_key or "",
+        # Build request for SAM3-based paper2drawio workflow
+        req = Paper2DrawioRequest(
+            input_type="PDF",
+            chat_api_url=settings.PAPER2DRAWIO_OCR_API_URL,
+            api_key=settings.PAPER2DRAWIO_OCR_API_KEY,
+            chat_api_key=settings.PAPER2DRAWIO_OCR_API_KEY,
             model=model,
-            gen_fig_model=gen_fig_model,
             vlm_model=vlm_model,
             language=language,
         )
 
-        state = Paper2FigureState(request=req, messages=[])
-        state.fig_draft_path = str(abs_img_path)
+        state = Paper2DrawioState(request=req, messages=[])
+        state.paper_file = str(abs_img_path)
+        state.text_content = str(abs_img_path)
         state.result_path = str(run_dir)
 
         async with task_semaphore:
-            final_state = await run_workflow("image2drawio", state)
+            final_state = await run_workflow("paper2drawio_sam3", state)
 
         drawio_xml = final_state.get("drawio_xml", "") if isinstance(final_state, dict) else getattr(final_state, "drawio_xml", "")
-        drawio_path = final_state.get("drawio_output_path", "") if isinstance(final_state, dict) else getattr(final_state, "drawio_output_path", "")
+        drawio_path = (
+            final_state.get("output_xml_path", "")
+            if isinstance(final_state, dict)
+            else getattr(final_state, "output_xml_path", "")
+        )
+        if not drawio_path:
+            drawio_path = final_state.get("drawio_output_path", "") if isinstance(final_state, dict) else getattr(final_state, "drawio_output_path", "")
 
         return {
             "success": bool(drawio_xml),

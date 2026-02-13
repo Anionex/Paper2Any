@@ -8,7 +8,7 @@ import {
   ImagePlus,
   Image,
   Wand2,
-  BookOpen,
+  // BookOpen,
   FolderOpen,
   Network,
   MessageSquare,
@@ -43,6 +43,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
 
   const paper2figureChildren = useMemo(() => ([
     {
+      id: 'paper2figure-model-drawio',
+      labelKey: t('app.navSub.paper2figureModelDrawio'),
+      tooltipKey: t('app.navSubTooltip.paper2figureModelDrawio'),
+      icon: Wand2,
+      gradient: 'from-emerald-500 to-teal-500'
+    },
+    {
       id: 'paper2figure-tech-exp',
       labelKey: t('app.navSub.paper2figureTechExp'),
       tooltipKey: t('app.navSubTooltip.paper2figureTechExp'),
@@ -55,13 +62,6 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navSubTooltip.paper2drawioAi'),
       icon: Network,
       gradient: 'from-violet-500 to-fuchsia-500'
-    },
-    {
-      id: 'paper2figure-model-drawio',
-      labelKey: t('app.navSub.paper2figureModelDrawio'),
-      tooltipKey: t('app.navSubTooltip.paper2figureModelDrawio'),
-      icon: Wand2,
-      gradient: 'from-emerald-500 to-teal-500'
     }
   ]), [t]);
 
@@ -122,13 +122,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       icon: ImagePlus,
       gradient: 'from-cyan-500 to-blue-500'
     },
-    {
-      id: 'knowledge',
-      labelKey: t('app.nav.knowledge'),
-      tooltipKey: t('app.navTooltip.knowledge'),
-      icon: BookOpen,
-      gradient: 'from-indigo-500 to-purple-500'
-    },
+    // {
+    //   id: 'knowledge',
+    //   labelKey: t('app.nav.knowledge'),
+    //   tooltipKey: t('app.navTooltip.knowledge'),
+    //   icon: BookOpen,
+    //   gradient: 'from-indigo-500 to-purple-500'
+    // },
     {
       id: 'files',
       labelKey: t('app.nav.files'),

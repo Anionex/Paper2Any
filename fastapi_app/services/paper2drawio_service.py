@@ -61,12 +61,25 @@ class Paper2DrawioService:
             pdf_path.write_bytes(content)
             paper_file = str(pdf_path)
 
+        text_input = (text_content or "").strip()
+        image_exts = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp"}
+        text_is_image_path = Path(text_input).suffix.lower() in image_exts if text_input else False
+        use_sam3_workflow = bool(paper_file) or text_is_image_path
+
+        # SAM3 流程使用平台内置 OCR 服务配置；普通流程沿用用户入参
+        request_chat_api_url = chat_api_url
+        request_api_key = api_key
+        if use_sam3_workflow:
+            request_chat_api_url = settings.PAPER2DRAWIO_OCR_API_URL
+            request_api_key = settings.PAPER2DRAWIO_OCR_API_KEY
+
         # 构造 State
         state = Paper2DrawioState(
             request=Paper2DrawioRequest(
                 language=language,
-                chat_api_url=chat_api_url,
-                api_key=api_key,
+                chat_api_url=request_chat_api_url,
+                api_key=request_api_key,
+                chat_api_key=request_api_key,
                 model=model or settings.PAPER2DRAWIO_DEFAULT_MODEL,
                 enable_vlm_validation=bool(enable_vlm_validation),
                 vlm_model=vlm_model or settings.PAPER2DRAWIO_VLM_MODEL,
@@ -85,7 +98,9 @@ class Paper2DrawioService:
 
         try:
             async with task_semaphore:
-                factory = RuntimeRegistry.get("paper2drawio")
+                workflow_name = "paper2drawio_sam3" if use_sam3_workflow else "paper2drawio"
+                log.info(f"[paper2drawio] selected workflow={workflow_name}, input_type={input_type}")
+                factory = RuntimeRegistry.get(workflow_name)
                 builder = factory()
                 graph = builder.build()
                 final_state = await graph.ainvoke(state)

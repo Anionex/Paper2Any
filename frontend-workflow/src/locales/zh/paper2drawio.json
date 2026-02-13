@@ -71,5 +71,16 @@
       "textToDiagramTitle": "文本转图表",
       "textToDiagramDesc": "输入文本描述，快速生成可视化图表"
     }
+  },
+  "cases": {
+    "title": "流程图 / 架构图案例",
+    "subtitle": "下面示例支持在线编辑与导出",
+    "feishu": "查看飞书文档",
+    "items": {
+      "case1Title": "流程图示例",
+      "case1Desc": "从文本或 PDF 直接生成可编辑流程图",
+      "case2Title": "架构图示例",
+      "case2Desc": "适用于系统架构与模块关系展示"
+    }
   }
 }

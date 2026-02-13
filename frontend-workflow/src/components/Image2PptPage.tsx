@@ -254,18 +254,26 @@ const Image2PptPage = () => {
           msg = '邀请码不正确或已失效';
         } else if (res.status === 429) {
           msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
         }
         throw new Error(msg);
       }
-      
+
       // 获取文件 blob
       const blob = await res.blob();
+      if (!blob || blob.size === 0) {
+        throw new Error('生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
+      }
       setDownloadBlob(blob);
       setProgress(100);
       setStatusMessage(t('status.complete'));
       setIsComplete(true);
 
-      // Record usage and upload file to Supabase Storage
+      // 校验通过后才扣积分
       await recordUsage(user?.id || null, 'image2ppt'); // Assuming same quota type or distinct one
       refreshQuota();
       
