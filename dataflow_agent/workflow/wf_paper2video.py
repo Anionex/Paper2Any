@@ -27,7 +27,7 @@ from dataflow_agent.toolkits.p2vtool.p2v_tool import (
     clean_text, parser_beamer_latex, resize_latex_image,
     talking_gen_per_slide, render_video_with_cursor_from_json, add_subtitles,
     merge_wav_files, get_mp4_duration_ffprobe,
-    speech_task_wrapper_with_gemini,
+    speech_task_wrapper_with_cloud_tts,
     speech_task_wrapper_with_f5,
 )
 
@@ -402,11 +402,13 @@ def create_paper2video_graph() -> GenericGraphBuilder:
         speech_language = state.request.language
         api_key = state.request.api_key
         tts_model = state.request.tts_model
+        tts_voice_name = (getattr(state.request, "tts_voice_name", None) or "").strip()
         chat_api_url = state.request.chat_api_url
 
         speech_save_dir.mkdir(parents=True, exist_ok=True)
         ref_audio_path = state.request.ref_audio_path
-        # 如果 ref_audio_path 不为空，则说明用户选择了上传自己的声音
+        # 云语音：仅用 tts_voice_name 作为 CosyVoice 的 voice 参数，不涉及参考音频文件。
+        # 本地语音（F5-TTS）：ref_audio_path 来自 sys_audio 目录或用户上传，作为参考语音。
         use_specific_sound = ref_audio_path is not None and (ref_audio_path or "").strip() != ""
         ref_text = state.request.ref_text
         script_pages = state.script_pages
@@ -449,20 +451,21 @@ def create_paper2video_graph() -> GenericGraphBuilder:
             with ctx.Pool(processes=len(all_tasks)) as pool:
                 results = list(pool.map(speech_task_wrapper_with_f5, all_tasks))
         else:
-            # 方案二：Gemini TTS 按句，多线程；若某句 5 次均失败则回退 F5-TTS
-            gpu_list = [4, 5, 6]  # F5 回退时按需修改可用 GPU ID
+            # 方案二：云 TTS（CosyVoice）按句，音色仅用 tts_voice_name（如 longanhuan），不传参考音频；限流控制并发
+            gpu_list = [4, 5, 6]  # F5-TTS 回退时按需修改可用 GPU ID
             for slide_idx in range(len(parsed_subtitle_w_cursor)):
                 speech_with_cursor = parsed_subtitle_w_cursor[slide_idx]
                 for idx, (prompt, cursor_prompt) in enumerate(speech_with_cursor):
                     speech_result_path = speech_save_dir / f"{slide_idx}_{idx}.wav"
                     all_tasks.append((
                         slide_idx, idx, prompt, speech_result_path,
-                        api_key, tts_model, chat_api_url, gpu_list, speech_language,
+                        api_key, tts_model, chat_api_url, tts_voice_name, gpu_list, speech_language,
                     ))
-            log.info(f"开始并行生成单句语音（Gemini TTS 按句，5 次失败则回退 F5），任务总数: {len(all_tasks)}")
-            max_workers = min(16, len(all_tasks)) if all_tasks else 1
+            log.info(f"开始并行生成单句语音（云 TTS 按句，voice_name={tts_voice_name or 'default'}），任务总数: {len(all_tasks)}")
+            # 降低 CosyVoice 并发，避免 Throttling.RateQuota（请求过于频繁）
+            max_workers = min(3, len(all_tasks)) if all_tasks else 1
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                results = list(executor.map(speech_task_wrapper_with_gemini, all_tasks))
+                results = list(executor.map(speech_task_wrapper_with_cloud_tts, all_tasks))
 
         # 2.3: 按 slide 归类按句结果，供 slide_timesteps（cursor 用）和后续合并/整段使用
         for s_idx, i_idx, dur, pth in results:
@@ -470,40 +473,17 @@ def create_paper2video_graph() -> GenericGraphBuilder:
                 organized_results[s_idx] = {}
             organized_results[s_idx][i_idx] = (dur, pth)
 
-        # 2.4: 根据 with_gemini_tts 得到每页的 {slide_idx}.wav；slide_timesteps 始终来自按句结果
-        # 如果是gemini tts，则不将所有的句子语音文件直接拼接，因为音色不一样
-        # 所以修改为直接使用gemini tts生成每页的语音文件
-        is_gemini_tts = state.request.tts_model == "gemini-2.5-pro-preview-tts" 
-        if is_gemini_tts and not use_specific_sound:
-            # True：用 Gemini 按页整段生成（每页一句 TTS），覆盖/产出 {slide_idx}.wav
-            tasks = []
-            for slide_idx, sentence in enumerate(sentences):
-                slide_speech_path = speech_save_dir / f"{slide_idx}.wav"
-                tasks.append((
-                    slide_idx, 0, sentence, slide_speech_path,
-                    api_key, tts_model, chat_api_url
-                ))
-            log.info(f"开始按页整段生成语音（Gemini TTS），任务总数: {len(tasks)}")
-            max_workers = min(16, len(tasks)) if tasks else 1
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                list(executor.map(speech_task_wrapper_with_gemini, tasks))
-            # slide_timesteps 仍用按句的 duration，供 cursor 用
-            for slide_idx in range(len(parsed_subtitle_w_cursor)):
-                current_slide_data = sorted(organized_results[slide_idx].items())
-                sentence_duration_list = [data[1][0] for data in current_slide_data]
-                slide_timesteps.append(sentence_duration_list)
-        else:
-            # False：按页合并按句 wav 为一个 {slide_idx}.wav
-            for slide_idx in range(len(parsed_subtitle_w_cursor)):
-                slide_speech_path = speech_save_dir / f"{slide_idx}.wav"
-                current_slide_data = sorted(organized_results[slide_idx].items())
-                sentence_duration_list = [data[1][0] for data in current_slide_data]
-                sentence_speech_path_list = [data[1][1] for data in current_slide_data]
-                slide_timesteps.append(sentence_duration_list)
-                merge_wav_files(sentence_speech_path_list, str(slide_speech_path))
-                for p in sentence_speech_path_list:
-                    Path(p).unlink(missing_ok=True)
-                log.info(f"Slide {slide_idx} 合并完成: {slide_speech_path}")
+        # 2.4: 按页合并按句 wav 为一个 {slide_idx}.wav；slide_timesteps 来自按句结果
+        for slide_idx in range(len(parsed_subtitle_w_cursor)):
+            slide_speech_path = speech_save_dir / f"{slide_idx}.wav"
+            current_slide_data = sorted(organized_results[slide_idx].items())
+            sentence_duration_list = [data[1][0] for data in current_slide_data]
+            sentence_speech_path_list = [data[1][1] for data in current_slide_data]
+            slide_timesteps.append(sentence_duration_list)
+            merge_wav_files(sentence_speech_path_list, str(slide_speech_path))
+            for p in sentence_speech_path_list:
+                Path(p).unlink(missing_ok=True)
+            log.info(f"Slide {slide_idx} 合并完成: {slide_speech_path}")
         
         # 结构化 slide_timesteps中的数据
         formatted_data = []
@@ -545,7 +525,16 @@ def create_paper2video_graph() -> GenericGraphBuilder:
         audio_path_list = get_audio_paths(state.speech_save_dir)
         for audio_path in audio_path_list:
             talking_inference_input.append([state.request.ref_img_path, audio_path])
-        talking_gen_per_slide("echomimic", talking_inference_input, paper_output_dir, talking_video_save_dir, "/root/miniconda3/envs/echomimic/bin/python")
+        talking_model = getattr(state.request, "talking_model", None) or "echomimic"
+        # LivePortrait Key 仅从环境变量 LIVEPORTRAIT_KEY 读取，不传 request
+        talking_gen_per_slide(
+            talking_model,
+            talking_inference_input,
+            paper_output_dir,
+            talking_video_save_dir,
+            "/root/miniconda3/envs/echomimic/bin/python",
+            api_key=None,
+        )
         log.info(f"talking-video 的信息已经写入了{talking_video_save_dir}目录中")
             
         return state

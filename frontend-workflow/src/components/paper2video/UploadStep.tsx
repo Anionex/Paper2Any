@@ -2,8 +2,13 @@ import React, { ChangeEvent, useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API_URL_OPTIONS } from '../../config/api';
 import {
+  COSYVOICE_V3_FLASH_VOICES,
+  COSYVOICE_VOICE_LIST_URL,
+  TTS_MODEL,
+} from './constants';
+import {
   UploadCloud, Settings2, Loader2, AlertCircle, ArrowRight,
-  Key, Globe, Cpu, Mic, Image, X, Play, Square
+  Key, Globe, Cpu, Mic, Image, X, Play, Square, ExternalLink
 } from 'lucide-react';
 
 /** 系统预置数字人：id 对应 public/paper2video/avatar/{id}.png */
@@ -20,6 +25,7 @@ export const SYSTEM_AUDIO = [
 
 export type UseAvatar = 'none' | 'yes';
 export type UseVoice = 'tts' | 'own';
+export type TalkingModel = 'echomimic' | 'liveportrait';
 
 interface UploadStepProps {
   selectedFile: File | null;
@@ -30,6 +36,8 @@ interface UploadStepProps {
   avatarFile: File | null;
   avatarPreview: string | null;
   avatarPreset: string | null;
+  talkingModel: TalkingModel;
+  setTalkingModel: (v: TalkingModel) => void;
   voiceFile: File | null;
   voiceFileName: string | null;
   useVoice: UseVoice;
@@ -45,6 +53,10 @@ interface UploadStepProps {
   setScriptApiUrl: (v: string) => void;
   scriptModel: string;
   setScriptModel: (v: string) => void;
+  ttsModel: string;
+  setTtsModel: (v: string) => void;
+  ttsVoiceName: string;
+  setTtsVoiceName: (v: string) => void;
   language: 'zh' | 'en';
   setLanguage: (v: 'zh' | 'en') => void;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => void;
@@ -58,8 +70,6 @@ interface UploadStepProps {
   handleStartParse: () => void;
 }
 
-const TTS_MODEL_DISPLAY = 'gemini-2.5-pro-preview-tts';
-
 const UploadStep: React.FC<UploadStepProps> = ({
   selectedFile,
   isDragOver,
@@ -69,6 +79,8 @@ const UploadStep: React.FC<UploadStepProps> = ({
   avatarFile,
   avatarPreview,
   avatarPreset,
+  talkingModel,
+  setTalkingModel,
   voiceFile,
   voiceFileName,
   useVoice,
@@ -84,6 +96,10 @@ const UploadStep: React.FC<UploadStepProps> = ({
   setScriptApiUrl,
   scriptModel,
   setScriptModel,
+  ttsModel,
+  setTtsModel,
+  ttsVoiceName,
+  setTtsVoiceName,
   language,
   setLanguage,
   handleFileChange,
@@ -120,6 +136,27 @@ const UploadStep: React.FC<UploadStepProps> = ({
       return;
     }
     if (voiceAudioRef.current) voiceAudioRef.current.pause();
+    const audio = new Audio(url);
+    voiceAudioRef.current = audio;
+    audio.play().catch(() => {});
+    audio.onended = () => {
+      setVoicePlayingId(null);
+      voiceAudioRef.current = null;
+    };
+    setVoicePlayingId(id);
+  };
+
+  const handleTtsVoicePreview = (e: React.MouseEvent, voiceId: string) => {
+    e.stopPropagation();
+    const id = `tts-${voiceId}`;
+    if (voicePlayingId === id) {
+      voiceAudioRef.current?.pause();
+      voiceAudioRef.current = null;
+      setVoicePlayingId(null);
+      return;
+    }
+    if (voiceAudioRef.current) voiceAudioRef.current.pause();
+    const url = `/paper2video/cosyvoice/v3-flash/${voiceId}.wav`;
     const audio = new Audio(url);
     voiceAudioRef.current = audio;
     audio.play().catch(() => {});
@@ -210,6 +247,34 @@ const UploadStep: React.FC<UploadStepProps> = ({
             <>
               <p className="text-xs text-amber-400/90 mb-2">{t('upload.avatarTipTime')}</p>
               <p className="text-xs text-gray-400 mb-2">{t('upload.avatarChoiceHint')}</p>
+              <p className="text-xs text-gray-500 mb-1 mt-3">{t('upload.talkingModelLabel')}</p>
+              <div className="flex rounded-lg bg-white/5 border border-white/10 p-1 gap-0 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setTalkingModel('liveportrait')}
+                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                    talkingModel === 'liveportrait'
+                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
+                      : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                >
+                  {t('upload.talkingModelLiveportrait')}
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/25 text-amber-300 border border-amber-400/40">
+                    {t('upload.talkingModelRecommend')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTalkingModel('echomimic')}
+                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all ${
+                    talkingModel === 'echomimic'
+                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
+                      : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                >
+                  {t('upload.talkingModelEchomimic')}
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mb-1">{t('upload.avatarSystemLabel')}</p>
               <div className="flex flex-wrap gap-3 mb-3">
                 {SYSTEM_AVATARS.map((a) => (
@@ -315,13 +380,16 @@ const UploadStep: React.FC<UploadStepProps> = ({
               <button
                 type="button"
                 onClick={() => setUseVoice('tts')}
-                className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${
+                className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
                   useVoice === 'tts'
                     ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50 shadow-sm'
                     : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
                 }`}
               >
                 {t('upload.voiceUseTts')}
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/25 text-amber-300 border border-amber-400/40">
+                  {t('upload.voiceUseTtsRecommend')}
+                </span>
               </button>
               <button
                 type="button"
@@ -336,11 +404,73 @@ const UploadStep: React.FC<UploadStepProps> = ({
               </button>
             </div>
             {useVoice === 'tts' && (
-              <div className="rounded-lg border border-white/20 bg-black/40 px-3 py-2.5">
-                <span className="text-sm text-teal-300 flex items-center gap-2">
-                  <Mic size={14} /> {TTS_MODEL_DISPLAY}
-                </span>
-                <p className="text-[10px] text-gray-500 mt-1">{t('upload.config.ttsFixed')}</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                    <Mic size={12} /> {t('upload.config.ttsModelLabel')}
+                  </label>
+                  <div className="rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-teal-300">
+                    {TTS_MODEL}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                    <Mic size={12} /> {t('upload.config.ttsVoiceLabel')}
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">{t('upload.config.ttsVoicePresetHint')}</p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {COSYVOICE_V3_FLASH_VOICES.map((v) => (
+                      <div
+                        key={v.id}
+                        className={`flex items-center gap-0 rounded-xl overflow-hidden border-2 transition-all ${
+                          ttsVoiceName === v.id
+                            ? 'border-teal-500 bg-teal-500/15 shadow-md shadow-teal-500/10'
+                            : 'border-white/20 hover:border-teal-400/50 bg-white/5'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setTtsVoiceName(v.id)}
+                          className="pl-3 pr-2 py-2.5 text-sm font-medium text-left text-gray-200 flex-1 min-w-0"
+                        >
+                          {v.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleTtsVoicePreview(e, v.id)}
+                          className="pr-2.5 py-2.5 text-teal-400 hover:text-teal-300 hover:bg-white/10 flex-shrink-0 transition-colors"
+                          title={t('upload.voicePreview')}
+                        >
+                          {voicePlayingId === `tts-${v.id}` ? (
+                            <Square size={16} fill="currentColor" />
+                          ) : (
+                            <Play size={16} fill="currentColor" />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1 flex-wrap">
+                    <span>{t('upload.config.ttsVoiceCustomHint')}</span>
+                    <a
+                      href={COSYVOICE_VOICE_LIST_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-teal-400 hover:text-teal-300 inline-flex items-center gap-0.5"
+                    >
+                      {t('upload.config.ttsVoiceListLink')}
+                      <ExternalLink size={12} />
+                    </a>
+                  </p>
+                  <input
+                    type="text"
+                    value={ttsVoiceName}
+                    onChange={(e) => setTtsVoiceName(e.target.value)}
+                    placeholder={t('upload.config.ttsVoicePlaceholder')}
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
               </div>
             )}
             {useVoice === 'own' && (

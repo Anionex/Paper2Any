@@ -57,6 +57,7 @@ def _p2v_build_worker_input(state, mode: str) -> dict:
             "api_key": getattr(req, "api_key", "") or req.get("api_key", ""),
             "model": getattr(req, "model", "gpt-4o") or req.get("model", "gpt-4o"),
             "tts_model": getattr(req, "tts_model", "") or req.get("tts_model", ""),
+            "tts_voice_name": getattr(req, "tts_voice_name", "") or req.get("tts_voice_name", ""),
             "language": getattr(req, "language", "en") or req.get("language", "en"),
         }
     else:

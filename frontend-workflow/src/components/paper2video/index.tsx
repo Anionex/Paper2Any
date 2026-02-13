@@ -3,7 +3,7 @@ import { API_KEY } from '../../config/api';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
 import { Step, ScriptPage } from './types';
-import { MAX_FILE_SIZE, STORAGE_KEY, TTS_MODEL } from './constants';
+import { MAX_FILE_SIZE, STORAGE_KEY, TTS_MODEL_DEFAULT, TALKING_MODEL_DEFAULT } from './constants';
 import Banner from '../paper2ppt/Banner';
 import StepIndicator from './StepIndicator';
 import UploadStep from './UploadStep';
@@ -33,6 +33,7 @@ const Paper2VideoPage = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarPreset, setAvatarPreset] = useState<string | null>(null);
+  const [talkingModel, setTalkingModel] = useState<'echomimic' | 'liveportrait'>(TALKING_MODEL_DEFAULT);
   const [useVoice, setUseVoice] = useState<'tts' | 'own'>('tts');
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [voiceFileName, setVoiceFileName] = useState<string | null>(null);
@@ -62,6 +63,8 @@ const Paper2VideoPage = () => {
     import.meta.env.VITE_DEFAULT_LLM_API_URL || 'https://api.apiyi.com/v1'
   );
   const [scriptModel, setScriptModel] = useState('gpt-4o');
+  const [ttsModel, setTtsModel] = useState<string>(TTS_MODEL_DEFAULT);
+  const [ttsVoiceName, setTtsVoiceName] = useState<string>('longanyang');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
 
   useEffect(() => {
@@ -73,6 +76,8 @@ const Paper2VideoPage = () => {
         if (saved.apiKey) setApiKey(saved.apiKey);
         if (saved.scriptApiUrl) setScriptApiUrl(saved.scriptApiUrl);
         if (saved.scriptModel) setScriptModel(saved.scriptModel);
+        if (saved.ttsModel) setTtsModel(saved.ttsModel);
+        if (saved.ttsVoiceName) setTtsVoiceName(saved.ttsVoiceName);
         if (saved.language) setLanguage(saved.language);
       }
       const userApi = getApiSettings(user?.id || null);
@@ -87,7 +92,7 @@ const Paper2VideoPage = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const data = { apiKey, scriptApiUrl, scriptModel, language };
+    const data = { apiKey, scriptApiUrl, scriptModel, ttsModel, ttsVoiceName, language };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       if (user?.id && scriptApiUrl && apiKey) {
@@ -96,7 +101,7 @@ const Paper2VideoPage = () => {
     } catch (e) {
       console.error('Failed to persist paper2video config', e);
     }
-  }, [apiKey, scriptApiUrl, scriptModel, language, user?.id]);
+  }, [apiKey, scriptApiUrl, scriptModel, ttsModel, ttsVoiceName, language, user?.id]);
 
   useEffect(() => {
     const fetchStars = async () => {
@@ -243,8 +248,10 @@ const Paper2VideoPage = () => {
       formData.append('api_key', apiKey.trim());
       formData.append('chat_api_url', scriptApiUrl.trim());
       formData.append('model', scriptModel);
-      formData.append('tts_model', TTS_MODEL);
+      formData.append('tts_model', ttsModel);
+      formData.append('tts_voice_name', ttsVoiceName.trim() || 'longanyang');
       formData.append('language', language);
+      formData.append('talking_model', useAvatar === 'yes' ? talkingModel : TALKING_MODEL_DEFAULT);
       if (useAvatar === 'yes') {
         if (avatarFile) formData.append('avatar', avatarFile);
         else if (avatarPreset) formData.append('avatar_preset', avatarPreset);
@@ -371,6 +378,8 @@ const Paper2VideoPage = () => {
     setResultPath(null);
     setStateSnapshot(null);
     setVideoUrl(null);
+    setTtsModel(TTS_MODEL_DEFAULT);
+    setTtsVoiceName('longanyang');
     setError(null);
     setProgress(0);
     setProgressStatus('');
@@ -393,6 +402,8 @@ const Paper2VideoPage = () => {
               avatarFile={avatarFile}
               avatarPreview={avatarPreview}
               avatarPreset={avatarPreset}
+              talkingModel={talkingModel}
+              setTalkingModel={setTalkingModel}
               voiceFile={voiceFile}
               voiceFileName={voiceFileName}
               useVoice={useVoice}
@@ -408,6 +419,10 @@ const Paper2VideoPage = () => {
               setScriptApiUrl={setScriptApiUrl}
               scriptModel={scriptModel}
               setScriptModel={setScriptModel}
+              ttsModel={ttsModel}
+              setTtsModel={setTtsModel}
+              ttsVoiceName={ttsVoiceName}
+              setTtsVoiceName={setTtsVoiceName}
               language={language}
               setLanguage={setLanguage}
               handleFileChange={handleFileChange}

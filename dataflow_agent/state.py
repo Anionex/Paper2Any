@@ -105,8 +105,9 @@ class Paper2VideoRequest(MainRequest):
     paper_pdf_path: str = ""
     # 用户上传的图片，添加在ppt中的，现在这个字段不用了
     user_imgs_path: str = ""
-    # tts使用的模型
-    tts_model: str = "gemini-2.5-pro-preview-tts"
+    # tts使用的模型（CosyVoice）
+    tts_model: str = "cosyvoice-v3-flash"
+    tts_voice_name: str = ""
     # 判断当前处于什么stage
     script_stage: bool = True
 
@@ -118,6 +119,8 @@ class Paper2VideoRequest(MainRequest):
     ref_text: str = ""
     # 用户上传的人像图片
     ref_img_path: str = ""
+    # 数字人模型：echomimic（本地）或 liveportrait（云，默认）
+    talking_model: str = "liveportrait"
     # 用户上传的cursor图片
     # fixme: 这里的绝对路径需要修改一下
     cursor_path: str = "/data/users/ligang/Paper2Any/dataflow_agent/toolkits/p2vtool/red.png"
@@ -462,9 +465,9 @@ class KBPodcastRequest(MainRequest):
     files: List[str] = field(default_factory=list)  # 文件路径列表
     podcast_mode: str = "monologue"  # monologue | dialog
     podcast_length: str = "standard"  # brief | standard | long
-    tts_model: str = "gemini-2.5-pro-preview-tts"
-    voice_name: str = "Kore"
-    voice_name_b: str = "Puck"
+    tts_model: str = "cosyvoice-v3-flash"
+    voice_name: str = ""
+    voice_name_b: str = ""
     language: str = "zh"
 
 @dataclass

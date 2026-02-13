@@ -95,9 +95,11 @@ async def run_paper2video_generate_subtitle_wf_api(
     chat_api_url: str = "",
     api_key: str = "",
     model: str = "gpt-4o",
-    tts_model: str = "gemini-2.5-pro-preview-tts",
+    tts_model: str = "cosyvoice-v3-flash",
+    tts_voice_name: str = "",
     language: str = "en",
     email: str = "",
+    talking_model: str = "liveportrait",
 ) -> dict[str, Any]:
     """
     执行“生成字幕/脚本”工作流：从 PDF（及可选头像/语音）解析出每页图片与语音脚本。
@@ -110,7 +112,7 @@ async def run_paper2video_generate_subtitle_wf_api(
     - ref_audio_path: 参考语音路径，空表示未上传
     - ref_text: 参考语音对应文本，空时工作流内部可选用 Whisper 等转录
     - chat_api_url / api_key / model: 脚本生成用 LLM 配置
-    - tts_model: 语音模型名（如 gemini-2.5-pro-preview-tts）
+    - tts_model: 语音模型名（如 cosyvoice-v3-flash）
     - language: zh / en
     - email: 用户标识，用于日志与可选路径
 
@@ -134,7 +136,9 @@ async def run_paper2video_generate_subtitle_wf_api(
         ref_text=ref_text or "",
         ref_img_path=ref_img_path or "",
         tts_model=tts_model or "",
+        tts_voice_name=(tts_voice_name or "").strip(),
         script_stage=True,
+        talking_model=(talking_model or "liveportrait").strip() or "liveportrait",
     )
     state = Paper2VideoState(request=req, messages=[])
     setattr(state, "result_path", str(result_root))

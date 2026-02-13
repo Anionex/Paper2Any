@@ -46,6 +46,7 @@ def get_image_paths(directory_path: str) -> List[str]:
     return [str(p.resolve()) for p in found_image_paths]
 
 def create_subtitle_image(text, font_size=32, font_path="arial.ttf"):
+    # fixme: 硬编码了路径，后续可能需要修改
     if font_path == "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc":
         try:
             font = ImageFont.truetype(font_path, font_size, index=2)
@@ -262,18 +263,373 @@ def run_echomimic_inference(args):
         "--save_path", save_path,
     ]
     log.info(f"Starting Task on GPU {gpu_id}: {audio_basename}")
+    # fixme: 硬编码了路径，后续可能需要修改
     result = subprocess.run(cmd, cwd="/data/users/ligang/EchoMimic", env=env)
 
     if os.path.exists(config_bak):
         os.remove(config_bak)
     return result
 
-def talking_gen_per_slide(model_name, input_list, project_root, save_dir, env_path):
+
+# ------------------------- LivePortrait 云数字人 API -------------------------
+LIVEPORTRAIT_MODEL = "liveportrait"
+LIVEPORTRAIT_DETECT_MODEL = "liveportrait-detect"
+LIVEPORTRAIT_UPLOAD_API = "https://dashscope.aliyuncs.com/api/v1/uploads"
+LIVEPORTRAIT_VIDEO_SYNTHESIS_API = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis"
+LIVEPORTRAIT_FACE_DETECT_API = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2video/face-detect"
+LIVEPORTRAIT_TASKS_API = "https://dashscope.aliyuncs.com/api/v1/tasks"
+
+
+def _liveportrait_get_upload_policy(api_key: str, model: str = LIVEPORTRAIT_MODEL) -> dict:
+    """获取 DashScope 文件上传凭证，用于后续上传图片/音频并得到 oss:// URL。"""
+    import requests
+    resp = requests.get(
+        LIVEPORTRAIT_UPLOAD_API,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        params={"action": "getPolicy", "model": model},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if "data" not in data:
+        raise RuntimeError(f"LivePortrait getPolicy response missing data: {data}")
+    return data["data"]
+
+
+def _liveportrait_upload_file(api_key: str, file_path: str, model: str = LIVEPORTRAIT_MODEL) -> str:
+    """上传本地文件到 DashScope 临时 OSS，返回 oss://... URL。调用 API 时需加 Header X-DashScope-OssResourceResolve: enable。"""
+    import requests
+    policy_data = _liveportrait_get_upload_policy(api_key, model)
+    file_path = Path(file_path)
+    if not file_path.is_file():
+        raise FileNotFoundError(f"LivePortrait upload: file not found: {file_path}")
+    key = f"{policy_data['upload_dir']}/{file_path.name}"
+    with open(file_path, "rb") as f:
+        files = {
+            "OSSAccessKeyId": (None, policy_data["oss_access_key_id"]),
+            "Signature": (None, policy_data["signature"]),
+            "policy": (None, policy_data["policy"]),
+            "x-oss-object-acl": (None, policy_data["x_oss_object_acl"]),
+            "x-oss-forbid-overwrite": (None, policy_data["x_oss_forbid_overwrite"]),
+            "key": (None, key),
+            "success_action_status": (None, "200"),
+            "file": (file_path.name, f.read()),
+        }
+        resp = requests.post(policy_data["upload_host"], files=files, timeout=120)
+    resp.raise_for_status()
+    return f"oss://{key}"
+
+
+def liveportrait_face_detect(api_key: str, image_path: Union[str, Path]) -> Tuple[bool, str]:
+    """
+    使用 LivePortrait-detect 检测人物肖像图是否符合数字人输入规范。
+    仅支持 HTTP/OSS 链接，会先将本地文件上传到 DashScope 临时 OSS 再调用 face-detect。
+    返回 (passed, message)：通过时 passed=True、message 可能为空；不通过时 passed=False、message 为原因（如 No human face detected）。
+    """
+    import requests
+    image_path = Path(image_path)
+    if not image_path.is_file():
+        return False, "图像文件不存在"
+    image_oss = _liveportrait_upload_file(api_key, str(image_path), model=LIVEPORTRAIT_DETECT_MODEL)
+    resp = requests.post(
+        LIVEPORTRAIT_FACE_DETECT_API,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-DashScope-OssResourceResolve": "enable",
+        },
+        json={
+            "model": LIVEPORTRAIT_DETECT_MODEL,
+            "input": {"image_url": image_oss},
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if "code" in data and data.get("code"):
+        return False, data.get("message", data.get("code", "检测接口返回错误"))
+    output = data.get("output", data)
+    passed = output.get("pass", False)
+    message = output.get("message") or ""
+    return bool(passed), str(message).strip()
+
+
+def _liveportrait_submit(api_key: str, image_url: str, audio_url: str, template_id: str = "normal") -> str:
+    """提交 LivePortrait 视频合成异步任务，返回 task_id。image_url/audio_url 需为 oss:// 或公网 URL。"""
+    import requests
+    payload = {
+        "model": LIVEPORTRAIT_MODEL,
+        "input": {"image_url": image_url, "audio_url": audio_url},
+        "parameters": {"template_id": template_id},
+    }
+    resp = requests.post(
+        LIVEPORTRAIT_VIDEO_SYNTHESIS_API,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-DashScope-Async": "enable",
+            "X-DashScope-OssResourceResolve": "enable",
+        },
+        json=payload,
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    task_id = data.get("output", {}).get("task_id") or data.get("task_id")
+    if not task_id:
+        raise RuntimeError(f"LivePortrait submit response missing task_id: {data}")
+    return task_id
+
+
+def _liveportrait_poll(api_key: str, task_id: str, poll_interval: float = 5.0, max_wait: float = 600.0) -> Optional[str]:
+    """轮询任务状态，成功时返回结果视频 URL，失败返回 None 或抛异常。"""
+    import requests
+    import time
+    url = f"{LIVEPORTRAIT_TASKS_API}/{task_id}"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    start = time.monotonic()
+    while (time.monotonic() - start) < max_wait:
+        resp = requests.get(url, headers=headers, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        output = data.get("output", data)
+        status = output.get("task_status") or output.get("status")
+        if status == "SUCCEEDED":
+            results = output.get("results") or output.get("result")
+            if isinstance(results, dict):
+                video_url = results.get("video_url") or results.get("url")
+                if video_url:
+                    return video_url
+            if isinstance(results, list) and results:
+                video_url = results[0].get("video_url") or results[0].get("url")
+                if video_url:
+                    return video_url
+            return output.get("video_url") or output.get("video_path")
+        if status in ("FAILED", "CANCELED"):
+            msg = output.get("message") or output.get("code") or str(data)
+            raise RuntimeError(f"LivePortrait task failed: {status} - {msg}")
+        time.sleep(poll_interval)
+    raise TimeoutError(f"LivePortrait task {task_id} did not finish within {max_wait}s")
+
+
+def _liveportrait_single(
+    api_key: str,
+    ref_img_path: str,
+    audio_path: str,
+    save_path: str | Path,
+    template_id: str = "normal",
+) -> bool:
+    """单段：上传图片+音频，提交任务，轮询并下载视频到 save_path。"""
+    import requests
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    image_oss = _liveportrait_upload_file(api_key, ref_img_path)
+    audio_oss = _liveportrait_upload_file(api_key, audio_path)
+    task_id = _liveportrait_submit(api_key, image_oss, audio_oss, template_id=template_id)
+    video_url = _liveportrait_poll(api_key, task_id)
+    if not video_url:
+        log.warning("[liveportrait] task %s succeeded but no video_url", task_id)
+        return False
+    resp = requests.get(video_url, timeout=120)
+    resp.raise_for_status()
+    save_path.write_bytes(resp.content)
+    log.info("[liveportrait] saved %s", save_path)
+    return True
+
+
+def _liveportrait_single_with_retry(
+    api_key: str,
+    ref_img_path: str,
+    audio_path: str,
+    save_path: str | Path,
+    template_id: str = "normal",
+    max_retries: int = 3,
+    retry_delay: float = 15.0,
+) -> bool:
+    """单段 LivePortrait 生成，输出校验失败或异常时重试。"""
+    import time
+    save_path = Path(save_path)
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            if save_path.is_file():
+                try:
+                    os.remove(save_path)
+                except OSError:
+                    pass
+            ok = _liveportrait_single(api_key, ref_img_path, audio_path, save_path, template_id=template_id)
+            if not ok:
+                last_err = RuntimeError("_liveportrait_single returned False")
+                if attempt < max_retries - 1:
+                    log.warning("[liveportrait] attempt %s/%s failed, retry in %.0fs", attempt + 1, max_retries, retry_delay)
+                    time.sleep(retry_delay)
+                continue
+            if not _validate_talking_video_output(save_path, audio_path):
+                try:
+                    os.remove(save_path)
+                except OSError:
+                    pass
+                last_err = RuntimeError("LivePortrait output validation failed")
+                log.warning("[liveportrait] output validation failed (attempt %s/%s), retry in %.0fs", attempt + 1, max_retries, retry_delay)
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                raise last_err
+            return True
+        except Exception as e:
+            last_err = e
+            if save_path.is_file():
+                try:
+                    os.remove(save_path)
+                except OSError:
+                    pass
+            log.warning("[liveportrait] attempt %s/%s failed: %s", attempt + 1, max_retries, e)
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                raise
+    if last_err:
+        raise last_err
+    return False
+
+
+def _call_echomimic_api_single(
+    base_url: str,
+    ref_img_path: str,
+    audio_path: str,
+    save_dir: Path,
+    timeout_sec: int = 900,
+    max_retries: int = 10,
+    retry_delay: float = 30.0,
+    task_idx: Optional[int] = None,
+) -> bool:
+    """
+    向 EchoMimic API 发送单次推理请求，将返回的视频字节写入 save_dir/<subdir>/digit_person_withaudio.mp4。
+    task_idx 非空时用 save_dir/<task_idx>，保证与 input_list 顺序一一对应，避免多线程下同名音频或乱序导致音画错位。
+    若返回 503 则等待后重试（由 Nginx 或服务端换实例）。
+    """
+    import time
+    import httpx
+
+    if task_idx is not None:
+        out_dir = save_dir / str(task_idx)
+    else:
+        audio_basename = os.path.splitext(os.path.basename(audio_path))[0]
+        out_dir = save_dir / audio_basename
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "digit_person_withaudio.mp4"
+
+    url = base_url.rstrip("/") + "/infer"
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            with open(ref_img_path, "rb") as f_img, open(audio_path, "rb") as f_aud:
+                files = [
+                    ("image", ("image.png", f_img.read(), "image/png")),
+                    ("audio", ("audio.wav", f_aud.read(), "audio/wav")),
+                ]
+            with httpx.Client(timeout=timeout_sec) as client:
+                resp = client.post(url, files=files)
+            if resp.status_code == 503:
+                last_err = httpx.HTTPStatusError("503 Service Unavailable", request=resp.request, response=resp)
+                log.warning("[echomimic-api] 503 (attempt %s/%s), retry in %.0fs", attempt + 1, max_retries, retry_delay)
+                time.sleep(retry_delay)
+                continue
+            resp.raise_for_status()
+            out_path.write_bytes(resp.content)
+            log.info("[echomimic-api] wrote %s", out_path)
+            return True
+        except httpx.HTTPStatusError as e:
+            last_err = e
+            if e.response.status_code == 503 and attempt < max_retries - 1:
+                log.warning("[echomimic-api] 503 (attempt %s/%s), retry in %.0fs", attempt + 1, max_retries, retry_delay)
+                time.sleep(retry_delay)
+                continue
+            # 500 等错误时打出服务端返回的 body，便于排查
+            try:
+                body = e.response.text
+                if body:
+                    log.error("[echomimic-api] server error %s body: %s", e.response.status_code, body[:2000])
+            except Exception:
+                pass
+            raise
+        except Exception as e:
+            last_err = e
+            log.warning("[echomimic-api] attempt %s/%s failed: %s", attempt + 1, max_retries, e)
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                raise
+    if last_err:
+        raise last_err
+    return True
+
+
+def talking_gen_per_slide(model_name, input_list, project_root, save_dir, env_path, api_key: Optional[str] = None):
     import multiprocessing as mp
     save_dir = Path(save_dir)
 
-    # fixme: 这里可能需要修改
-    gpu_list = [4,5,6,4,5,6,4,5,6]
+    # 云数字人 LivePortrait：上传图片/音频到 DashScope OSS，提交异步任务，轮询并下载；Key 仅从环境变量 LIVEPORTRAIT_KEY 读取
+    if model_name == "liveportrait":
+        key = (os.getenv("LIVEPORTRAIT_KEY", "") or "").strip()
+        if not key:
+            raise ValueError("LivePortrait 需要设置环境变量 LIVEPORTRAIT_KEY")
+        from concurrent.futures import ThreadPoolExecutor
+        max_workers = min(4, len(input_list)) or 1
+        results = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for idx, (ref_img_path, audio_path) in enumerate(input_list):
+                out_dir = save_dir / str(idx)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / "digit_person_withaudio.mp4"
+                fut = executor.submit(_liveportrait_single_with_retry, key, str(ref_img_path), str(audio_path), out_path)
+                futures.append((idx, fut))
+            for idx, fut in futures:
+                try:
+                    fut.result()
+                    results.append(None)  # 成功无返回值，与 echomimic 一致
+                except Exception as e:
+                    log.exception("[liveportrait] task %s failed: %s", idx, e)
+                    results.append(subprocess.CompletedProcess(args=[], returncode=1))
+        return results
+
+    # 若配置了 EchoMimic API（如 Nginx 入口），则走 HTTP 请求，并行打 8 个实例，503 时重试排队
+    
+    # fixme: 如果不使用nginx，则这个为空串即可。现在这里硬编码一个本地地址，后续需要修改。
+    nginx_echomimic_api_url = "http://localhost:8200"
+    if model_name == "echomimic" and nginx_echomimic_api_url:
+        timeout_sec = int(os.getenv("ECHOMIMIC_CLIENT_TIMEOUT", "900"))
+        max_workers = 8
+        from concurrent.futures import ThreadPoolExecutor
+        tasks = [
+            (str(Path(ref_img_path).resolve()), str(Path(audio_path).resolve()))
+            for ref_img_path, audio_path in input_list
+        ]
+        results = [None] * len(tasks)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _call_echomimic_api_single,
+                    nginx_echomimic_api_url,
+                    ref_img_path,
+                    audio_path,
+                    save_dir,
+                    timeout_sec=timeout_sec,
+                    task_idx=idx,
+                )
+                for idx, (ref_img_path, audio_path) in enumerate(tasks)
+            ]
+            for idx, fut in enumerate(futures):
+                try:
+                    fut.result()
+                except Exception as e:
+                    log.exception("[echomimic-api] task %s failed: %s", idx, e)
+                    results[idx] = subprocess.CompletedProcess(args=[], returncode=1)
+        return results
+
+    # 原有逻辑：本地多进程子进程调用
+    gpu_list = [4, 5, 6, 4, 5, 6, 4, 5, 6]
     num_gpus = len(gpu_list)
     task_list = []
     if model_name == "hallo2":
@@ -283,24 +639,24 @@ def talking_gen_per_slide(model_name, input_list, project_root, save_dir, env_pa
     elif model_name == "echomimic":
         config_path = "/data/users/ligang/EchoMimic/configs/prompts/animation.yaml"
         script_path = "/data/users/ligang/EchoMimic/infer_audio2vid.py"
+    else:
+        config_path = ""
+        script_path = ""
     for idx, (ref_img_path, audio_path) in enumerate(input_list):
         ref_img_path = Path(ref_img_path)
         audio_path = Path(audio_path)
         gpu_id = gpu_list[len(task_list) % num_gpus]
-        # target_path = save_dir / str(idx) / "digit_person_withaudio.mp4"
-        # if not target_path.exists():
         task_list.append([
-            str(ref_img_path), 
-            str(audio_path), 
-            str(save_dir), 
-            str(config_path), 
-            str(script_path), 
+            str(ref_img_path),
+            str(audio_path),
+            str(save_dir),
+            str(config_path),
+            str(script_path),
             env_path,
             gpu_id,
         ])
 
     results = []
-    
     if num_gpus > 1:
         ctx = mp.get_context("spawn")
         # fixme: 这个错误很致命！！！在这段代码之前，某处执行的代码错误的将“PYTHONHASHSEED”设置为了一个64位整数
@@ -354,6 +710,44 @@ def get_mp4_duration_ffprobe(path):
     ]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
     return float(result.stdout.strip())
+
+
+# 数字人输出校验：用于失败时触发重试
+MIN_TALKING_VIDEO_SIZE = 1024  # 至少 1KB
+DURATION_RATIO_MIN, DURATION_RATIO_MAX = 0.3, 2.5  # 视频时长/音频时长 合理区间
+
+
+def _validate_talking_video_output(
+    video_path: Union[str, Path],
+    audio_path: Optional[Union[str, Path]] = None,
+    min_size: int = MIN_TALKING_VIDEO_SIZE,
+    duration_ratio: Tuple[float, float] = (DURATION_RATIO_MIN, DURATION_RATIO_MAX),
+) -> bool:
+    """
+    校验数字人输出视频是否有效：文件存在、大小足够，可选与音频时长比例合理。
+    返回 True 表示通过，False 表示需重试。
+    """
+    p = Path(video_path)
+    if not p.is_file():
+        return False
+    if p.stat().st_size < min_size:
+        log.warning("[talking-video] output too small: %s (%s bytes)", p, p.stat().st_size)
+        return False
+    if audio_path and Path(audio_path).is_file():
+        try:
+            video_dur = get_mp4_duration_ffprobe(p)
+            audio_dur = get_audio_length(audio_path)
+        except Exception as e:
+            log.warning("[talking-video] cannot get duration for validation: %s", e)
+            return False
+        if audio_dur <= 0:
+            return True
+        ratio = video_dur / audio_dur
+        if ratio < duration_ratio[0] or ratio > duration_ratio[1]:
+            log.warning("[talking-video] duration ratio out of range: video=%.2fs audio=%.2fs ratio=%.2f", video_dur, audio_dur, ratio)
+            return False
+    return True
+
 
 '''========================== 解析生成cursor位置信息相关的函数  =================================='''
 _GLOBAL_PIPE_BYTEDANCE_SEED = None
@@ -562,12 +956,12 @@ def speech_task_wrapper_with_f5(task_args):
     duration = get_audio_length(str(speech_result_path))
     return slide_idx, idx, duration, str(speech_result_path)
 
-def speech_task_wrapper_with_gemini(task_args):
+def speech_task_wrapper_with_cloud_tts(task_args):
     """
-    单个句子的语音生成任务，优先使用 Gemini TTS；若 5 次内均失败则回退到 F5-TTS（需提供 ref_audio_path、ref_text、gpu_list）。
-    task_args 可为 7 元组或 10 元组：
-    - 7 元组: (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url)
-    - 10 元组: 上述 7 项 + (ref_audio_path, ref_text, gpu_list)，用于 Gemini 失败后 F5 回退
+    单个句子的语音生成任务，优先使用云 TTS（CosyVoice）；若 5 次内均失败则回退到 F5-TTS（需提供 ref_audio_path、ref_text、gpu_list）。
+    task_args 可为 8 元组或 10 元组：
+    - 8 元组: (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url, tts_voice_name)
+    - 10 元组: 上述 8 项 + (gpu_list, speech_language)，用于云 TTS 失败后 F5 回退
     """
     from dataflow_agent.toolkits.multimodaltool.req_tts import (
         generate_speech_and_save_async,
@@ -575,32 +969,40 @@ def speech_task_wrapper_with_gemini(task_args):
     )
     import asyncio
 
-    if len(task_args) >= 9:
+    if len(task_args) >= 10:
         (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url,
-         gpu_list, speech_language) = task_args[:9]
+         tts_voice_name, gpu_list, speech_language) = task_args[:10]
         can_fallback_f5 = bool(gpu_list)
+    elif len(task_args) >= 8:
+        (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url,
+         tts_voice_name) = task_args[:8]
+        ref_audio_path = ref_text = gpu_list = None
+        can_fallback_f5 = False
     else:
-        (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url) = task_args
+        (slide_idx, idx, prompt, speech_result_path, api_key, tts_model, chat_api_url) = task_args[:7]
+        tts_voice_name = ""
         ref_audio_path = ref_text = gpu_list = None
         can_fallback_f5 = False
 
-    async def _run_gemini():
+    voice_name = (tts_voice_name or "").strip()
+
+    async def _run_cloud_tts():
         return await generate_speech_and_save_async(
             prompt,
             str(speech_result_path),
             api_url=chat_api_url,
             api_key=api_key,
             model=tts_model,
-            voice_name="Kore",
+            voice_name=voice_name,
             max_attempts=5,
         )
 
     try:
-        speech_result_path = asyncio.run(_run_gemini())
+        speech_result_path = asyncio.run(_run_cloud_tts())
     except TTSFallbackToF5Error:
         if not can_fallback_f5:
             raise
-        log.warning(f"Gemini TTS 5 次均失败，回退 F5-TTS: slide_idx={slide_idx}, idx={idx}")
+        log.warning(f"云 TTS 5 次均失败，回退 F5-TTS: slide_idx={slide_idx}, idx={idx}")
         # 从 speech_result_path 的父目录中任选一个 .wav 作为 ref_audio
         parent_dir = Path(speech_result_path).resolve().parent
         current_name = Path(speech_result_path).name

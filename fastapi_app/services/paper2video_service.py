@@ -13,6 +13,7 @@ paper2video 业务 Service 层。
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -28,6 +29,7 @@ from fastapi_app.workflow_adapters.wa_paper2video import (
 )
 from dataflow_agent.logger import get_logger
 from dataflow_agent.utils import get_project_root
+from dataflow_agent.toolkits.p2vtool.p2v_tool import liveportrait_face_detect
 
 log = get_logger(__name__)
 
@@ -77,8 +79,10 @@ class Paper2VideoService:
         api_key: str = "",
         chat_api_url: str = "",
         model: str = "gpt-4o",
-        tts_model: str = "gemini-2.5-pro-preview-tts",
+        tts_model: str = "cosyvoice-v3-flash",
+        tts_voice_name: str = "",
         language: str = "en",
+        talking_model: str = "liveportrait",
         file: Optional[UploadFile] = None,
         avatar: Optional[UploadFile] = None,
         avatar_preset: Optional[str] = None,
@@ -130,8 +134,39 @@ class Paper2VideoService:
                 log.warning("[Paper2VideoService] preset avatar not found: %s in %s", preset_id, preset_dir)
                 raise HTTPException(status_code=400, detail=f"avatar_preset '{preset_id}' not found in public/paper2video/avatar")
 
-        # 可选：语音文件（上传优先；否则使用系统预设 voice_preset，从 public/paper2video/sys_audio 复制）
-        # 如果都没有，则说明没有上传语音文件，该字段为 None，选择使用模型生成语音
+        # 用户上传的数字人头像且使用云数字人(LivePortrait)时，调用 LivePortrait 图像检测；系统预设头像不检测；Key 仅从环境变量 LIVEPORTRAIT_KEY 读取
+        if avatar_path is not None and avatar is not None and (talking_model or "").strip().lower() == "liveportrait":
+            detect_key = (os.environ.get("LIVEPORTRAIT_KEY", "") or "").strip()
+            if detect_key:
+                try:
+                    passed, detect_message = liveportrait_face_detect(detect_key, avatar_path)
+                    if not passed:
+                        msg = (detect_message or "图像不符合数字人规范").strip()
+                        if not msg:
+                            msg = "图像检测未通过"
+                        log.warning("[Paper2VideoService] LivePortrait face detect failed: %s", msg)
+                        return {
+                            "success": False,
+                            "message": f"数字人图像检测未通过：{msg}",
+                            "result_path": "",
+                            "script_pages": [],
+                            "state_snapshot": None,
+                        }
+                except Exception as e:
+                    log.exception("[Paper2VideoService] LivePortrait face detect error: %s", e)
+                    return {
+                        "success": False,
+                        "message": f"数字人图像检测服务异常：{str(e)}",
+                        "result_path": "",
+                        "script_pages": [],
+                        "state_snapshot": None,
+                    }
+            else:
+                log.warning("[Paper2VideoService] no API key for LivePortrait detect, skip validation")
+
+        # 可选：参考语音（仅在选择「本地语音模型」时传入）
+        # 云语音（CosyVoice）：不传 voice/voice_preset，后端仅用 tts_voice_name 作为音色参数。
+        # 本地语音（F5-TTS）：上传 voice 或选择 voice_preset，从 public/paper2video/sys_audio 复制对应 .wav 作为 ref_audio_path。
         voice_path: Optional[Path] = None
         if voice:
             ext = Path(voice.filename or "").suffix.lower()
@@ -164,8 +199,10 @@ class Paper2VideoService:
             api_key=api_key,
             model=model,
             tts_model=tts_model,
+            tts_voice_name=tts_voice_name or "",
             language=language,
             email=email or "",
+            talking_model=talking_model or "liveportrait",
         )
         log.info("[Paper2VideoService] run_generate_subtitle adapter returned success=%s", resp.get("success"))
 

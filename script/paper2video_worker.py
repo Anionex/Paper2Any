@@ -90,6 +90,7 @@ def _run_generate_subtitle(in_data: dict) -> dict:
         ref_text=in_data.get("ref_text", ""),
         ref_img_path=in_data.get("ref_img_path", ""),
         tts_model=in_data.get("tts_model", ""),
+        tts_voice_name=in_data.get("tts_voice_name", ""),
         script_stage=True,
     )
     state = Paper2VideoState(request=req, messages=[])

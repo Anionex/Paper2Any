@@ -7,7 +7,7 @@ Usage:
     python script/run_paper2video_cli.py --input paper.pdf --api-key sk-xxx
 
     # With custom language / TTS model
-    python script/run_paper2video_cli.py --input paper.pdf --language zh --tts-model gemini-2.5-pro-preview-tts
+    python script/run_paper2video_cli.py --input paper.pdf --language zh --tts-model cosyvoice-v3-flash
 
     # With reference image and audio (talking head / voice clone)
     python script/run_paper2video_cli.py --input paper.pdf --ref-img avatar.png --ref-audio voice.wav --ref-text "reference script"
@@ -85,7 +85,7 @@ Examples:
   python script/run_paper2video_cli.py --input paper.pdf --api-key sk-xxx
 
   # With custom language / TTS model
-  python script/run_paper2video_cli.py --input paper.pdf --language zh --tts-model gemini-2.5-pro-preview-tts
+  python script/run_paper2video_cli.py --input paper.pdf --language zh --tts-model cosyvoice-v3-flash
 
   # With reference image and audio (talking head)
   python script/run_paper2video_cli.py --input paper.pdf --ref-img avatar.png --ref-audio voice.wav --ref-text "script"
@@ -121,8 +121,8 @@ Environment Variables:
 
     parser.add_argument(
         "--tts-model",
-        default="gemini-2.5-pro-preview-tts",
-        help="TTS model name (default: gemini-2.5-pro-preview-tts)",
+        default="cosyvoice-v3-flash",
+        help="TTS model name (default: cosyvoice-v3-flash)",
     )
 
     parser.add_argument(
