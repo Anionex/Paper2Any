@@ -1,15 +1,15 @@
 {
   "steps": {
-    "upload": "Upload Paper",
+    "upload": "Upload PPT",
     "script": "Confirm Script",
     "complete": "Complete & Download"
   },
   "upload": {
-    "subtitle": "PAPER → VIDEO",
+    "subtitle": "PPT → VIDEO",
     "title": "PPT to Video",
-    "desc": "Upload PDF paper, optional avatar and voice. AI generates voice script per page, then video.",
+    "desc": "Upload PPT or PDF. Optional avatar and voice. AI generates voice script per page, then video.",
     "instruction": {
-      "pdf": "Upload PDF paper (required)"
+      "pdf": "Upload PPT (required)"
     },
     "optional": "optional",
     "avatarLabel": "Digital human",
@@ -36,9 +36,9 @@
     "voicePreview": "Preview",
     "voiceUpload": "Click to upload voice (.wav)",
     "dropzone": {
-      "dragText": "Drag PDF here",
-      "supportText": "PDF only",
-      "button": "Select PDF"
+      "dragText": "Drag PPT or PDF here",
+      "supportText": "PPT, PDF",
+      "button": "Select PPT/PDF"
     },
     "config": {
       "title": "Configuration",
@@ -81,5 +81,13 @@
     "download": "Download video",
     "videoNotSupported": "Your browser does not support the video tag.",
     "newTask": "Process new paper"
+  },
+  "example": {
+    "title": "Example Results",
+    "subtitle": "View sample PDF and generated video below",
+    "viewPdf": "View PDF",
+    "viewVideo": "View Video",
+    "example1Title": "Example 1: DataFlow Intro",
+    "example2Title": "Example 2: Poetry \"Chun Xiao\" Teaching"
   }
 }

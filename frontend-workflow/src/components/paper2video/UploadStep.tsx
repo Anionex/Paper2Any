@@ -206,7 +206,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
             </div>
             <label className="px-5 py-2 rounded-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white text-sm font-medium cursor-pointer hover:from-teal-700 hover:to-cyan-700 transition-all">
               {t('upload.dropzone.button')}
-              <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+              <input type="file" accept=".pdf,.pptx" className="hidden" onChange={handleFileChange} />
             </label>
             {selectedFile && (
               <div className="px-4 py-2 bg-teal-500/20 border border-teal-500/40 rounded-lg">

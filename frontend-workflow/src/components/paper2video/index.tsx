@@ -1,4 +1,5 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { API_KEY } from '../../config/api';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
@@ -10,20 +11,26 @@ import UploadStep from './UploadStep';
 import ScriptStep from './ScriptStep';
 import CompleteStep from './CompleteStep';
 
-const BACKEND_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// 开发时 Vite 会代理 /outputs 到后端，用相对路径即可；生产或跨域时需配置 VITE_API_BASE_URL
+const BACKEND_ORIGIN = import.meta.env.VITE_API_BASE_URL || '';
 
 function convertToHttpUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   const outputsIndex = path.indexOf('/outputs/');
   if (outputsIndex !== -1) {
     const relativePath = path.substring(outputsIndex);
-    return `${BACKEND_ORIGIN}${relativePath}`;
+    // 未配置 BACKEND_ORIGIN 时用相对路径，请求会发到当前页面同源（开发时由 Vite 代理到后端）
+    if (!BACKEND_ORIGIN) return relativePath;
+    return `${BACKEND_ORIGIN.replace(/\/$/, '')}${relativePath}`;
   }
   return path;
 }
 
+const EXAMPLE_BASE = '/paper2video/example';
+
 const Paper2VideoPage = () => {
   const { user } = useAuthStore();
+  const { t } = useTranslation(['paper2video', 'common']);
 
   const [currentStep, setCurrentStep] = useState<Step>('upload');
 
@@ -126,10 +133,10 @@ const Paper2VideoPage = () => {
     fetchStars();
   }, []);
 
-  const validatePdf = (file: File): boolean => {
+  const validateDocument = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'pdf') {
-      setError('仅支持 PDF 格式');
+    if (ext !== 'pdf' && ext !== 'pptx') {
+      setError('仅支持 PDF 或 PPTX 格式');
       return false;
     }
     return true;
@@ -137,7 +144,7 @@ const Paper2VideoPage = () => {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !validatePdf(file)) return;
+    if (!file || !validateDocument(file)) return;
     if (file.size > MAX_FILE_SIZE) {
       setError('文件大小超过 50MB 限制');
       return;
@@ -150,7 +157,7 @@ const Paper2VideoPage = () => {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (!file || !validatePdf(file)) return;
+    if (!file || !validateDocument(file)) return;
     if (file.size > MAX_FILE_SIZE) {
       setError('文件大小超过 50MB 限制');
       return;
@@ -218,7 +225,7 @@ const Paper2VideoPage = () => {
 
   const handleStartParse = async () => {
     if (!selectedFile) {
-      setError('请先选择 PDF 文件');
+      setError('请先选择 PDF 或 PPTX 文件');
       return;
     }
     if (!apiKey.trim()) {
@@ -457,6 +464,50 @@ const Paper2VideoPage = () => {
               error={error}
             />
           )}
+
+          {/* 示例效果：预加载展示 public/paper2video/example 下的示例 PDF 与视频 */}
+          <section className="mt-16 pt-10 border-t border-white/10">
+            <h3 className="text-lg font-semibold text-white mb-1">{t('paper2video:example.title')}</h3>
+            <p className="text-sm text-gray-400 mb-6">{t('paper2video:example.subtitle')}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="glass rounded-xl border border-white/10 p-4 space-y-3">
+                <h4 className="text-teal-300 font-medium">{t('paper2video:example.example1Title')}</h4>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                  <iframe
+                    title="示例一 PDF"
+                    src={`${EXAMPLE_BASE}/dataflow.pdf#view=FitH`}
+                    className="w-full h-[280px]"
+                  />
+                </div>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                  <video
+                    src={`${EXAMPLE_BASE}/dataflow.mp4`}
+                    controls
+                    className="w-full max-h-[280px]"
+                    preload="metadata"
+                  />
+                </div>
+              </div>
+              <div className="glass rounded-xl border border-white/10 p-4 space-y-3">
+                <h4 className="text-teal-300 font-medium">{t('paper2video:example.example2Title')}</h4>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                  <iframe
+                    title="示例二 PDF"
+                    src={`${EXAMPLE_BASE}/poetry.pdf#view=FitH`}
+                    className="w-full h-[280px]"
+                  />
+                </div>
+                <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                  <video
+                    src={`${EXAMPLE_BASE}/poetry.mp4`}
+                    controls
+                    className="w-full max-h-[280px]"
+                    preload="metadata"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 

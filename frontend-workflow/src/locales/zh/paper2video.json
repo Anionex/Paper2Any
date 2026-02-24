@@ -1,15 +1,15 @@
 {
   "steps": {
-    "upload": "上传论文",
+    "upload": "上传 PPT",
     "script": "语音脚本确认",
     "complete": "完成下载"
   },
   "upload": {
-    "subtitle": "论文 → 视频",
+    "subtitle": "PPT → 视频",
     "title": "PPT转视频",
-    "desc": "上传 PDF 论文，可选数字人头像与语音文件。AI 按页生成语音脚本，再生成视频。",
+    "desc": "上传 PPT 或 PDF 格式的 PPT，可选数字人头像与语音文件。AI 按页生成语音脚本，再生成视频。",
     "instruction": {
-      "pdf": "上传 PDF 论文（必填）"
+      "pdf": "上传 PPT（必填）"
     },
     "optional": "可选",
     "avatarLabel": "数字人",
@@ -36,9 +36,9 @@
     "voicePreview": "试听",
     "voiceUpload": "点击上传语音（.wav）",
     "dropzone": {
-      "dragText": "将 PDF 拖到此处",
-      "supportText": "仅支持 PDF",
-      "button": "选择 PDF"
+      "dragText": "将 PPT 或 PDF 拖到此处",
+      "supportText": "支持 PPT、PDF",
+      "button": "选择 PPT/PDF"
     },
     "config": {
       "title": "配置",
@@ -81,5 +81,13 @@
     "download": "下载视频",
     "videoNotSupported": "您的浏览器不支持视频播放。",
     "newTask": "处理新论文"
+  },
+  "example": {
+    "title": "示例效果",
+    "subtitle": "可查看以下示例的 PDF 与生成视频效果",
+    "viewPdf": "查看 PDF",
+    "viewVideo": "查看视频",
+    "example1Title": "示例一：DataFlow 论文介绍",
+    "example2Title": "示例二：古诗《春晓》教学讲解"
   }
 }

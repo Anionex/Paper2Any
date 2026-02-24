@@ -12,6 +12,7 @@ paper2video 业务 Service 层。
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -29,7 +30,7 @@ from fastapi_app.workflow_adapters.wa_paper2video import (
 )
 from dataflow_agent.logger import get_logger
 from dataflow_agent.utils import get_project_root
-from dataflow_agent.toolkits.p2vtool.p2v_tool import liveportrait_face_detect
+from dataflow_agent.toolkits.p2vtool.p2v_tool import liveportrait_face_detect, pptx_to_pdf
 
 log = get_logger(__name__)
 
@@ -97,16 +98,41 @@ class Paper2VideoService:
         """
         if not file:
             log.warning("[Paper2VideoService] run_generate_subtitle: missing file")
-            raise HTTPException(status_code=400, detail="file is required (PDF)")
+            raise HTTPException(status_code=400, detail="file is required (PDF or PPTX)")
 
         run_dir = self._create_timestamp_run_dir(email)
         input_dir = run_dir / "input"
         input_dir.mkdir(parents=True, exist_ok=True)
 
-        # 落盘 PDF
-        pdf_path = (input_dir / "input.pdf").resolve()
-        await self._save_upload(pdf_path, file, allowed_ext=[".pdf"])
-        log.info("[Paper2VideoService] saved PDF to %s", pdf_path)
+        # 落盘：支持 PDF 或 PPTX
+        ext = (Path(file.filename or "").suffix or ".pdf").lower()
+        if ext not in [".pdf", ".pptx"]:
+            raise HTTPException(
+                status_code=400,
+                detail="file must be PDF or PPTX",
+            )
+        input_path = (input_dir / f"input{ext}").resolve()
+        await self._save_upload(input_path, file, allowed_ext=[".pdf", ".pptx"])
+        log.info("[Paper2VideoService] saved file to %s", input_path)
+
+        # 若为 PPTX，先转为 PDF，后续流程统一用 PDF
+        if ext == ".pptx":
+            try:
+                pdf_path_str = await asyncio.to_thread(
+                    pptx_to_pdf,
+                    input_path,
+                    input_dir,
+                )
+                pdf_path = Path(pdf_path_str)
+            except Exception as e:
+                log.exception("[Paper2VideoService] PPTX to PDF conversion failed: %s", e)
+                msg = str(e).strip() or "PPTX 转 PDF 失败"
+                if "LibreOffice not found" in str(e) or "not found" in str(e).lower():
+                    msg = "未检测到 LibreOffice，无法转换 PPTX。请安装 LibreOffice（如 apt install libreoffice）或上传 PDF。"
+                raise HTTPException(status_code=500, detail=msg) from e
+        else:
+            pdf_path = input_path
+        log.info("[Paper2VideoService] using PDF for workflow: %s", pdf_path)
 
         # 可选：数字人头像（上传文件优先；否则使用系统预设 avatar_preset）
         # 如果都没有，则说明没有选择数字人，该字段为 None

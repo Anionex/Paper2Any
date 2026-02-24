@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# 启动时加载 fastapi_app/.env 到环境变量，使 os.getenv("COSYVOICE_KEY") 等能读到
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent / ".env"
+    if _env_file.is_file():
+        load_dotenv(_env_file)
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

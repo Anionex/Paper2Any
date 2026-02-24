@@ -328,8 +328,9 @@ if __name__ == "__main__":
         voice_name = "longanhuan"
         try:
             path = await generate_speech_and_save_async(
-                "好雨知时节，当春乃发生。随风潜入夜，润物细无声。",
-                f"/data/users/ligang/Paper2Any/frontend-workflow/public/paper2video/cosyvoice/v3-plus/{voice_name}.wav",
+                "Hello this is a test",
+                # f"/data/users/ligang/Paper2Any/frontend-workflow/public/paper2video/cosyvoice/v3-plus/{voice_name}.wav",
+                "test.wav",
                 url, key, model, voice_name=voice_name,
             )
             log.info(f"Success: {path}")

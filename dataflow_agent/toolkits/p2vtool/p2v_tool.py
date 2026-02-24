@@ -17,6 +17,54 @@ import numpy as np
 log = get_logger(__name__)
 import re
 
+
+def pptx_to_pdf(pptx_path: Union[str, Path], output_dir: Union[str, Path]) -> str:
+    """
+    使用 LibreOffice 将 PPTX（或 PPT）转为 PDF，供 paper2video 等 workflow 使用。
+
+    Args:
+        pptx_path: 输入 PPTX/PPT 文件路径
+        output_dir: 输出目录，生成的 PDF 将写入此目录，文件名为 pptx_path 的 stem + .pdf
+
+    Returns:
+        生成的 PDF 文件路径（字符串）
+
+    Raises:
+        FileNotFoundError: 输入文件不存在
+        RuntimeError: LibreOffice 未安装或转换失败
+    """
+    pptx_path = Path(pptx_path).resolve()
+    output_dir = Path(output_dir).resolve()
+    if not pptx_path.is_file():
+        raise FileNotFoundError(f"PPTX file not found: {pptx_path}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    soffice_bin = os.environ.get("SOFFICE_BIN") or "libreoffice"
+    cmd = [
+        soffice_bin,
+        "--headless",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(output_dir),
+        str(pptx_path),
+    ]
+    log.info("[p2v] Converting PPTX to PDF: %s -> %s", pptx_path, output_dir)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"LibreOffice conversion timeout: {e}") from e
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "LibreOffice not found. Install it (e.g. apt install libreoffice) to support PPTX conversion."
+        ) from e
+    pdf_name = pptx_path.with_suffix(".pdf").name
+    pdf_path = output_dir / pdf_name
+    if not pdf_path.is_file():
+        raise RuntimeError(f"PDF conversion failed, expected output: {pdf_path}")
+    log.info("[p2v] PDF saved: %s", pdf_path)
+    return str(pdf_path)
+
+
 def get_image_paths(directory_path: str) -> List[str]:
     """
     遍历指定目录及其子目录，查找所有常见的图片文件，并按照日期排序，返回它们的路径字符串列表。
@@ -171,6 +219,20 @@ def render_cursor_on_video(
             f"enable='between(t,{move_start},{move_end})'"
         )
         filters.append(move_expr)
+
+    # 最后一个光标点之后到视频结束：保持光标在最后位置，避免末尾几秒光标消失
+    video_duration = get_mp4_duration_ffprobe(input_video)
+    t_last, x_last, y_last = cursor_points[-1]
+    t_hold_end = round(video_duration, 3)
+    t_hold_start = round(t_last, 3)
+    if t_hold_end > t_hold_start:
+        x_hold = x_last - cursor_size / 2
+        y_hold = y_last - cursor_size / 2
+        final_hold = (
+            f"overlay=x={x_hold}:y={y_hold}:"
+            f"enable='between(t,{t_hold_start},{t_hold_end})'"
+        )
+        filters.append(final_hold)
 
     filter_lines = []
     stream_in = "[0][1]"
