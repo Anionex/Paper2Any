@@ -45,6 +45,8 @@ def _abs_path(p: str) -> str:
     if not p:
         return ""
     try:
+        # 去掉 URL query string（如 ?t=1234567890），防止前端缓存破坏参数污染文件路径
+        p = p.split("?", 1)[0]
         return str(Path(p).expanduser().resolve())
     except Exception:
         return p
