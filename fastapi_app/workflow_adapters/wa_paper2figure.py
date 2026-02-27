@@ -82,7 +82,7 @@ async def run_paper2figure_wf_api(req: Paper2FigureRequest, result_path: Path | 
         image_path_or_url = req.input_content
         
         # 尝试将 URL 转换为本地路径
-        if image_path_or_url and image_path_or_url.startswith("http"):
+        if image_path_or_url and "/outputs/" in image_path_or_url:
             if "/outputs/" in image_path_or_url:
                 try:
                     # 提取 /outputs/ 之后的部分
