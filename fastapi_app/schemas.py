@@ -210,6 +210,7 @@ class DeepResearchRequest(BaseModel):
     language: str = "zh"
     email: Optional[str] = None
     user_id: Optional[str] = None
+    notebook_id: Optional[str] = None
     search_provider: Literal["serpapi", "google_cse", "brave"] = "serpapi"
     search_api_key: str = ""
     search_engine: Literal["google", "baidu"] = "google"
@@ -246,6 +247,7 @@ class KBReportRequest(BaseModel):
     length: Literal["short", "standard", "long"] = "standard"
     email: Optional[str] = None
     user_id: Optional[str] = None
+    notebook_id: Optional[str] = None
 
 
 class KBReportResponse(BaseModel):
