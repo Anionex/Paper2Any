@@ -42,6 +42,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
 
   const paper2figureChildren = useMemo(() => ([
     {
+      id: 'paper2figure-model-drawio',
+      labelKey: t('app.navSub.paper2figureModelDrawio'),
+      tooltipKey: t('app.navSubTooltip.paper2figureModelDrawio'),
+      icon: Wand2,
+      gradient: 'from-emerald-500 to-teal-500'
+    },
+    {
       id: 'paper2figure-tech-exp',
       labelKey: t('app.navSub.paper2figureTechExp'),
       tooltipKey: t('app.navSubTooltip.paper2figureTechExp'),
@@ -54,13 +61,6 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navSubTooltip.paper2drawioAi'),
       icon: Network,
       gradient: 'from-violet-500 to-fuchsia-500'
-    },
-    {
-      id: 'paper2figure-model-drawio',
-      labelKey: t('app.navSub.paper2figureModelDrawio'),
-      tooltipKey: t('app.navSubTooltip.paper2figureModelDrawio'),
-      icon: Wand2,
-      gradient: 'from-emerald-500 to-teal-500'
     }
   ]), [t]);
 

@@ -84,7 +84,7 @@
     }
   },
   "submit": {
-    "buttonIdle": "生成可编辑 PPTX",
+    "buttonIdle": "生成",
     "buttonLoading": "生成中...",
     "hintTitle": "提示",
     "hintText": "提示：如果长时间无响应或生成失败，可能是 API 服务商不稳定。建议稍后再试，或尝试更换模型/服务商。"
