@@ -580,7 +580,7 @@ const Image2DrawioPage = () => {
                     onChange={(e) => setApiUrl(e.target.value)}
                     className={inputClass}
                   >
-                    {API_URL_OPTIONS.map((url) => (
+                    {API_URL_OPTIONS.map((url: string) => (
                       <option key={url} value={url}>{url}</option>
                     ))}
                   </select>
