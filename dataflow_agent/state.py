@@ -307,7 +307,7 @@ class Paper2FigureState(MainState):
     figure_tec_svg_bw_content: str = ""
     figure_tec_svg_color_content: str = ""
     svg_img_path: str = ""
-    mineru_port: int = 8010
+    mineru_port: int = int(os.environ.get("MINERU_PORT", 8010))
     svg_file_path: str = ""  # svg 带文字图的 地址
     svg_bg_file_path: str = ""
     svg_bw_file_path: str = ""

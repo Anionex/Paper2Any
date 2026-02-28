@@ -1129,6 +1129,7 @@ def create_pdf2ppt_qwenvl_graph() -> GenericGraphBuilder:
         prs.save(str(out_path))
         state.ppt_path = str(out_path)
         log.info(f"[pdf2ppt_qwenvl] PPT Generated: {out_path}")
+
         return state
 
     nodes = {

@@ -280,8 +280,8 @@ async def generate_or_edit_and_save_image_async(
     """
     # 动态调整超时（保留原有针对 Gemini-3 Pro 的逻辑）
     if _is_gemini_model(model) and is_gemini_3_pro(model):
-        timeout_map = {"1K": 40, "2K": 180, "4K": 350}
-        timeout = timeout_map.get(resolution, 180)
+        timeout_map = {"1K": 60, "2K": 300, "4K": 600}
+        timeout = timeout_map.get(resolution, 300)
     
     log.info(f"generate_or_edit: model={model}, provider_check={detect_provider(api_url)}")
 

@@ -31,7 +31,9 @@ from transformers import AutoModelForImageSegmentation
 from dataflow_agent.logger import get_logger
 
 CURRENT_DIR = Path(__file__).resolve().parent
-MODEL_PATH = CURRENT_DIR / "onnx" / "model.onnx"
+# Allow override via env var (e.g. in Docker: RMBG_MODEL_PATH=/app/models/RMBG-2.0)
+_env_model_path = os.environ.get("RMBG_MODEL_PATH")
+MODEL_PATH = Path(_env_model_path) if _env_model_path else CURRENT_DIR / "onnx" / "model.onnx"
 OUTPUT_DIR = CURRENT_DIR
 
 # 进程级抠图模型缓存：按 model_path 复用 BriaRMBG2Remover 实例

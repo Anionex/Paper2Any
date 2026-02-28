@@ -6,10 +6,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: paper2any-backend
-    ports:
-      - "8002:8000"
+    network_mode: host
     environment:
       - PYTHONUNBUFFERED=1
+      - RMBG_MODEL_PATH=/app/models/RMBG-2.0
     volumes:
       - ./outputs:/app/outputs
       - ./models:/app/models
