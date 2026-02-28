@@ -51,7 +51,7 @@ interface ImageVersion {
   imageUrl: string;
   prompt: string;
   timestamp: number;
-  isCurrentVersion?: boolean;
+  isCurrentVersion: boolean;
 }
 
 interface BeautifyResult {

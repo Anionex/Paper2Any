@@ -307,7 +307,7 @@ class Paper2FigureState(MainState):
     figure_tec_svg_bw_content: str = ""
     figure_tec_svg_color_content: str = ""
     svg_img_path: str = ""
-    mineru_port: int = 8010
+    mineru_port: int = int(os.environ.get("MINERU_PORT", 8010))
     svg_file_path: str = ""  # svg 带文字图的 地址
     svg_bg_file_path: str = ""
     svg_bw_file_path: str = ""
@@ -601,3 +601,47 @@ class Paper2DrawioState(MainState):
     output_xml_path: str = ""      # XML 文件路径
     output_png_path: str = ""      # PNG 导出路径
     output_svg_path: str = ""      # SVG 导出路径
+# ==================== WebSearch Knowledge Store State ====================
+@dataclass
+class WebsearchKnowledgeRequest(MainRequest):
+    """
+    Web 搜索知识入库任务的 Request
+    - input_urls: 用户初始输入的 URL 列表
+    """
+    input_urls: List[str] = field(default_factory=list)
+
+
+@dataclass
+class WebsearchKnowledgeState(MainState):
+    """
+    Web 搜索知识入库任务的 State，继承自 MainState
+    
+    全局状态字段：
+    - input_urls: 用户初始输入的 URL 列表
+    - research_routes: 由初始 URL 分析得出的不同领域调研路线队列（会被 planner 逐步弹出）
+    - original_research_routes: 原始的研究路线列表（不会被修改，供 curator 使用）
+    - raw_data_store: 追加型列表，存储所有阶段抓取到的原始内容
+    - knowledge_base_summary: 最终清洗后的结构化数据的总结
+    """
+    # 重写 request 类型
+    request: WebsearchKnowledgeRequest = field(default_factory=WebsearchKnowledgeRequest)
+
+    # === 全局状态 ===
+    # Input URLs: 用户初始输入的 URL 列表
+    input_urls: List[str] = field(default_factory=list)
+    
+    # Research Routes (研究计划队列) - 会被 planner 逐步弹出
+    research_routes: List[str] = field(default_factory=list)
+    
+    # Original Research Routes (原始研究路线) - 不会被修改，供 chief_curator 使用
+    original_research_routes: List[str] = field(default_factory=list)
+    
+    # 当前由 Planner 分配给 Web Researcher 执行的任务
+    # 注意：必须作为显式字段存在，避免在 LangGraph 状态合并时被丢弃
+    current_task: str = ""
+    
+    # Raw Data Store: 存储原始内容（文本、多模态资源引用等）
+    raw_data_store: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # Knowledge Base Summary: 最终结构化总结
+    knowledge_base_summary: str = ""

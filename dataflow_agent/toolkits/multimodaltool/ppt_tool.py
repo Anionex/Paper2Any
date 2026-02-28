@@ -95,9 +95,10 @@ def _ensure_numpy_sctypes_compat() -> None:
     }
 
 
-_ensure_numpy_sctypes_compat()
+# _ensure_numpy_sctypes_compat() — 移到 _get_paddle_ocr() 内部，仅在需要时调用
 
-from paddleocr import PaddleOCR
+# PaddleOCR 懒加载：仅在实际调用 paddle_ocr() 时才 import，避免启动时下载/初始化
+# from paddleocr import PaddleOCR
 
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -148,13 +149,21 @@ SUBTITLE_RATIO_MAX = 2.0  # 副标题最大倍率
 BODY_RATIO_MIN = 0.9  # 正文最小倍率
 BODY_RATIO_MAX = 1.1  # 正文最大倍率
 
-# PaddleOCR 配置（全局只初始化一次）
-PADDLE_OCR = PaddleOCR(
-    use_angle_cls=True,  # 角度分类，处理横竖混排
-    lang="ch",  # 中文 + 英文
-    det_db_unclip_ratio=1.2 ,
-    det_db_box_thresh=0.5
-)
+# PaddleOCR 懒加载（仅在调用 paddle_ocr() 时初始化）
+_PADDLE_OCR = None
+
+def _get_paddle_ocr():
+    global _PADDLE_OCR
+    if _PADDLE_OCR is None:
+        _ensure_numpy_sctypes_compat()
+        from paddleocr import PaddleOCR
+        _PADDLE_OCR = PaddleOCR(
+            use_angle_cls=True,
+            lang="ch",
+            det_db_unclip_ratio=1.2,
+            det_db_box_thresh=0.5,
+        )
+    return _PADDLE_OCR
 
 # ----------------------------
 # Font Size Clustering
@@ -500,7 +509,7 @@ def paddle_ocr(bgr: np.ndarray, drop_score: int = DROP_SCORE):
     h, w = bgr.shape[:2]
 
     # ocr_result: List[List[ [box, (text, score)], ... ]]
-    ocr_result = PADDLE_OCR.ocr(bgr, cls=True)
+    ocr_result = _get_paddle_ocr().ocr(bgr, cls=True)
     lines = []
 
     if not ocr_result:

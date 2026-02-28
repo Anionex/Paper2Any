@@ -247,9 +247,33 @@ Paper2Any currently includes the following sub-capabilities:
 git clone https://github.com/OpenDCAI/Paper2Any.git
 cd Paper2Any
 
-# 2. Backend env (required for your API keys/models)
+# 2. Configure environment variables
 cp fastapi_app/.env.example fastapi_app/.env
+cp frontend-workflow/.env.example frontend-workflow/.env
+```
 
+**Required configuration:**
+
+`fastapi_app/.env` (backend):
+```bash
+# Required: Your LLM API URL (replace with your own)
+DEFAULT_LLM_API_URL=https://api.openai.com/v1/
+# Optional: Supabase (skip for no auth — core features still work)
+# SUPABASE_URL=https://your-project-id.supabase.co
+# SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+`frontend-workflow/.env` (frontend):
+```bash
+# Required: LLM API URLs available in the UI dropdown (comma separated)
+VITE_DEFAULT_LLM_API_URL=https://api.openai.com/v1
+VITE_LLM_API_URLS=https://api.openai.com/v1
+# Optional: Supabase (keep consistent with backend)
+# VITE_SUPABASE_URL=https://your-project-id.supabase.co
+# VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+```bash
 # 3. Build + run
 docker compose up -d --build
 ```
@@ -257,6 +281,19 @@ docker compose up -d --build
 Open:
 - Frontend: http://localhost:3000
 - Backend health: http://localhost:8000/health
+
+> **GPU services note:** Docker only starts the frontend and backend. No GPU model services are included.
+> - Paper2PPT, Paper2Figure, Knowledge Base, etc. only need LLM APIs and work out of the box.
+> - **PDF2PPT, Image2PPT, Image2Drawio** require the SAM3 segmentation service (needs GPU), deployed separately:
+>   ```bash
+>   # On a machine with GPU
+>   python -m dataflow_agent.toolkits.model_servers.sam3_server \
+>       --port 8001 --checkpoint models/sam3/sam3.pt \
+>       --bpe models/sam3/bpe_simple_vocab_16e6.txt.gz --device cuda
+>   ```
+>   Then add to `fastapi_app/.env`: `SAM3_SERVER_URLS=http://GPU_MACHINE_IP:8001`
+>
+> See the "Advanced: Local Model Server Load Balancing" section below for details.
 
 Modify & update:
 - After changing code or `.env`, rebuild: `docker compose up -d --build`
