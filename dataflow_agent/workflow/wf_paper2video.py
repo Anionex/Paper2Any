@@ -502,7 +502,7 @@ def create_paper2video_graph() -> GenericGraphBuilder:
 
     def generate_talking_video(state: Paper2VideoState):
         '''
-        生成talking head video，暂时先使用echomimic模型。
+        生成 talking head video，当前统一使用 LivePortrait API。
         当 ref_img_path 为空时由条件边跳过，不执行；此处仅做防御性判断。
         '''
         ref_img_path = state.request.ref_img_path or ""
@@ -524,7 +524,7 @@ def create_paper2video_graph() -> GenericGraphBuilder:
         audio_path_list = get_audio_paths(state.speech_save_dir)
         for audio_path in audio_path_list:
             talking_inference_input.append([state.request.ref_img_path, audio_path])
-        talking_model = getattr(state.request, "talking_model", None) or "echomimic"
+        talking_model = getattr(state.request, "talking_model", None) or "liveportrait"
         # LivePortrait Key 仅从环境变量 LIVEPORTRAIT_KEY 读取，不传 request
         talking_gen_per_slide(
             talking_model,

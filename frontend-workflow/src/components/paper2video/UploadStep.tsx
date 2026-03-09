@@ -25,7 +25,6 @@ export const SYSTEM_AUDIO = [
 
 export type UseAvatar = 'none' | 'yes';
 export type UseVoice = 'tts' | 'own';
-export type TalkingModel = 'echomimic' | 'liveportrait';
 
 interface UploadStepProps {
   selectedFile: File | null;
@@ -36,8 +35,6 @@ interface UploadStepProps {
   avatarFile: File | null;
   avatarPreview: string | null;
   avatarPreset: string | null;
-  talkingModel: TalkingModel;
-  setTalkingModel: (v: TalkingModel) => void;
   voiceFile: File | null;
   voiceFileName: string | null;
   useVoice: UseVoice;
@@ -79,8 +76,6 @@ const UploadStep: React.FC<UploadStepProps> = ({
   avatarFile,
   avatarPreview,
   avatarPreset,
-  talkingModel,
-  setTalkingModel,
   voiceFile,
   voiceFileName,
   useVoice,
@@ -247,34 +242,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
             <>
               <p className="text-xs text-amber-400/90 mb-2">{t('upload.avatarTipTime')}</p>
               <p className="text-xs text-gray-400 mb-2">{t('upload.avatarChoiceHint')}</p>
-              <p className="text-xs text-gray-500 mb-1 mt-3">{t('upload.talkingModelLabel')}</p>
-              <div className="flex rounded-lg bg-white/5 border border-white/10 p-1 gap-0 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setTalkingModel('liveportrait')}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                    talkingModel === 'liveportrait'
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
-                      : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
-                  }`}
-                >
-                  {t('upload.talkingModelLiveportrait')}
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/25 text-amber-300 border border-amber-400/40">
-                    {t('upload.talkingModelRecommend')}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTalkingModel('echomimic')}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all ${
-                    talkingModel === 'echomimic'
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
-                      : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
-                  }`}
-                >
-                  {t('upload.talkingModelEchomimic')}
-                </button>
-              </div>
+              <p className="text-xs text-teal-300/90 mb-3 mt-3">{t('upload.talkingModelFixed')}</p>
               <p className="text-xs text-gray-500 mb-1">{t('upload.avatarSystemLabel')}</p>
               <div className="flex flex-wrap gap-3 mb-3">
                 {SYSTEM_AVATARS.map((a) => (

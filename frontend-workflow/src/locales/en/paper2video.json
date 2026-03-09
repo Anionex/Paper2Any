@@ -20,10 +20,7 @@
     "avatarSystemLabel": "System avatars",
     "avatarUploadOwn": "Upload your own",
     "avatarChoiceHint": "Choose system avatar or upload your own (choose one)",
-    "talkingModelLabel": "Digital human model",
-    "talkingModelEchomimic": "Local (Echomimic)",
-    "talkingModelLiveportrait": "Cloud (LivePortrait)",
-    "talkingModelRecommend": "Recommended",
+    "talkingModelFixed": "Digital human video is generated through the LivePortrait cloud API only",
     "voiceLabel": "Voice",
     "voiceUseTts": "Cloud TTS (API)",
     "voiceUseTtsRecommend": "Recommended",
@@ -66,9 +63,14 @@
     "scriptLabel": "Voice script",
     "scriptPlaceholder": "Edit script for this page...",
     "loadingImage": "Loading image...",
+    "costHint": "Generating the final video will consume {{count}} usage credits",
     "back": "Back to upload",
     "confirmAndGenerate": "Confirm and generate video",
     "generating": "Generating video..."
+  },
+  "errors": {
+    "quotaUserInsufficient": "You need at least {{count}} remaining credits to generate a video",
+    "quotaGuestInsufficient": "Guest quota is below {{count}} remaining credits, so video generation is unavailable"
   },
   "complete": {
     "title": "Video ready",
@@ -78,6 +80,7 @@
     "progressTts": "Synthesizing speech...",
     "progressVideo": "Generating talking video...",
     "noVideo": "No video URL yet.",
+    "usageRecordFailed": "The video is ready, but deducting {{count}} usage credits failed",
     "download": "Download video",
     "videoNotSupported": "Your browser does not support the video tag.",
     "newTask": "Process new paper"

@@ -41,6 +41,16 @@ BASE_OUTPUT_DIR = (PROJECT_ROOT / "outputs").resolve()
 class Paper2VideoService:
     """paper2video 两步流程的业务编排。"""
 
+    @staticmethod
+    def _normalize_talking_model(talking_model: str) -> str:
+        normalized = (talking_model or "").strip().lower()
+        if normalized not in {"", "liveportrait"}:
+            log.info(
+                "[Paper2VideoService] force talking_model=%s -> liveportrait",
+                talking_model,
+            )
+        return "liveportrait"
+
     def _create_timestamp_run_dir(self, email: Optional[str]) -> Path:
         """
         根据当前时间戳和邮箱创建本次请求的根输出目录。
@@ -133,6 +143,7 @@ class Paper2VideoService:
         else:
             pdf_path = input_path
         log.info("[Paper2VideoService] using PDF for workflow: %s", pdf_path)
+        talking_model = self._normalize_talking_model(talking_model)
 
         # 可选：数字人头像（上传文件优先；否则使用系统预设 avatar_preset）
         # 如果都没有，则说明没有选择数字人，该字段为 None
@@ -228,7 +239,7 @@ class Paper2VideoService:
             tts_voice_name=tts_voice_name or "",
             language=language,
             email=email or "",
-            talking_model=talking_model or "liveportrait",
+            talking_model=talking_model,
         )
         log.info("[Paper2VideoService] run_generate_subtitle adapter returned success=%s", resp.get("success"))
 

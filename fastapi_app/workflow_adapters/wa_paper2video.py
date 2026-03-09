@@ -125,6 +125,14 @@ async def run_paper2video_generate_subtitle_wf_api(
     result_root = Path(result_path).resolve() if result_path else _ensure_result_path(None, email)
     log.info("[wa_paper2video] run_paper2video_generate_subtitle_wf_api: result_path=%s, paper_pdf_path=%s", result_root, paper_pdf_path)
 
+    normalized_talking_model = "liveportrait"
+    if (talking_model or "").strip().lower() not in {"", "liveportrait"}:
+        log.info(
+            "[wa_paper2video] force talking_model=%s -> %s",
+            talking_model,
+            normalized_talking_model,
+        )
+
     req = Paper2VideoRequest(
         language=language,
         chat_api_url=chat_api_url or "",
@@ -138,7 +146,7 @@ async def run_paper2video_generate_subtitle_wf_api(
         tts_model=tts_model or "",
         tts_voice_name=(tts_voice_name or "").strip(),
         script_stage=True,
-        talking_model=(talking_model or "liveportrait").strip() or "liveportrait",
+        talking_model=normalized_talking_model,
     )
     state = Paper2VideoState(request=req, messages=[])
     setattr(state, "result_path", str(result_root))

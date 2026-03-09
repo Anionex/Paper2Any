@@ -1050,7 +1050,7 @@ const Paper2PptPage = () => {
       }
 
       // 校验通过后才扣积分
-      await recordUsage(user?.id || null, 'paper2ppt');
+      await recordUsage(user?.id || null, 'paper2ppt', { isAnonymous: user?.is_anonymous || false });
       refreshQuota();
 
       // Upload generated file to Supabase Storage (either PPTX or PDF)
