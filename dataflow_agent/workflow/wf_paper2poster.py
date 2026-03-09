@@ -14,12 +14,12 @@ This workflow integrates PosterGen functionality into Paper2Any:
 """
 
 from __future__ import annotations
-import asyncio
 import os
 import sys
 import time
 from pathlib import Path
 from typing import Dict, Any
+from uuid import uuid4
 
 from dataflow_agent.state import Paper2PosterState
 from dataflow_agent.graphbuilder.graph_builder import GenericGraphBuilder
@@ -37,8 +37,8 @@ def _ensure_result_path(state: Paper2PosterState) -> Paper2PosterState:
         return state
 
     root = get_project_root()
-    ts = int(time.time())
-    base_dir = (root / "outputs" / "paper2poster" / str(ts)).resolve()
+    run_id = f"{int(time.time())}-{uuid4().hex[:8]}"
+    base_dir = (root / "outputs" / "paper2poster" / run_id).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
     state.result_path = str(base_dir)
     return state
@@ -86,35 +86,22 @@ def create_paper2poster_graph() -> GenericGraphBuilder:
         """Execute the complete PosterGen pipeline"""
         log.info("Starting PosterGen pipeline execution")
 
-        # CRITICAL: Save the Paper2Any working directory at the very beginning
-        # before any directory changes
-        paper2any_cwd = str(get_project_root())
-
         # Get API credentials from state
         api_key = state.request.api_key or state.request.chat_api_key
         api_url = state.request.chat_api_url
 
-        # Update postertool .env file with user-provided credentials
-        # This ensures pipeline.py loads the correct credentials when it calls load_dotenv()
-        postergen_path = Path(__file__).parent.parent / "toolkits" / "postertool"
-        env_file_path = postergen_path / ".env"
+        env_backup = {
+            "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY"),
+            "OPENAI_BASE_URL": os.environ.get("OPENAI_BASE_URL"),
+        }
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+        if api_url:
+            os.environ["OPENAI_BASE_URL"] = api_url
 
-        if api_key and api_url:
-            log.info(f"Updating postertool .env file with user credentials")
-            env_content = f'OPENAI_API_KEY="{api_key}"\n'
-            env_content += f'OPENAI_BASE_URL="{api_url}"\n'
-            env_file_path.write_text(env_content)
-            log.info(f"Updated {env_file_path}")
-
-        # CRITICAL: Change to postertool directory BEFORE importing modules
-        # This is required because load_dotenv() executes at import time
         try:
-            os.chdir(str(postergen_path))
-            log.info(f"Changed to postertool directory: {postergen_path}")
-
-            # NOW import postertool modules - load_dotenv will find the .env file
             postergen_modules = _import_postergen()
-            log.info("postertool modules imported with correct .env file")
+            log.info("postertool modules imported with request-scoped env")
 
             # Ensure output directory exists
             state = _ensure_result_path(state)
@@ -204,9 +191,11 @@ def create_paper2poster_graph() -> GenericGraphBuilder:
             log.error(traceback.format_exc())
             state.errors.append(error_msg)
         finally:
-            # Always restore to Paper2Any directory
-            os.chdir(paper2any_cwd)
-            log.info(f"Restored working directory to: {paper2any_cwd}")
+            for key, value in env_backup.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
         return state
 

@@ -47,10 +47,6 @@ const Paper2VideoPage = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarPreset, setAvatarPreset] = useState<string | null>(null);
-  const [useVoice, setUseVoice] = useState<'tts' | 'own'>('tts');
-  const [voiceFile, setVoiceFile] = useState<File | null>(null);
-  const [voiceFileName, setVoiceFileName] = useState<string | null>(null);
-  const [voicePreset, setVoicePreset] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
@@ -202,33 +198,6 @@ const Paper2VideoPage = () => {
     setAvatarPreset(null);
   };
 
-  const handleVoiceChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'wav') {
-      setError('语音仅支持 .wav 格式');
-      return;
-    }
-    setVoicePreset(null);
-    setVoiceFile(file);
-    setVoiceFileName(file.name);
-    setError(null);
-  };
-
-  const handleSelectVoicePreset = (presetId: string) => {
-    setVoiceFile(null);
-    setVoiceFileName(null);
-    setVoicePreset(presetId || null);
-    setError(null);
-  };
-
-  const handleRemoveVoice = () => {
-    setVoiceFile(null);
-    setVoiceFileName(null);
-    setVoicePreset(null);
-  };
-
   const handleStartParse = async () => {
     if (!selectedFile) {
       setError('请先选择 PDF 或 PPTX 文件');
@@ -268,10 +237,6 @@ const Paper2VideoPage = () => {
       if (useAvatar === 'yes') {
         if (avatarFile) formData.append('avatar', avatarFile);
         else if (avatarPreset) formData.append('avatar_preset', avatarPreset);
-      }
-      if (useVoice === 'own') {
-        if (voiceFile) formData.append('voice', voiceFile);
-        else if (voicePreset) formData.append('voice_preset', voicePreset);
       }
 
       const res = await fetch('/api/v1/paper2video/generate-subtitle', {
@@ -366,7 +331,7 @@ const Paper2VideoPage = () => {
 
       const url = data.video_url || (data.video_path ? convertToHttpUrl(data.video_path) : null);
       if (url) setVideoUrl(url);
-      else setError('后端未返回视频地址');
+      else setError(data.message || '后端未返回视频地址');
 
       const usageRecorded = await recordUsage(user?.id || null, 'paper2video', {
         amount: VIDEO_GENERATION_COST,
@@ -403,10 +368,6 @@ const Paper2VideoPage = () => {
     setAvatarFile(null);
     setAvatarPreview(null);
     setAvatarPreset(null);
-    setUseVoice('tts');
-    setVoiceFile(null);
-    setVoiceFileName(null);
-    setVoicePreset(null);
     setScriptPages([]);
     setResultPath(null);
     setStateSnapshot(null);
@@ -435,11 +396,6 @@ const Paper2VideoPage = () => {
               avatarFile={avatarFile}
               avatarPreview={avatarPreview}
               avatarPreset={avatarPreset}
-              voiceFile={voiceFile}
-              voiceFileName={voiceFileName}
-              useVoice={useVoice}
-              setUseVoice={setUseVoice}
-              voicePreset={voicePreset}
               isUploading={isUploading}
               progress={progress}
               progressStatus={progressStatus}
@@ -461,9 +417,6 @@ const Paper2VideoPage = () => {
               handleAvatarChange={handleAvatarChange}
               handleSelectAvatarPreset={handleSelectAvatarPreset}
               handleRemoveAvatar={handleRemoveAvatar}
-              handleVoiceChange={handleVoiceChange}
-              handleSelectVoicePreset={handleSelectVoicePreset}
-              handleRemoveVoice={handleRemoveVoice}
               handleStartParse={handleStartParse}
             />
           )}

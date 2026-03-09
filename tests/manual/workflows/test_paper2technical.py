@@ -12,6 +12,7 @@ import pytest
 
 from dataflow_agent.state import Paper2FigureState, Paper2FigureRequest
 from dataflow_agent.workflow import run_workflow
+from dataflow_agent.utils import get_project_root
 
 
 # ============ 核心异步流程 ============

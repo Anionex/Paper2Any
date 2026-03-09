@@ -26,7 +26,7 @@ from src.agents.renderer import renderer_node
 from utils.src.logging_utils import log_agent_info, log_agent_success, log_agent_error
 
 env_path = Path(__file__).parent.parent.parent / '.env'
-load_dotenv(env_path, override=True)
+load_dotenv(env_path, override=False)
 
 def create_workflow_graph() -> StateGraph:
     """create the langgraph workflow"""
@@ -75,7 +75,7 @@ def main():
     input_ratio = args.poster_width / args.poster_height
     # check poster ratio: lower bound 1.4 (ISO A paper size), upper bound 2 (human vision limit)
     if input_ratio > 2 or input_ratio < 1.4:
-        print(f"❌ Poster ratio is out of range: {input_ratio}. Please use a ratio between 1.4 and 2.")
+        log_agent_error("pipeline", f"Poster ratio is out of range: {input_ratio}. Please use a ratio between 1.4 and 2.")
         return 1
     
     final_width = 54.0
@@ -83,9 +83,9 @@ def main():
     
     # check .env file
     if env_path.exists():
-        print(f"✅ .env file found at: {env_path}")
+        log_agent_success("pipeline", f".env file found at: {env_path}")
     else:
-        print(f"❌ .env file NOT found")
+        log_agent_error("pipeline", ".env file NOT found")
     
     # check api keys
     required_keys = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "google": "GOOGLE_API_KEY", "zhipu": "ZHIPU_API_KEY", "moonshot": "MOONSHOT_API_KEY", "Minimax": "MINIMAX_API_KEY", "Alibaba": "ALIBABA_API_KEY"}
@@ -104,21 +104,21 @@ def main():
     
     missing = [k for k in needed_keys if not os.getenv(k)]
     if missing:
-        print(f"❌ Missing API keys: {missing}")
+        log_agent_error("pipeline", f"Missing API keys: {missing}")
         return 1
     
     # get pdf path
     pdf_path = args.paper_path
     if not pdf_path or not Path(pdf_path).exists():
-        print("❌ PDF not found")
+        log_agent_error("pipeline", "PDF not found")
         return 1
     
-    print(f"🚀 PosterGen Pipeline")
-    print(f"📄 PDF: {pdf_path}")
-    print(f"🤖 Models: {args.text_model}/{args.vision_model}")
-    print(f"📏 Size: {final_width}\" × {final_height:.2f}\"")
-    print(f"🏢 Conference Logo: {args.logo}")
-    print(f"🏫 Affiliation Logo: {args.aff_logo}")
+    log_agent_info("pipeline", "PosterGen Pipeline")
+    log_agent_info("pipeline", f"PDF: {pdf_path}")
+    log_agent_info("pipeline", f"Models: {args.text_model}/{args.vision_model}")
+    log_agent_info("pipeline", f"Size: {final_width}\" × {final_height:.2f}\"")
+    log_agent_info("pipeline", f"Conference Logo: {args.logo}")
+    log_agent_info("pipeline", f"Affiliation Logo: {args.aff_logo}")
     
     try:
         # create poster state

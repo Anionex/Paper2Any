@@ -7,7 +7,7 @@
   "upload": {
     "subtitle": "PPT → VIDEO",
     "title": "PPT to Video",
-    "desc": "Upload PPT or PDF. Optional avatar and voice. AI generates voice script per page, then video.",
+    "desc": "Upload PPT or PDF with an optional avatar. Speech is synthesized through the Aliyun API only, then AI generates the final video page by page.",
     "instruction": {
       "pdf": "Upload PPT (required)"
     },
@@ -22,6 +22,7 @@
     "avatarChoiceHint": "Choose system avatar or upload your own (choose one)",
     "talkingModelFixed": "Digital human video is generated through the LivePortrait cloud API only",
     "voiceLabel": "Voice",
+    "voiceApiOnly": "Speech uses the Aliyun CosyVoice API only. Local TTS options are no longer shown.",
     "voiceUseTts": "Cloud TTS (API)",
     "voiceUseTtsRecommend": "Recommended",
     "voiceUseFile": "Local TTS (F5-TTS)",

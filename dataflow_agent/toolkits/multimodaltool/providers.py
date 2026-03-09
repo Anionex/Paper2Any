@@ -754,14 +754,14 @@ class CosyVoiceProvider(AIProviderStrategy):
         voice_name: str = "longanyang",
         **kwargs,
     ) -> bytes:
-        """同步调用 DashScope CosyVoice，返回音频 bytes（WAV/MP3 等，由 format 决定）。Key 仅从环境变量 COSYVOICE_KEY 读取。"""
+        """同步调用 DashScope CosyVoice，返回音频 bytes（WAV/MP3 等，由 format 决定）。"""
         import os
         import dashscope
         from dashscope.audio.tts_v2 import SpeechSynthesizer
         from dashscope.audio.tts_v2 import AudioFormat
-        key = (os.environ.get("COSYVOICE_KEY", "") or "").strip()
+        key = (os.environ.get("COSYVOICE_KEY", "") or api_key or "").strip()
         if not key:
-            raise RuntimeError("CosyVoice 需要设置环境变量 COSYVOICE_KEY")
+            raise RuntimeError("CosyVoice 需要提供阿里云 DashScope Key（环境变量 COSYVOICE_KEY 或请求 api_key）")
         dashscope.api_key = key
         # 可选：地域（北京/新加坡）
         base_ws = os.environ.get("DASHSCOPE_BASE_WEBSOCKET_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/inference")

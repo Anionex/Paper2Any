@@ -292,7 +292,14 @@ const Paper2PosterPage = () => {
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        let detail = `HTTP error! status: ${res.status}`;
+        try {
+          const errData = await res.json();
+          detail = errData?.detail || errData?.message || detail;
+        } catch {
+          // ignore json parse error and keep default message
+        }
+        throw new Error(detail);
       }
 
       const data = await res.json();
@@ -309,7 +316,7 @@ const Paper2PosterPage = () => {
       });
 
       // Record usage
-      await recordUsage(user?.id || null, 'paper2poster');
+      await recordUsage(user?.id || null, 'paper2poster', { isAnonymous: user?.is_anonymous || false });
       refreshQuota();
 
       // Upload to storage

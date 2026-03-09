@@ -7,7 +7,7 @@
   "upload": {
     "subtitle": "PPT → 视频",
     "title": "PPT转视频",
-    "desc": "上传 PPT 或 PDF 格式的 PPT，可选数字人头像与语音文件。AI 按页生成语音脚本，再生成视频。",
+    "desc": "上传 PPT 或 PDF 格式的 PPT，可选数字人头像。语音统一通过阿里云 API 合成，AI 按页生成语音脚本后再生成视频。",
     "instruction": {
       "pdf": "上传 PPT（必填）"
     },
@@ -22,6 +22,7 @@
     "avatarChoiceHint": "选择系统数字人或上传自己的数字人（二选一）",
     "talkingModelFixed": "数字人视频统一使用云端 LivePortrait API 生成",
     "voiceLabel": "语音",
+    "voiceApiOnly": "语音统一通过阿里云 CosyVoice API 生成，不再提供本地语音模型选项",
     "voiceUseTts": "云语音模型（API）",
     "voiceUseTtsRecommend": "推荐",
     "voiceUseFile": "本地语音模型（F5-TTS）",

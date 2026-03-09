@@ -42,7 +42,11 @@ class AppSettings(BaseSettings):
     # API Configuration
     DEFAULT_LLM_API_URL: str = "http://123.129.219.111:3000/v1/"
 
+    # RMBG-2.0 background removal model path
+    RMBG_MODEL_PATH: str = str(_project_root() / "models" / "RMBG-2.0")
+
     # Paper2Drawio SAM3 + OCR service configuration
+    # 阿里云相关真实 key 统一放在 fastapi_app/.env，本文件不再写死密钥。
     PAPER2DRAWIO_SAM3_CHECKPOINT_PATH: str = str(_project_root() / "models" / "sam3" / "sam3.pt")
     PAPER2DRAWIO_SAM3_BPE_PATH: str = str(_project_root() / "models" / "sam3" / "bpe_simple_vocab_16e6.txt.gz")
     PAPER2DRAWIO_OCR_API_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"

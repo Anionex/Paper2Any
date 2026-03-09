@@ -636,6 +636,56 @@ class Paper2DrawioState(MainState):
     output_xml_path: str = ""      # XML 文件路径
     output_png_path: str = ""      # PNG 导出路径
     output_svg_path: str = ""      # SVG 导出路径
+
+
+@dataclass
+class Paper2PosterRequest(MainRequest):
+    """Paper2Poster 工作流请求。"""
+    vision_model: str = "gpt-4o-2024-08-06"
+    poster_width: float = 54.0
+    poster_height: float = 36.0
+    logo_path: str = ""
+    aff_logo_path: str = ""
+    url: str = ""
+
+
+@dataclass
+class Paper2PosterState(MainState):
+    """Paper2Poster 工作流状态。"""
+    request: Paper2PosterRequest = field(default_factory=Paper2PosterRequest)
+
+    # 输入与输出目录
+    paper_file: str = ""
+    result_path: str = ""
+
+    # 海报基础配置
+    poster_width: float = 54.0
+    poster_height: float = 36.0
+    logo_path: str = ""
+    aff_logo_path: str = ""
+    url: str = ""
+
+    # 工作流中间结果
+    poster_name: str = ""
+    structured_sections: Any = None
+    classified_visuals: Any = None
+    narrative_content: Any = None
+    story_board: Any = None
+    optimized_story_board: Any = None
+    initial_layout_data: Any = None
+    optimized_layout: Any = None
+    final_design_layout: Any = None
+    color_scheme: Any = None
+    section_title_design: Any = None
+    keywords: Any = None
+    styled_layout: Any = None
+
+    # 最终产物
+    output_pptx_path: str = ""
+    output_png_path: str = ""
+
+    # 错误收集
+    errors: List[str] = field(default_factory=list)
 # ==================== WebSearch Knowledge Store State ====================
 @dataclass
 class WebsearchKnowledgeRequest(MainRequest):

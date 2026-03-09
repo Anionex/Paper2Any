@@ -450,15 +450,15 @@ def create_paper2video_graph() -> GenericGraphBuilder:
             with ctx.Pool(processes=len(all_tasks)) as pool:
                 results = list(pool.map(speech_task_wrapper_with_f5, all_tasks))
         else:
-            # 方案二：云 TTS（CosyVoice）按句，音色仅用 tts_voice_name（如 longanhuan），不传参考音频；限流控制并发
-            gpu_list = [4, 5, 6]  # F5-TTS 回退时按需修改可用 GPU ID
+            # 方案二：云 TTS（CosyVoice）按句，音色仅用 tts_voice_name（如 longanhuan），不传参考音频。
+            # paper2video API 统一走阿里云语音，不再在这里回退本地 F5-TTS。
             for slide_idx in range(len(parsed_subtitle_w_cursor)):
                 speech_with_cursor = parsed_subtitle_w_cursor[slide_idx]
                 for idx, (prompt, cursor_prompt) in enumerate(speech_with_cursor):
                     speech_result_path = speech_save_dir / f"{slide_idx}_{idx}.wav"
                     all_tasks.append((
                         slide_idx, idx, prompt, speech_result_path,
-                        api_key, tts_model, chat_api_url, tts_voice_name, gpu_list, speech_language,
+                        api_key, tts_model, chat_api_url, tts_voice_name,
                     ))
             log.info(f"开始并行生成单句语音（云 TTS 按句，voice_name={tts_voice_name or 'default'}），任务总数: {len(all_tasks)}")
             # 降低 CosyVoice 并发，避免 Throttling.RateQuota（请求过于频繁）

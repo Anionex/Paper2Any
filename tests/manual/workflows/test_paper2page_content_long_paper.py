@@ -19,7 +19,7 @@ from dataflow_agent.state import Paper2FigureState, Paper2FigureRequest
 from dataflow_agent.workflow import run_workflow
 from dataflow_agent.utils import get_project_root
 
-PDF_PATH = Path(__file__).resolve().parent / "2506.02454v1.pdf"
+PDF_PATH = Path(get_project_root()) / "tests" / "2506.02454v1.pdf"
 
 
 async def run_paper2page_content_pipeline_pdf() -> Paper2FigureState:

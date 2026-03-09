@@ -82,8 +82,7 @@ def test_call_pagecontent_pdf():
         }
     )
 
-    # 使用 dev/DataFlow-Agent/tests 里的示例 pdf，按需要调整路径
-    pdf_path = Path("dev/DataFlow-Agent/tests/2506.02454v1.pdf")
+    pdf_path = Path(get_project_root()) / "tests" / "2506.02454v1.pdf"
     assert pdf_path.exists(), f"pdf file not found: {pdf_path}"
 
     with pdf_path.open("rb") as f:

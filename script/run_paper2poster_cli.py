@@ -16,13 +16,17 @@ import os
 import sys
 import time
 from pathlib import Path
+from uuid import uuid4
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dataflow_agent.logger import get_logger
 from dataflow_agent.state import Paper2PosterState, Paper2PosterRequest
 from dataflow_agent.workflow import run_workflow
 from dataflow_agent.utils import get_project_root
+
+log = get_logger(__name__)
 
 
 def parse_args():
@@ -157,8 +161,8 @@ def create_output_dir(args) -> Path:
         output_dir = Path(args.output_dir)
     else:
         project_root = get_project_root()
-        timestamp = int(time.time())
-        output_dir = project_root / "outputs" / "cli" / "paper2poster" / str(timestamp)
+        run_id = f"{int(time.time())}-{uuid4().hex[:8]}"
+        output_dir = project_root / "outputs" / "cli" / "paper2poster" / run_id
 
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
@@ -202,57 +206,57 @@ async def run_paper2poster_workflow(args, input_path: str, output_dir: Path):
         url=args.url,
     )
 
-    print(f"\n{'='*60}")
-    print(f"Paper2Poster Workflow Starting")
-    print(f"{'='*60}")
-    print(f"Input PDF: {input_path}")
-    print(f"Output Directory: {output_dir}")
-    print(f"Poster Dimensions: {args.poster_width}x{args.poster_height} inches")
-    print(f"Aspect Ratio: {args.poster_width/args.poster_height:.2f}")
-    print(f"Text Model: {args.model}")
-    print(f"Vision Model: {args.vision_model}")
+    log.info("%s", "=" * 60)
+    log.info("Paper2Poster Workflow Starting")
+    log.info("%s", "=" * 60)
+    log.info("Input PDF: %s", input_path)
+    log.info("Output Directory: %s", output_dir)
+    log.info("Poster Dimensions: %sx%s inches", args.poster_width, args.poster_height)
+    log.info("Aspect Ratio: %.2f", args.poster_width / args.poster_height)
+    log.info("Text Model: %s", args.model)
+    log.info("Vision Model: %s", args.vision_model)
     if args.logo:
-        print(f"Logo: {args.logo}")
+        log.info("Logo: %s", args.logo)
     if args.aff_logo:
-        print(f"Affiliation Logo: {args.aff_logo}")
-    print(f"{'='*60}\n")
+        log.info("Affiliation Logo: %s", args.aff_logo)
+    log.info("%s", "=" * 60)
 
     # Run workflow
-    print(f"Executing Paper2Poster workflow...")
-    print(f"This may take several minutes...\n")
+    log.info("Executing Paper2Poster workflow...")
+    log.info("This may take several minutes...")
 
     state = await run_workflow("paper2poster", state)
 
-    print(f"\n✓ Paper2Poster workflow completed")
+    log.info("Paper2Poster workflow completed")
 
     return state
 
 
 def print_results(final_state: Paper2PosterState, output_dir: Path):
     """Print workflow results"""
-    print(f"\n{'='*60}")
-    print(f"✓ Paper2Poster Workflow Completed Successfully")
-    print(f"{'='*60}")
-    print(f"Output Directory: {output_dir}")
+    log.info("%s", "=" * 60)
+    log.info("Paper2Poster Workflow Completed Successfully")
+    log.info("%s", "=" * 60)
+    log.info("Output Directory: %s", output_dir)
 
     # Check for PPTX file
     pptx_path = getattr(final_state, "output_pptx_path", None)
     if pptx_path and os.path.exists(pptx_path):
-        print(f"PPTX File: {pptx_path}")
+        log.info("PPTX File: %s", pptx_path)
 
     # Check for PNG file
     png_path = getattr(final_state, "output_png_path", None)
     if png_path and os.path.exists(png_path):
-        print(f"PNG File: {png_path}")
+        log.info("PNG File: %s", png_path)
 
     # Check for errors
     errors = getattr(final_state, "errors", [])
     if errors:
-        print(f"\n⚠ Warnings/Errors:")
+        log.warning("Warnings/Errors:")
         for error in errors:
-            print(f"  - {error}")
+            log.warning("  - %s", error)
 
-    print(f"{'='*60}\n")
+    log.info("%s", "=" * 60)
 
 
 def main():
@@ -279,13 +283,13 @@ def main():
         return 0
 
     except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        log.error("%s", e)
         return 1
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        log.error("%s", e)
         return 1
     except Exception as e:
-        print(f"Error: Workflow execution failed: {e}", file=sys.stderr)
+        log.exception("Workflow execution failed: %s", e)
         import traceback
         traceback.print_exc()
         return 1

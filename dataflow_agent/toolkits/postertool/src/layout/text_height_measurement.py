@@ -7,7 +7,10 @@ from pptx.util import Inches, Pt
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from typing import Dict, Any, List
 from pathlib import Path
+from dataflow_agent.logger import get_logger
 from src.config.poster_config import load_config
+
+log = get_logger(__name__)
 
 def get_font_file_path(font_name: str) -> str:
     font_mapping = {
@@ -96,7 +99,7 @@ def measure_text_height(text_content: str, width_inches: float, font_name: str =
                 if font_reduced:
                     break
         except Exception as e:
-            print(f"fit_text error: {e}")
+            log.warning("fit_text error: %s", e)
             font_reduced = True
         
         if font_reduced:

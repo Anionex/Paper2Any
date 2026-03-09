@@ -1,19 +1,17 @@
 """LangGraph utilities"""
 
 import os
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 import json
 import json_repair
 
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic  
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import HumanMessage, SystemMessage
-from langchain_community.callbacks.manager import get_openai_callback
+from langchain_core.messages import HumanMessage, SystemMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.state.poster_state import ModelConfig
+from utils.src.logging_utils import log_agent_error, log_agent_warning
 
 load_dotenv(override=True) # reload env every time
 
@@ -27,6 +25,8 @@ def create_model(config: ModelConfig):
     }
     
     if config.provider == 'openai':
+        from langchain_openai import ChatOpenAI
+
         openai_kwargs = {
             'model_name': config.model_name,
             'temperature': config.temperature,
@@ -41,6 +41,8 @@ def create_model(config: ModelConfig):
             
         return ChatOpenAI(**openai_kwargs)
     elif config.provider == 'anthropic':
+        from langchain_anthropic import ChatAnthropic
+
         anthropic_kwargs = {
             'model': config.model_name,
             'temperature': config.temperature,
@@ -55,6 +57,8 @@ def create_model(config: ModelConfig):
             
         return ChatAnthropic(**anthropic_kwargs)
     elif config.provider == 'google':
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
         google_kwargs = {
             'model': config.model_name,
             'temperature': config.temperature,
@@ -69,6 +73,8 @@ def create_model(config: ModelConfig):
             
         return ChatGoogleGenerativeAI(**google_kwargs)
     elif config.provider == 'zhipu':
+        from langchain_openai import ChatOpenAI
+
         zhipu_kwargs = {
             'model': config.model_name,
             'temperature': config.temperature,
@@ -83,6 +89,8 @@ def create_model(config: ModelConfig):
             
         return ChatOpenAI(**zhipu_kwargs)
     elif config.provider == 'moonshot':
+        from langchain_openai import ChatOpenAI
+
         moonshot_kwargs = {
             'model': config.model_name,
             'temperature': config.temperature,
@@ -97,6 +105,8 @@ def create_model(config: ModelConfig):
             
         return ChatOpenAI(**moonshot_kwargs)
     elif config.provider == 'Minimax':
+        from langchain_openai import ChatOpenAI
+
         minimax_kwargs = {
             'model': config.model_name,
             'temperature': config.temperature,
@@ -111,6 +121,8 @@ def create_model(config: ModelConfig):
             
         return ChatOpenAI(**minimax_kwargs)
     elif config.provider == 'Alibaba':
+        from langchain_openai import ChatOpenAI
+
         alibaba_kwargs = {
             'model': config.model_name,
             'temperature': config.temperature,
@@ -126,6 +138,28 @@ def create_model(config: ModelConfig):
         return ChatOpenAI(**alibaba_kwargs)
     else:
         raise ValueError(f"unsupported provider: {config.provider}")
+
+
+def _extract_token_usage(response: Any, *, fallback_input: float, fallback_output_text: str) -> tuple[int, int]:
+    usage = getattr(response, "usage_metadata", None) or {}
+    response_meta = getattr(response, "response_metadata", None) or {}
+    token_usage = response_meta.get("token_usage") or {}
+
+    input_tokens = (
+        usage.get("input_tokens")
+        or usage.get("prompt_tokens")
+        or token_usage.get("prompt_tokens")
+        or token_usage.get("input_tokens")
+        or int(fallback_input)
+    )
+    output_tokens = (
+        usage.get("output_tokens")
+        or usage.get("completion_tokens")
+        or token_usage.get("completion_tokens")
+        or token_usage.get("output_tokens")
+        or max(1, int(len(fallback_output_text.split()) * 1.3))
+    )
+    return int(input_tokens), int(output_tokens)
 
 
 class LangGraphAgent:
@@ -163,34 +197,24 @@ class LangGraphAgent:
         # get response with token tracking
         input_tokens, output_tokens = 0, 0
         try:
-            if self.config.provider in ('openai', 'zhipu'):
-                with get_openai_callback() as cb:
-                    response = self.model.invoke(self.history)
-                    input_tokens = cb.prompt_tokens or 0
-                    output_tokens = cb.completion_tokens or 0
-            else:
-                response = self.model.invoke(self.history)
-                # estimate tokens for non-openai
-                input_tokens = len(message.split()) * 1.3
-                output_tokens = len(response.content.split()) * 1.3
+            response = self.model.invoke(self.history)
+            input_tokens, output_tokens = _extract_token_usage(
+                response,
+                fallback_input=len(message.split()) * 1.3,
+                fallback_output_text=response.content,
+            )
         except Exception as e:
             error_msg = f"model call failed: {e}"
-            print(error_msg)
+            log_agent_error("langgraph_utils", error_msg)
             
             # provide more specific error information
             if "timeout" in str(e).lower() or "read operation timed out" in str(e).lower():
-                print(f"⚠️  Timeout error detected for {self.config.provider} {self.config.model_name}")
-                print("💡 Possible solutions:")
-                print("   - Check your internet connection")
-                print("   - Verify API key is valid")
-                print("   - Try using a different model provider")
-                print("   - Consider increasing timeout settings")
+                log_agent_warning("langgraph_utils", f"Timeout error detected for {self.config.provider} {self.config.model_name}")
+                log_agent_warning("langgraph_utils", "Possible solutions: check internet, verify API key, switch provider, or increase timeout.")
             elif "rate limit" in str(e).lower():
-                print(f"⚠️  Rate limit exceeded for {self.config.provider}")
-                print("💡 Consider adding delays between requests")
+                log_agent_warning("langgraph_utils", f"Rate limit exceeded for {self.config.provider}")
             elif "authentication" in str(e).lower() or "api key" in str(e).lower():
-                print(f"⚠️  Authentication error for {self.config.provider}")
-                print("💡 Check your API key configuration")
+                log_agent_warning("langgraph_utils", f"Authentication error for {self.config.provider}; check API key configuration.")
             
             input_tokens = len(message.split()) * 1.3
             output_tokens = 100
@@ -218,30 +242,24 @@ class LangGraphAgent:
         # get response
         input_tokens, output_tokens = 0, 0
         try:
-            if self.config.provider in ('openai', 'zhipu'):
-                with get_openai_callback() as cb:
-                    response = self.model.invoke([self.history[0], human_msg])
-                    input_tokens = cb.prompt_tokens or 0
-                    output_tokens = cb.completion_tokens or 0
-            else:
-                response = self.model.invoke([self.history[0], human_msg])
-                # estimate tokens
-                input_tokens = 200  # rough estimate for image
-                output_tokens = len(response.content.split()) * 1.3
+            response = self.model.invoke([self.history[0], human_msg])
+            input_tokens, output_tokens = _extract_token_usage(
+                response,
+                fallback_input=200,
+                fallback_output_text=response.content,
+            )
         except Exception as e:
             error_msg = f"vision model call failed: {e}"
-            print(error_msg)
+            log_agent_error("langgraph_utils", error_msg)
             
             # provide more specific error information for vision calls
             if "timeout" in str(e).lower() or "read operation timed out" in str(e).lower():
-                print(f"⚠️  Vision timeout error detected for {self.config.provider} {self.config.model_name}")
-                print("💡 Vision calls may take longer due to image processing")
-                print("   - Consider using a different vision model")
-                print("   - Check image size and format")
+                log_agent_warning("langgraph_utils", f"Vision timeout error detected for {self.config.provider} {self.config.model_name}")
+                log_agent_warning("langgraph_utils", "Vision calls may take longer; consider another model or check image size/format.")
             elif "rate limit" in str(e).lower():
-                print(f"⚠️  Rate limit exceeded for vision calls on {self.config.provider}")
+                log_agent_warning("langgraph_utils", f"Rate limit exceeded for vision calls on {self.config.provider}")
             elif "authentication" in str(e).lower() or "api key" in str(e).lower():
-                print(f"⚠️  Authentication error for vision calls on {self.config.provider}")
+                log_agent_warning("langgraph_utils", f"Authentication error for vision calls on {self.config.provider}")
             
             raise
         
@@ -276,5 +294,10 @@ def extract_json(response: str) -> Dict[str, Any]:
 
 def load_prompt(path: str) -> str:
     """load prompt template from file"""
-    with open(path, 'r', encoding='utf-8') as f:
+    prompt_path = Path(path).expanduser()
+    if not prompt_path.is_absolute():
+        postertool_root = Path(__file__).resolve().parents[1]
+        prompt_path = postertool_root / prompt_path
+
+    with prompt_path.open("r", encoding="utf-8") as f:
         return f.read()

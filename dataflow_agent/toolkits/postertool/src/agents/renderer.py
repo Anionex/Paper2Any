@@ -3,7 +3,6 @@ powerpoint rendering using python-pptx
 """
 
 import re
-import qrcode
 from pathlib import Path
 from typing import Dict, Any, Optional
 import json
@@ -657,6 +656,12 @@ class Renderer:
 
     def _generate_qr_code(self, url: str, output_dir: str) -> str:
         """generate QR code for URL"""
+        try:
+            import qrcode
+        except ImportError as exc:
+            log_agent_error(self.name, f"qrcode dependency is unavailable, skipping QR generation: {exc}")
+            return ""
+
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,

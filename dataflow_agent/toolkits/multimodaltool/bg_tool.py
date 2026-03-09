@@ -252,7 +252,6 @@ class BriaRMBG2Remover:
 #
 #         out_path = self.output_dir / f"{Path(image_path).stem}_bg_removed.png"
 #         out.save(out_path)
-#         print(f"抠图完成: {out_path}")
 #         return str(out_path)
 
 
