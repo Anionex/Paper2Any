@@ -13,7 +13,8 @@ import {
   Network,
   MessageSquare,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Video
 } from 'lucide-react';
 import NavTooltip from './NavTooltip';
 
@@ -92,6 +93,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navTooltip.paper2ppt'),
       icon: Presentation,
       gradient: 'from-purple-500 to-pink-500'
+    },
+    {
+      id: 'paper2video',
+      labelKey: t('app.nav.paper2video'),
+      tooltipKey: t('app.navTooltip.paper2video'),
+      icon: Video,
+      gradient: 'from-teal-500 to-cyan-500'
     },
     {
       id: 'ppt2polish',
