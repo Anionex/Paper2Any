@@ -7,14 +7,17 @@ import subprocess
 import signal
 from pathlib import Path
 
+from dataflow_agent.logger import get_logger
+
 # 获取项目根目录
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT_DIR / "conf" / "model_servers.yaml"
 LOG_DIR = ROOT_DIR / "logs"
+log = get_logger(__name__)
 
 def load_config():
     if not CONFIG_PATH.exists():
-        print(f"Error: Config file not found at {CONFIG_PATH}")
+        log.error("Config file not found at %s", CONFIG_PATH)
         sys.exit(1)
     with open(CONFIG_PATH, "r") as f:
         return yaml.safe_load(f)
@@ -34,7 +37,7 @@ def kill_process_on_port(port):
     """杀死占用指定端口的进程"""
     pids = get_pids_on_port(port)
     for pid in pids:
-        print(f"Killing process on port {port} (PID: {pid})")
+        log.info("Killing process on port %s (PID: %s)", port, pid)
         try:
             os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -45,10 +48,10 @@ def ensure_log_dir():
         LOG_DIR.mkdir(parents=True)
 
 def start_mineru(config):
-    print("\n[MinerU] Starting services...")
+    log.info("[MinerU] Starting services...")
     mineru_cfg = config.get("mineru", {})
     if not mineru_cfg:
-        print("[MinerU] No config found, skipping.")
+        log.warning("[MinerU] No config found, skipping.")
         return
 
     model_path = mineru_cfg.get("model_path")
@@ -81,7 +84,7 @@ def start_mineru(config):
             ]
             
             full_cmd = " ".join(cmd)
-            print(f"Starting MinerU Backend #{instance_count} on GPU {gpu_id} Port {port}...")
+            log.info("Starting MinerU Backend #%s on GPU %s Port %s...", instance_count, gpu_id, port)
             
             with open(log_file, "w") as f:
                 subprocess.Popen(full_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT_DIR)
@@ -110,16 +113,16 @@ def start_mineru(config):
         ]
         
         full_cmd = " ".join(cmd)
-        print(f"Starting MinerU LB on {lb_host}:{lb_port}...")
+        log.info("Starting MinerU LB on %s:%s...", lb_host, lb_port)
         
         with open(log_file, "w") as f:
             subprocess.Popen(full_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT_DIR)
 
 def start_sam(config):
-    print("\n[SAM] Starting services...")
+    log.info("[SAM] Starting services...")
     sam_cfg = config.get("sam", {})
     if not sam_cfg:
-        print("[SAM] No config found, skipping.")
+        log.warning("[SAM] No config found, skipping.")
         return
 
     # 1. Start Backends
@@ -156,7 +159,7 @@ def start_sam(config):
             ]
             
             full_cmd = " ".join(cmd)
-            print(f"Starting SAM Backend #{instance_count} on GPU {gpu_id} Port {port}...")
+            log.info("Starting SAM Backend #%s on GPU %s Port %s...", instance_count, gpu_id, port)
             
             with open(log_file, "w") as f:
                 subprocess.Popen(full_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT_DIR)
@@ -185,16 +188,16 @@ def start_sam(config):
         ]
         
         full_cmd = " ".join(cmd)
-        print(f"Starting SAM3 LB on {lb_host}:{lb_port}...")
+        log.info("Starting SAM3 LB on %s:%s...", lb_host, lb_port)
         
         with open(log_file, "w") as f:
             subprocess.Popen(full_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT_DIR)
 
 def start_ocr(config):
-    print("\n[OCR] Starting services...")
+    log.info("[OCR] Starting services...")
     ocr_cfg = config.get("ocr", {})
     if not ocr_cfg:
-        print("[OCR] No config found, skipping.")
+        log.warning("[OCR] No config found, skipping.")
         return
 
     port = ocr_cfg.get("port", 8003)
@@ -215,13 +218,13 @@ def start_ocr(config):
     ]
     
     full_cmd = " ".join(cmd)
-    print(f"Starting OCR Server on {host}:{port} with {workers} workers...")
+    log.info("Starting OCR Server on %s:%s with %s workers...", host, port, workers)
     
     with open(log_file, "w") as f:
         subprocess.Popen(full_cmd, shell=True, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT_DIR)
 
 def main():
-    print(f"Working Directory: {ROOT_DIR}")
+    log.info("Working Directory: %s", ROOT_DIR)
     ensure_log_dir()
     config = load_config()
     
@@ -229,7 +232,7 @@ def main():
     start_sam(config)
     start_ocr(config)
     
-    print("\nAll services started! Check logs in logs/ directory.")
+    log.info("All services started. Check logs in logs/ directory.")
 
 if __name__ == "__main__":
     main()

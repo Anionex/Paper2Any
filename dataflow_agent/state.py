@@ -103,9 +103,28 @@ class DFState(MainState):
 @dataclass
 class Paper2VideoRequest(MainRequest):
     paper_pdf_path: str = ""
+    # 用户上传的图片，添加在ppt中的，现在这个字段不用了
     user_imgs_path: str = ""
-    
+    # tts使用的模型（CosyVoice）
+    tts_model: str = "cosyvoice-v3-flash"
+    tts_voice_name: str = ""
+    # 判断当前处于什么stage
+    script_stage: bool = True
+
+    # 用户决定是否上传自己的声音
+    use_specific_sound: bool = False
+    # 用户上传的声音
     ref_audio_path: str = ""
+    # 用户上传声音对应的文本
+    ref_text: str = ""
+    # 用户上传的人像图片
+    ref_img_path: str = ""
+    # 数字人模型：echomimic（本地）或 liveportrait（云，默认）
+    talking_model: str = "liveportrait"
+    # 用户上传的cursor图片
+    # fixme: 这里的绝对路径需要修改一下
+    cursor_path: str = "/data/users/ligang/Paper2Any/dataflow_agent/toolkits/p2vtool/red.png"
+    
 
 # ==================== Paper2Video 生成 State ======================
 @dataclass
@@ -119,14 +138,30 @@ class Paper2VideoState(MainState):
     is_beamer_warning: bool = False
     code_debug_result: str = ""
     ppt_path: str = ""
+    img_size_debug: bool = True
+    result_path: str = ""
+
+    # 生成音频的语言
+    slide_timesteps_path: str = ""
     
     # 生成字幕 + cursor的位置信息
     slide_img_dir: str = ""
     subtitle_and_cursor: List[str] = field(default_factory=list)
     subtitle_and_cursor_path: str = ""
+    # 临时的字段，不用保存它
+    tmp_sentence: str = ""
     
     # 生成的音频路径
     speech_save_dir: str = ""
+    # 生成的cursor路径
+    cursor_save_path: str = ""
+    # 生成的talking video路径
+    talking_video_save_dir: str = ""
+
+    # 用来返回给前端的脚本信息
+    script_pages: List[Dict[str, Any]] = field(default_factory=list)
+    # 生成的视频路径
+    video_path: str = ""
 
 
 
@@ -430,9 +465,9 @@ class KBPodcastRequest(MainRequest):
     files: List[str] = field(default_factory=list)  # 文件路径列表
     podcast_mode: str = "monologue"  # monologue | dialog
     podcast_length: str = "standard"  # brief | standard | long
-    tts_model: str = "gemini-2.5-pro-preview-tts"
-    voice_name: str = "Kore"
-    voice_name_b: str = "Puck"
+    tts_model: str = "cosyvoice-v3-flash"
+    voice_name: str = ""
+    voice_name_b: str = ""
     language: str = "zh"
 
 @dataclass
@@ -601,6 +636,56 @@ class Paper2DrawioState(MainState):
     output_xml_path: str = ""      # XML 文件路径
     output_png_path: str = ""      # PNG 导出路径
     output_svg_path: str = ""      # SVG 导出路径
+
+
+@dataclass
+class Paper2PosterRequest(MainRequest):
+    """Paper2Poster 工作流请求。"""
+    vision_model: str = "gpt-4o-2024-08-06"
+    poster_width: float = 54.0
+    poster_height: float = 36.0
+    logo_path: str = ""
+    aff_logo_path: str = ""
+    url: str = ""
+
+
+@dataclass
+class Paper2PosterState(MainState):
+    """Paper2Poster 工作流状态。"""
+    request: Paper2PosterRequest = field(default_factory=Paper2PosterRequest)
+
+    # 输入与输出目录
+    paper_file: str = ""
+    result_path: str = ""
+
+    # 海报基础配置
+    poster_width: float = 54.0
+    poster_height: float = 36.0
+    logo_path: str = ""
+    aff_logo_path: str = ""
+    url: str = ""
+
+    # 工作流中间结果
+    poster_name: str = ""
+    structured_sections: Any = None
+    classified_visuals: Any = None
+    narrative_content: Any = None
+    story_board: Any = None
+    optimized_story_board: Any = None
+    initial_layout_data: Any = None
+    optimized_layout: Any = None
+    final_design_layout: Any = None
+    color_scheme: Any = None
+    section_title_design: Any = None
+    keywords: Any = None
+    styled_layout: Any = None
+
+    # 最终产物
+    output_pptx_path: str = ""
+    output_png_path: str = ""
+
+    # 错误收集
+    errors: List[str] = field(default_factory=list)
 # ==================== WebSearch Knowledge Store State ====================
 @dataclass
 class WebsearchKnowledgeRequest(MainRequest):

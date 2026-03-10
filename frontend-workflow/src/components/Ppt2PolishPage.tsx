@@ -1265,7 +1265,7 @@ const Ppt2PolishPage = () => {
       }
 
       // Record usage
-      await recordUsage(user?.id || null, 'ppt2polish');
+      await recordUsage(user?.id || null, 'ppt2polish', { isAnonymous: user?.is_anonymous || false });
       refreshQuota();
 
       // Upload generated file to Supabase Storage (either PPTX or PDF)

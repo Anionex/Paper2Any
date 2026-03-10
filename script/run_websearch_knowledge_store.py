@@ -181,8 +181,12 @@ from __future__ import annotations
 
 import asyncio
 
+from dataflow_agent.logger import get_logger
 from dataflow_agent.state import WebsearchKnowledgeRequest, WebsearchKnowledgeState
 from dataflow_agent.workflow import run_workflow
+
+
+log = get_logger(__name__)
 
 
 # ================== 可配置参数 ==================
@@ -233,7 +237,7 @@ def main() -> None:
     final_state = asyncio.run(run_websearch_knowledge_store_pipeline())
 
     # ---------- 打印关键信息，便于快速查看结果 ----------
-    print("\n=== WebsearchKnowledgeState ===")
+    log.info("=== WebsearchKnowledgeState ===")
 
     # 兼容处理: run_workflow 可能返回 dict 或 dataclass 对象
     if isinstance(final_state, dict):
@@ -247,14 +251,14 @@ def main() -> None:
         raw_data_store = getattr(final_state, "raw_data_store", [])
         knowledge_base_summary = getattr(final_state, "knowledge_base_summary", "")
 
-    print(f"input_urls          : {input_urls}")
-    print(f"research_routes     : {research_routes}")
-    print(f"raw_data_store size : {len(raw_data_store) if raw_data_store else 0}")
-    print("knowledge_base_summary (截取前 500 字):")
+    log.info("input_urls          : %s", input_urls)
+    log.info("research_routes     : %s", research_routes)
+    log.info("raw_data_store size : %s", len(raw_data_store) if raw_data_store else 0)
+    log.info("knowledge_base_summary (截取前 500 字):")
     if knowledge_base_summary:
-        print(knowledge_base_summary[:500])
+        log.info("%s", knowledge_base_summary[:500])
     else:
-        print("(empty)")
+        log.info("(empty)")
 
 
 if __name__ == "__main__":
