@@ -373,10 +373,10 @@ const Paper2PptPage = () => {
 
       if (styleMode === 'reference' && referenceImage) {
         formData.append('reference_img', referenceImage);
-        // 如果有参考图，清空 style 参数，避免混淆
-        formData.set('style', '');
+        // 参考图模式下：保留用户显式输入的风格提示词（globalPrompt），但去掉默认 preset 描述
+        formData.set('style', globalPrompt || '');
       }
-      
+
       console.log(`Sending request to /api/v1/paper2ppt/page-content with input_type=${uploadMode}`);
       
       const res = await fetch('/api/v1/paper2ppt/page-content', {
@@ -645,6 +645,12 @@ const Paper2PptPage = () => {
       formData.append('result_path', resultPath || '');
       formData.append('get_down', 'false');
 
+      // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
+      if (styleMode === 'reference' && referenceImage) {
+        formData.append('reference_img', referenceImage);
+        formData.set('style', globalPrompt || '');
+      }
+
       const pagecontent = outlineData.map((slide) => ({
         title: slide.title,
         layout_description: slide.layout_description,
@@ -860,6 +866,12 @@ const Paper2PptPage = () => {
       formData.append('page_id', String(currentSlideIndex));
       formData.append('edit_prompt', slidePrompt);
 
+      // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
+      if (styleMode === 'reference' && referenceImage) {
+        formData.append('reference_img', referenceImage);
+        formData.set('style', globalPrompt || '');
+      }
+
       const pagecontent = outlineData.map((slide, idx) => {
         const result = generateResults[idx];
         let generatedPath = '';
@@ -978,6 +990,12 @@ const Paper2PptPage = () => {
       formData.append('result_path', resultPath);
       formData.append('get_down', 'false');
       formData.append('all_edited_down', 'true');
+
+      // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
+      if (styleMode === 'reference' && referenceImage) {
+        formData.append('reference_img', referenceImage);
+        formData.set('style', globalPrompt || '');
+      }
 
       const pagecontent = outlineData.map((slide) => ({
         title: slide.title,
