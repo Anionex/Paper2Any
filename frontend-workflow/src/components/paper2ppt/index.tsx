@@ -1120,6 +1120,32 @@ const Paper2PptPage = () => {
     window.open(pdfPreviewUrl, '_blank');
   };
 
+  const handleDownloadPptx = async () => {
+    if (!downloadUrl) {
+      setError('下载链接不存在');
+      return;
+    }
+
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) {
+        throw new Error('下载失败');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'paper2ppt_editable.pptx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
+      setError(message);
+    }
+  };
+
   const handleReset = () => {
     setCurrentStep('upload');
     setSelectedFile(null);
@@ -1219,6 +1245,7 @@ const Paper2PptPage = () => {
               pdfPreviewUrl={pdfPreviewUrl}
               isGeneratingFinal={isGeneratingFinal}
               handleGenerateFinal={handleGenerateFinal}
+              handleDownloadPptx={handleDownloadPptx}
               handleDownloadPdf={handleDownloadPdf}
               handleReset={handleReset}
               error={error}
