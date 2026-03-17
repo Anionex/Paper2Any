@@ -49,6 +49,7 @@ export interface CitationWorkItem {
   citedByCount?: number;
   authors: string[];
   institutions?: string[];
+  landingPageUrl?: string;
 }
 
 export interface CitationPagination {
@@ -104,4 +105,34 @@ export interface CitationPaperDetail {
   citingAuthors: CitationAuthorItem[];
   citingWorks: CitationWorkItem[];
   matchedHonorees: CitationMatchedHonoree[];
+}
+
+export interface CitationContextItem {
+  section?: string;
+  sentence: string;
+  paragraph: string;
+  marker?: string;
+  confidence?: number;
+}
+
+export interface CitationPaperContextDetail {
+  sourceUrl?: string;
+  bestEffortNotice?: string;
+  summary?: string;
+  citationIntents: string[];
+  targetReferenceMatch?: {
+    matched?: boolean;
+    matchedBy?: string;
+    marker?: string;
+    referenceText?: string;
+    confidence?: number;
+  };
+  citingPaper?: {
+    id?: string;
+    title?: string;
+    venue?: string;
+    year?: number | null;
+    doi?: string;
+  };
+  contexts: CitationContextItem[];
 }

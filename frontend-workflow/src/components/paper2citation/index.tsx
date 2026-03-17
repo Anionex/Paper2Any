@@ -21,9 +21,11 @@ import type {
   CitationAuthorCandidate,
   CitationAuthorDetail,
   CitationAuthorItem,
+  CitationContextItem,
   CitationMatchedHonoree,
   CitationInstitutionStat,
   CitationMode,
+  CitationPaperContextDetail,
   CitationPaperDetail,
   CitationStatItem,
   CitationWorkItem,
@@ -197,6 +199,7 @@ function normalizeWorkItems(value: unknown): CitationWorkItem[] {
       citedByCount: Number(item.cited_by_count || item.citedByCount || item.citations || 0) || undefined,
       authors: normalizeStringArray(item.authors),
       institutions: normalizeStringArray(item.institutions),
+      landingPageUrl: normalizeString(item.landing_page_url || item.landingPageUrl) || undefined,
     }))
     .filter((item) => item.title);
 }
@@ -327,6 +330,41 @@ function normalizePaperDetail(payload: JsonRecord, t: TranslationFn): CitationPa
     ),
     citingWorks: normalizeWorkItems(payload.citing_works || payload.citingWorks || payload.citations),
     matchedHonorees,
+  };
+}
+
+function normalizePaperContextDetail(payload: JsonRecord): CitationPaperContextDetail {
+  const targetReferenceMatch = payload.target_reference_match || payload.targetReferenceMatch || {};
+  const citingPaper = payload.citing_paper || payload.citingPaper || {};
+  const contexts = asArray<JsonRecord>(payload.contexts || payload.citation_contexts)
+    .map((item) => ({
+      section: normalizeString(item.section) || undefined,
+      sentence: normalizeString(item.sentence),
+      paragraph: normalizeString(item.paragraph),
+      marker: normalizeString(item.marker) || undefined,
+      confidence: item.confidence == null ? undefined : Number(item.confidence),
+    }))
+    .filter((item) => item.sentence || item.paragraph);
+  return {
+    sourceUrl: normalizeString(payload.source_url || payload.sourceUrl) || undefined,
+    bestEffortNotice: normalizeString(payload.best_effort_notice || payload.bestEffortNotice) || undefined,
+    summary: normalizeString(payload.summary) || undefined,
+    citationIntents: normalizeStringArray(payload.citation_intents || payload.citationIntents),
+    targetReferenceMatch: {
+      matched: Boolean(targetReferenceMatch.matched),
+      matchedBy: normalizeString(targetReferenceMatch.matched_by || targetReferenceMatch.matchedBy) || undefined,
+      marker: normalizeString(targetReferenceMatch.marker) || undefined,
+      referenceText: normalizeString(targetReferenceMatch.reference_text || targetReferenceMatch.referenceText) || undefined,
+      confidence: targetReferenceMatch.confidence == null ? undefined : Number(targetReferenceMatch.confidence),
+    },
+    citingPaper: {
+      id: normalizeString(citingPaper.id || citingPaper.openalex_work_id || citingPaper.openalexWorkId) || undefined,
+      title: normalizeString(citingPaper.title) || undefined,
+      venue: normalizeString(citingPaper.venue) || undefined,
+      year: citingPaper.year == null ? null : Number(citingPaper.year),
+      doi: normalizeString(citingPaper.doi) || undefined,
+    },
+    contexts,
   };
 }
 
@@ -523,6 +561,8 @@ const Paper2CitationPage = () => {
   const [isLoadingAuthorDetail, setIsLoadingAuthorDetail] = useState(false);
   const [isPagingAuthorPublications, setIsPagingAuthorPublications] = useState(false);
   const [isLoadingPaperDetail, setIsLoadingPaperDetail] = useState(false);
+  const [paperContexts, setPaperContexts] = useState<Record<string, CitationPaperContextDetail>>({});
+  const [loadingPaperContextKey, setLoadingPaperContextKey] = useState<string | null>(null);
   const [loadingAuthorName, setLoadingAuthorName] = useState('');
   const [loadingPaperValue, setLoadingPaperValue] = useState('');
   const detailAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -578,6 +618,8 @@ const Paper2CitationPage = () => {
     setSelectedAuthorCandidate(null);
     setAuthorDetail(null);
     setPaperDetail(null);
+    setPaperContexts({});
+    setLoadingPaperContextKey(null);
     setAuthorPublicationPage(1);
     setLoadingAuthorName('');
     setLoadingPaperValue('');
@@ -613,6 +655,8 @@ const Paper2CitationPage = () => {
     setSelectedAuthorCandidate(null);
     setAuthorDetail(null);
     setPaperDetail(null);
+    setPaperContexts({});
+    setLoadingPaperContextKey(null);
     setAuthorPublicationPage(1);
 
     setIsSearchingAuthors(true);
@@ -662,6 +706,8 @@ const Paper2CitationPage = () => {
     if (!isPaginationOnly) {
       setAuthorDetail(null);
       setPaperDetail(null);
+      setPaperContexts({});
+      setLoadingPaperContextKey(null);
     }
     setIsPagingAuthorPublications(isPaginationOnly);
     setIsLoadingAuthorDetail(true);
@@ -735,6 +781,8 @@ const Paper2CitationPage = () => {
     setError(null);
     setPaperDetail(null);
     setAuthorDetail(null);
+    setPaperContexts({});
+    setLoadingPaperContextKey(null);
     setLoadingPaperValue(query);
     setLoadingAuthorName('');
 
@@ -756,6 +804,8 @@ const Paper2CitationPage = () => {
       }
 
       setPaperDetail(normalizePaperDetail(payload, t));
+      setPaperContexts({});
+      setLoadingPaperContextKey(null);
       const usageRecorded = await recordUsage(quotaUserId, 'paper2citation', { isAnonymous });
       if (usageRecorded) refreshQuota();
     } catch (err) {
@@ -763,6 +813,43 @@ const Paper2CitationPage = () => {
     } finally {
       setLoadingPaperValue('');
       setIsLoadingPaperDetail(false);
+    }
+  };
+
+  const getWorkKey = (work: CitationWorkItem) => work.id || work.doi || work.title;
+
+  const onLoadPaperContext = async (work: CitationWorkItem) => {
+    if (!paperDetail) return;
+    const workKey = getWorkKey(work);
+    setError(null);
+    setLoadingPaperContextKey(workKey);
+    try {
+      const response = await apiFetch('/api/v1/paper2citation/paper/context', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target_doi_or_url: paperDetail.paper.id || paperDetail.paper.doi || paperQuery.trim(),
+          citing_work_openalex_id: work.id || '',
+          citing_work_doi_or_url: work.doi || work.landingPageUrl || '',
+          citing_work_title: work.title,
+        }),
+      });
+
+      const payload = await safeReadJsonResponse(response);
+      if (!response.ok) {
+        throw new Error(payload?.detail || payload?.error || t('paper2citation:errors.contextFailed'));
+      }
+
+      setPaperContexts((current) => ({
+        ...current,
+        [workKey]: normalizePaperContextDetail(payload),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('paper2citation:errors.contextFailed'));
+    } finally {
+      setLoadingPaperContextKey((current) => (current === workKey ? null : current));
     }
   };
 
@@ -1274,14 +1361,109 @@ const Paper2CitationPage = () => {
                   <TableLikeList
                     items={paperDetail.citingWorks}
                     emptyText={t('paper2citation:states.noCitingWorks')}
-                    renderItem={(work: CitationWorkItem, index) => (
-                      <div key={`${work.id || work.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="text-sm font-semibold text-white">{work.title}</div>
-                        <div className="mt-1 text-xs text-slate-400">{buildMetaLine([work.year, work.venue])}</div>
-                        {work.authors.length ? <div className="mt-2 text-xs text-slate-500">{work.authors.join(', ')}</div> : null}
-                        {work.institutions?.length ? <div className="mt-1 text-xs text-slate-500">{work.institutions.join(', ')}</div> : null}
-                      </div>
-                    )}
+                    renderItem={(work: CitationWorkItem, index) => {
+                      const workKey = getWorkKey(work);
+                      const contextDetail = paperContexts[workKey];
+                      const isLoadingContext = loadingPaperContextKey === workKey;
+                      return (
+                        <div key={`${work.id || work.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-sm font-semibold text-white">{work.title}</div>
+                              <div className="mt-1 text-xs text-slate-400">{buildMetaLine([work.year, work.venue])}</div>
+                              {work.authors.length ? <div className="mt-2 text-xs text-slate-500">{work.authors.join(', ')}</div> : null}
+                              {work.institutions?.length ? <div className="mt-1 text-xs text-slate-500">{work.institutions.join(', ')}</div> : null}
+                            </div>
+                            <button
+                              onClick={() => void onLoadPaperContext(work)}
+                              disabled={isLoadingContext}
+                              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isLoadingContext ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
+                              {isLoadingContext ? t('paper2citation:actions.extractingContext') : t('paper2citation:actions.extractContext')}
+                            </button>
+                          </div>
+
+                          {contextDetail ? (
+                            <div className="mt-4 space-y-3 rounded-2xl border border-cyan-300/15 bg-slate-950/40 p-4">
+                              {contextDetail.summary ? (
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-cyan-200">
+                                    {t('paper2citation:sections.citationContext.summaryTitle')}
+                                  </div>
+                                  <p className="mt-2 text-sm leading-6 text-slate-200">{contextDetail.summary}</p>
+                                </div>
+                              ) : null}
+
+                              {contextDetail.citationIntents.length ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {contextDetail.citationIntents.map((intent) => (
+                                    <span key={intent} className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-100">
+                                      {intent.replace(/_/g, ' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              {contextDetail.targetReferenceMatch?.matched ? (
+                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-300">
+                                  <div className="font-medium text-white">{t('paper2citation:sections.citationContext.referenceTitle')}</div>
+                                  <div className="mt-1 text-slate-400">
+                                    {buildMetaLine([
+                                      contextDetail.targetReferenceMatch.marker,
+                                      contextDetail.targetReferenceMatch.matchedBy,
+                                      contextDetail.targetReferenceMatch.confidence != null
+                                        ? `${Math.round(contextDetail.targetReferenceMatch.confidence * 100)}%`
+                                        : '',
+                                    ])}
+                                  </div>
+                                  {contextDetail.targetReferenceMatch.referenceText ? (
+                                    <div className="mt-2 line-clamp-4">{contextDetail.targetReferenceMatch.referenceText}</div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+
+                              {contextDetail.contexts.length ? (
+                                <div className="space-y-3">
+                                  {contextDetail.contexts.map((context: CitationContextItem, contextIndex) => (
+                                    <div key={`${workKey}-context-${contextIndex}`} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                      <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                                        {context.section ? <span>{context.section}</span> : null}
+                                        {context.marker ? <span>{context.marker}</span> : null}
+                                        {context.confidence != null ? <span>{Math.round(context.confidence * 100)}%</span> : null}
+                                      </div>
+                                      <div className="mt-2 text-sm font-medium text-white">{context.sentence}</div>
+                                      {context.paragraph && context.paragraph !== context.sentence ? (
+                                        <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-400">{context.paragraph}</p>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-3 text-xs text-slate-400">
+                                  {t('paper2citation:states.noCitationContexts')}
+                                </div>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                                {contextDetail.sourceUrl ? (
+                                  <a
+                                    href={contextDetail.sourceUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200"
+                                  >
+                                    <ExternalLink size={13} />
+                                    {t('paper2citation:actions.openContextSource')}
+                                  </a>
+                                ) : null}
+                                {contextDetail.bestEffortNotice ? <span>{contextDetail.bestEffortNotice}</span> : null}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }}
                   />
                 </SectionCard>
               </div>

@@ -699,6 +699,9 @@ class Paper2CitationRequest(MainRequest):
     affiliation_hint: str = ""
     candidate_source: str = ""
     doi_or_url: str = ""
+    citing_work_openalex_id: str = ""
+    citing_work_doi_or_url: str = ""
+    citing_work_title: str = ""
     max_author_candidates: int = 12
     max_publications: int = 25
     max_citing_works: int = 60
@@ -725,6 +728,7 @@ class Paper2CitationState(MainState):
     honors_stats: List[Dict[str, Any]] = field(default_factory=list)
     matched_honorees: List[Dict[str, Any]] = field(default_factory=list)
     paper_detail: Dict[str, Any] = field(default_factory=dict)
+    citation_context: Dict[str, Any] = field(default_factory=dict)
     publication_pagination: Dict[str, Any] = field(default_factory=dict)
     best_effort_notice: str = ""
     errors: List[str] = field(default_factory=list)
