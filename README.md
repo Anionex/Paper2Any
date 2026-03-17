@@ -451,12 +451,12 @@ Script location: `/DataFlow-Agent/script/start_model_servers.sh`
 
 - **MinerU (PDF Parsing)**
   - `MINERU_MODEL_PATH`: Model path (default `models/MinerU2.5-2509-1.2B`)
-  - `MINERU_GPU_UTIL`: GPU memory utilization (default 0.2)
-  - **Instance configuration**: By default, 4 instances are started on GPU 0 and GPU 4 respectively (8 in total), ports 8011-8018.
+  - `MINERU_GPU_UTIL`: GPU memory utilization (default 0.85)
+  - **Instance configuration**: By default, one instance is started on each configured GPU, ports 8011-8013.
   - **Load Balancer**: Port 8010, automatically dispatches requests.
 
 - **SAM3 (Segment Anything Model 3)**
-  - **Instance configuration**: By default, one instance per configured GPU, ports start from 8021.
+  - **Instance configuration**: By default, one instance per configured GPU, ports 8021-8022.
   - **Model assets**: default paths are `./models/sam3/sam3.pt` and `./models/sam3/bpe_simple_vocab_16e6.txt.gz`.
   - **Load Balancer**: Port 8020.
 
@@ -465,13 +465,6 @@ Script location: `/DataFlow-Agent/script/start_model_servers.sh`
   - **Port**: 8003.
 
 > Before using, please modify `gpu_id` and the number of instances in the script according to your actual GPU count and memory.
-
-For SAM3 assets migration into this repository, run:
-
-```bash
-bash script/setup_sam3_assets.sh link
-# or: bash script/setup_sam3_assets.sh copy
-```
 
 For local one-command development test on a single GPU (SAM3 + backend + frontend), run:
 

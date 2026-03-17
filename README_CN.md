@@ -439,12 +439,12 @@ SUPABASE_JWT_SECRET=your-jwt-secret
 
 - **MinerU (PDF 解析)**
   - `MINERU_MODEL_PATH`: 模型路径 (默认 `models/MinerU2.5-2509-1.2B`)
-  - `MINERU_GPU_UTIL`: 显存占用比例 (默认 0.2)
-  - **实例配置**: 脚本默认在 GPU 0 和 GPU 4 上各启动 4 个实例 (共 8 个)，端口范围 8011-8018。
+  - `MINERU_GPU_UTIL`: 显存占用比例 (默认 0.85)
+  - **实例配置**: 脚本默认在每个配置 GPU 上各启动 1 个实例，端口范围 8011-8013。
   - **Load Balancer**: 端口 8010，自动分发请求。
 
 - **SAM3 (Segment Anything Model 3)**
-  - **实例配置**: 默认每个配置 GPU 启动 1 个实例，起始端口 8021。
+  - **实例配置**: 默认每个配置 GPU 启动 1 个实例，端口范围 8021-8022。
   - **模型路径**: 默认使用 `./models/sam3/sam3.pt` 与 `./models/sam3/bpe_simple_vocab_16e6.txt.gz`。
   - **Load Balancer**: 端口 8020。
 
@@ -453,13 +453,6 @@ SUPABASE_JWT_SECRET=your-jwt-secret
   - **端口**: 8003。
 
 > 使用前请根据实际 GPU 数量和显存情况修改脚本中的 `gpu_id` 和实例数量。
-
-若需将 SAM3 资产迁移到本仓库内，可执行：
-
-```bash
-bash script/setup_sam3_assets.sh link
-# 或：bash script/setup_sam3_assets.sh copy
-```
 
 如果你要在单张 GPU 上一条命令联调（SAM3 + 后端 + 前端），可执行：
 

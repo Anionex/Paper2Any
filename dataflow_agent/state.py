@@ -411,9 +411,12 @@ class Paper2FigureState(MainState):
     target_pages: int = 60
     pages_per_batch: int = 10
     pages_to_generate: int = 12
+    max_batch_tokens: int = 0
     max_rounds: int = 1
     current_chunk: str = ""
     current_text: str = ""
+    current_section_titles: List[str] = field(default_factory=list)
+    markdown_sections: List[Dict[str, Any]] = field(default_factory=list)
 
     # pdf2ppt 专用 ==============================
     pdf_file: str = ""
