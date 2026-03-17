@@ -686,6 +686,49 @@ class Paper2PosterState(MainState):
 
     # 错误收集
     errors: List[str] = field(default_factory=list)
+
+
+@dataclass
+class Paper2CitationRequest(MainRequest):
+    """Paper2Citation query request."""
+    mode: str = "author_search"
+    author_name: str = ""
+    openalex_author_id: str = ""
+    dblp_id: str = ""
+    display_name: str = ""
+    affiliation_hint: str = ""
+    candidate_source: str = ""
+    doi_or_url: str = ""
+    max_author_candidates: int = 12
+    max_publications: int = 25
+    max_citing_works: int = 60
+    publication_page: int = 1
+    publication_page_size: int = 20
+    max_seed_works: int = 20
+
+
+@dataclass
+class Paper2CitationState(MainState):
+    """Paper2Citation workflow state."""
+    request: Paper2CitationRequest = field(default_factory=Paper2CitationRequest)
+
+    mode: str = ""
+    query: str = ""
+    author_candidates: List[Dict[str, Any]] = field(default_factory=list)
+    author_profile: Dict[str, Any] = field(default_factory=dict)
+    publication_stats: Dict[str, Any] = field(default_factory=dict)
+    citation_stats: Dict[str, Any] = field(default_factory=dict)
+    publications: List[Dict[str, Any]] = field(default_factory=list)
+    citing_works: List[Dict[str, Any]] = field(default_factory=list)
+    citing_authors: List[Dict[str, Any]] = field(default_factory=list)
+    citing_institutions: List[Dict[str, Any]] = field(default_factory=list)
+    honors_stats: List[Dict[str, Any]] = field(default_factory=list)
+    matched_honorees: List[Dict[str, Any]] = field(default_factory=list)
+    paper_detail: Dict[str, Any] = field(default_factory=dict)
+    publication_pagination: Dict[str, Any] = field(default_factory=dict)
+    best_effort_notice: str = ""
+    errors: List[str] = field(default_factory=list)
+
 # ==================== WebSearch Knowledge Store State ====================
 @dataclass
 class WebsearchKnowledgeRequest(MainRequest):
