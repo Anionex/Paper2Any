@@ -369,11 +369,18 @@ export default function Paper2DrawioPage({
       });
 
       const data = await res.json();
-      if (data.success && data.xml_content) {
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || 'DrawIO 生成失败');
+      }
+      if (data.xml_content) {
         setXmlContent(data.xml_content);
+      } else {
+        throw new Error('DrawIO 生成失败：未返回可编辑 XML');
       }
     } catch (err) {
       console.error('生成失败:', err);
+      const errorMsg = err instanceof Error ? err.message : 'DrawIO 生成失败';
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }

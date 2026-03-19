@@ -12,6 +12,7 @@ from fastapi import UploadFile, Request
 
 from dataflow_agent.state import Paper2DrawioState, Paper2DrawioRequest
 from dataflow_agent.toolkits.drawio_tools import wrap_xml, extract_cells
+from dataflow_agent.toolkits.multimodaltool.mineru_tool import run_mineru_pdf_extract_http
 from dataflow_agent.logger import get_logger
 from fastapi_app.config.settings import settings
 
@@ -64,7 +65,45 @@ class Paper2DrawioService:
         text_input = (text_content or "").strip()
         image_exts = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp"}
         text_is_image_path = Path(text_input).suffix.lower() in image_exts if text_input else False
-        use_sam3_workflow = bool(paper_file) or text_is_image_path
+        use_sam3_workflow = text_is_image_path
+
+        workflow_input_type = input_type
+        workflow_paper_file = paper_file
+        workflow_text_content = text_content or ""
+
+        if input_type == "PDF":
+            if not paper_file:
+                return {
+                    "success": False,
+                    "xml_content": "",
+                    "file_path": "",
+                    "error": "Missing PDF file",
+                }
+            try:
+                markdown_text, _ = await run_mineru_pdf_extract_http(
+                    paper_file,
+                    str(run_dir),
+                )
+            except Exception as e:
+                log.error(f"[paper2drawio] MinerU extraction failed: {e}")
+                return {
+                    "success": False,
+                    "xml_content": "",
+                    "file_path": "",
+                    "error": f"MinerU extraction failed: {e}",
+                }
+
+            if not markdown_text.strip():
+                return {
+                    "success": False,
+                    "xml_content": "",
+                    "file_path": "",
+                    "error": "MinerU extraction returned empty markdown",
+                }
+
+            workflow_input_type = "TEXT"
+            workflow_paper_file = ""
+            workflow_text_content = markdown_text
 
         # SAM3 流程使用平台内置 OCR 服务配置；普通流程沿用用户入参
         request_chat_api_url = chat_api_url
@@ -84,12 +123,12 @@ class Paper2DrawioService:
                 enable_vlm_validation=bool(enable_vlm_validation),
                 vlm_model=vlm_model or settings.PAPER2DRAWIO_VLM_MODEL,
                 vlm_validation_max_retries=vlm_validation_max_retries or 3,
-                input_type=input_type,
+                input_type=workflow_input_type,
                 diagram_type=diagram_type,
                 diagram_style=diagram_style,
             ),
-            paper_file=paper_file,
-            text_content=text_content or "",
+            paper_file=workflow_paper_file,
+            text_content=workflow_text_content,
             result_path=str(run_dir),
         )
 
@@ -98,7 +137,7 @@ class Paper2DrawioService:
 
         try:
             async with task_semaphore:
-                workflow_name = "paper2drawio_sam3" if use_sam3_workflow else "paper2drawio"
+                workflow_name = "paper2drawio_visual" if use_sam3_workflow else "paper2drawio_semantic"
                 log.info(f"[paper2drawio] selected workflow={workflow_name}, input_type={input_type}")
                 factory = RuntimeRegistry.get(workflow_name)
                 builder = factory()
@@ -159,7 +198,7 @@ class Paper2DrawioService:
 
         try:
             async with task_semaphore:
-                factory = RuntimeRegistry.get("paper2drawio")
+                factory = RuntimeRegistry.get("paper2drawio_semantic")
                 builder = factory()
                 graph = builder.build()
                 final_state = await graph.ainvoke(state)

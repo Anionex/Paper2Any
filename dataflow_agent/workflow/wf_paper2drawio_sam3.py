@@ -1261,7 +1261,12 @@ def _build_elements_from_sam3(
 
 # ==================== WORKFLOW ====================
 @register("paper2drawio_sam3")
+@register("paper2drawio_visual")
 def create_paper2drawio_sam3_graph() -> GenericGraphBuilder:
+    """
+    Paper2Drawio visual workflow: start from an existing image and rebuild
+    it into editable draw.io XML with OCR + SAM3 segmentation.
+    """
     builder = GenericGraphBuilder(state_model=Paper2DrawioState, entry_point="_start_")
 
     def _init_node(state: Paper2DrawioState) -> Paper2DrawioState:
