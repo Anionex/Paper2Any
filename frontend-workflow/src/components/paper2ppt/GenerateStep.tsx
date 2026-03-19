@@ -12,6 +12,7 @@ interface GenerateStepProps {
   setCurrentSlideIndex: (index: number) => void;
   generateResults: GenerateResult[];
   isGenerating: boolean;
+  taskMessage?: string;
   slidePrompt: string;
   setSlidePrompt: (prompt: string) => void;
   handleRegenerateSlide: () => void;
@@ -27,6 +28,7 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
   setCurrentSlideIndex,
   generateResults,
   isGenerating,
+  taskMessage,
   slidePrompt,
   setSlidePrompt,
   handleRegenerateSlide,
@@ -81,7 +83,9 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
               <div className="text-center">
                 <Loader2 size={40} className="text-purple-400 animate-spin mx-auto mb-3" />
                 <p className="text-base text-purple-300">{generateResults.every(r => r.status === 'processing') ? '正在批量生成所有页面...' : '正在重新生成当前页...'}</p>
-                <p className="text-xs text-gray-500 mt-1">{generateResults.every(r => r.status === 'processing') ? `共 ${outlineData.length} 页，请稍候` : 'AI 正在根据您的提示重新创建'}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {taskMessage || (generateResults.every(r => r.status === 'processing') ? `共 ${outlineData.length} 页，请稍候` : 'AI 正在根据您的提示重新创建')}
+                </p>
               </div>
             ) : currentResult?.afterImage ? (
               <img src={currentResult.afterImage} alt="Generated" className="w-full h-full object-contain" />

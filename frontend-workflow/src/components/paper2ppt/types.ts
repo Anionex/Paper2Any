@@ -28,6 +28,25 @@ export interface GenerateResult {
   currentVersionIndex: number;
 }
 
+export type Paper2PPTTaskStatus = 'queued' | 'running' | 'done' | 'failed';
+
+export interface Paper2PPTTaskResponse {
+  success: boolean;
+  task_id: string;
+  task_type: string;
+  status: Paper2PPTTaskStatus;
+  message: string;
+  error?: string | null;
+  result?: {
+    success: boolean;
+    ppt_pdf_path?: string;
+    ppt_pptx_path?: string;
+    pagecontent?: Array<Record<string, unknown>>;
+    result_path?: string;
+    all_output_files?: string[];
+  } | null;
+}
+
 export type UploadMode = 'file' | 'text' | 'topic';
 export type StyleMode = 'prompt' | 'reference';
 export type StylePreset = 'modern' | 'business' | 'academic' | 'creative';

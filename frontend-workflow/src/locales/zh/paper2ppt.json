@@ -45,7 +45,7 @@
       "customModelTip": "手动输入模型名称（需与所选 API 服务商支持的模型名一致）",
       "genModel": "图像生成模型（中文使用3 pro）",
       "pageCount": "生成页数",
-      "longPaper": "启用长文档模式，适用于生成40到100页的PPT",
+      "longPaper": "启用长文档模式（系统也会自动识别超长文档并切换分段大纲生成）",
       "styleTitle": "风格配置",
       "language": "语言",
       "styleMode": {

@@ -15,7 +15,8 @@ import {
   ChevronRight,
   ArrowLeft,
   Video,
-  LayoutTemplate
+  LayoutTemplate,
+  Quote
 } from 'lucide-react';
 import NavTooltip from './NavTooltip';
 
@@ -108,6 +109,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
       tooltipKey: t('app.navTooltip.paper2poster'),
       icon: LayoutTemplate,
       gradient: 'from-fuchsia-500 to-rose-500'
+    },
+    {
+      id: 'paper2citation',
+      labelKey: t('app.nav.paper2citation'),
+      tooltipKey: t('app.navTooltip.paper2citation'),
+      icon: Quote,
+      gradient: 'from-cyan-500 to-sky-500'
     },
     {
       id: 'ppt2polish',
