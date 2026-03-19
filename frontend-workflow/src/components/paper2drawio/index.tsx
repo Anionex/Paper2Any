@@ -80,6 +80,7 @@ export default function Paper2DrawioPage({
   const [apiUrl, setApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(DEFAULT_PAPER2DRAWIO_MODEL);
+  const [enableModelRace, setEnableModelRace] = useState(PAPER2DRAWIO_MODELS.length > 1);
   const [drawioLanguage, setDrawioLanguage] = useState<'zh' | 'en'>('zh');
   const [enableVlmValidation, setEnableVlmValidation] = useState(false);
   const [p2dImageModel, setP2dImageModel] = useState(DEFAULT_PAPER2DRAWIO_IMAGE_MODEL);
@@ -173,6 +174,7 @@ export default function Paper2DrawioPage({
           apiUrl?: string;
           apiKey?: string;
           model?: string;
+          enableModelRace?: boolean;
           drawioLanguage?: 'zh' | 'en';
           enableVlmValidation?: boolean;
           xmlContent?: string;
@@ -192,6 +194,7 @@ export default function Paper2DrawioPage({
         if (saved.diagramType) setDiagramType(saved.diagramType);
         if (saved.diagramStyle) setDiagramStyle(saved.diagramStyle);
         if (saved.model) setModel(saved.model);
+        if (typeof saved.enableModelRace === 'boolean') setEnableModelRace(saved.enableModelRace);
         if (saved.drawioLanguage) setDrawioLanguage(saved.drawioLanguage);
         if (typeof saved.enableVlmValidation === 'boolean') setEnableVlmValidation(saved.enableVlmValidation);
         if (saved.xmlContent) setXmlContent(saved.xmlContent);
@@ -230,6 +233,7 @@ export default function Paper2DrawioPage({
       apiUrl,
       apiKey,
       model,
+      enableModelRace,
       drawioLanguage,
       enableVlmValidation,
       xmlContent,
@@ -259,6 +263,7 @@ export default function Paper2DrawioPage({
     apiUrl,
     apiKey,
     model,
+    enableModelRace,
     drawioLanguage,
     enableVlmValidation,
     xmlContent,
@@ -349,7 +354,8 @@ export default function Paper2DrawioPage({
       const formData = new FormData();
       formData.append('chat_api_url', apiUrl);
       formData.append('api_key', apiKey);
-      formData.append('model', model);
+      const modelToSend = enableModelRace ? withModelOptions(PAPER2DRAWIO_MODELS, model).join(',') : model;
+      formData.append('model', modelToSend);
       formData.append('input_type', uploadMode === 'file' ? 'PDF' : 'TEXT');
       formData.append('diagram_type', diagramType);
       formData.append('diagram_style', diagramStyle);
@@ -399,6 +405,7 @@ export default function Paper2DrawioPage({
     p2dStyle,
     p2dFigureComplex,
     drawioLanguage,
+    enableModelRace,
     enableVlmValidation,
   ]);
 
@@ -903,6 +910,20 @@ export default function Paper2DrawioPage({
                     </option>
                   ))}
                 </select>
+                {modelOptions.length > 1 && (
+                  <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={enableModelRace}
+                      onChange={e => setEnableModelRace(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-slate-100">{t('modelRace')}</span>
+                      <span className="text-slate-400">{t('modelRaceHint')}</span>
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
 

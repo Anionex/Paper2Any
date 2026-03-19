@@ -11,6 +11,7 @@ interface CompleteStepProps {
   downloadUrl: string | null;
   pdfPreviewUrl: string | null;
   isGeneratingFinal: boolean;
+  taskMessage?: string;
   handleGenerateFinal: () => void;
   handleDownloadPptx: () => void;
   handleDownloadPdf: () => void;
@@ -31,6 +32,7 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
   downloadUrl,
   pdfPreviewUrl,
   isGeneratingFinal,
+  taskMessage,
   handleGenerateFinal,
   handleDownloadPptx,
   handleDownloadPdf,
@@ -97,6 +99,12 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
       {error && (
         <div className="mt-4 flex items-center gap-2 text-sm text-red-300 bg-red-500/10 border border-red-500/40 rounded-lg px-4 py-3 justify-center">
           <AlertCircle size={16} /> {error}
+        </div>
+      )}
+
+      {isGeneratingFinal && taskMessage && (
+        <div className="mt-4 text-sm text-purple-200 bg-purple-500/10 border border-purple-500/30 rounded-lg px-4 py-3">
+          {taskMessage}
         </div>
       )}
 

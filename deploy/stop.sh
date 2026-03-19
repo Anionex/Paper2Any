@@ -6,7 +6,8 @@ set -u
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT" || exit 1
 
-APP_PORT=8000
+source "$PROJECT_ROOT/deploy/app_config.sh"
+
 PID_FILES=(
   "logs/uvicorn.pid"
   "logs/gunicorn.pid"

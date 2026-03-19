@@ -8,7 +8,15 @@ import { verifyLlmConnection } from '../../services/llmService';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
 
-import { Step, SlideOutline, GenerateResult, UploadMode, StyleMode, StylePreset } from './types';
+import {
+  Step,
+  SlideOutline,
+  GenerateResult,
+  UploadMode,
+  StyleMode,
+  StylePreset,
+  Paper2PPTTaskResponse,
+} from './types';
 import { MAX_FILE_SIZE, STORAGE_KEY } from './constants';
 
 import Banner from './Banner';
@@ -57,11 +65,13 @@ const Paper2PptPage = () => {
   const [generateResults, setGenerateResults] = useState<GenerateResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [slidePrompt, setSlidePrompt] = useState('');
+  const [generateTaskMessage, setGenerateTaskMessage] = useState('');
   
   // Step 4: 完成状态
   const [isGeneratingFinal, setIsGeneratingFinal] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [finalTaskMessage, setFinalTaskMessage] = useState('');
 
   // 通用状态
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +233,91 @@ const Paper2PptPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, currentSlideIndex]); // 移除 generateResults 依赖，避免无限循环
+
+  const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+
+  const parseErrorMessage = async (res: Response, fallback: string) => {
+    if (res.status === 429) {
+      return '请求过于频繁，请稍后再试';
+    }
+    try {
+      const errBody = await res.json();
+      return errBody?.error || errBody?.detail || errBody?.message || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const submitPaper2PptTask = async (formData: FormData): Promise<Paper2PPTTaskResponse> => {
+    const res = await fetch('/api/v1/paper2ppt/generate-task', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, '服务器繁忙，请稍后再试'));
+    }
+
+    const data = await res.json() as Paper2PPTTaskResponse;
+    if (!data.success || !data.task_id) {
+      throw new Error(data.error || data.message || '任务提交失败');
+    }
+    return data;
+  };
+
+  const pollPaper2PptTask = async (
+    taskId: string,
+    onUpdate?: (task: Paper2PPTTaskResponse) => void,
+  ) => {
+    let transientFailures = 0;
+
+    for (let attempt = 0; attempt < 720; attempt += 1) {
+      try {
+        const res = await fetch(`/api/v1/paper2ppt/tasks/${taskId}`, {
+          headers: { 'X-API-Key': API_KEY },
+        });
+        if (!res.ok) {
+          throw new Error(await parseErrorMessage(res, '任务状态查询失败'));
+        }
+
+        const data = await res.json() as Paper2PPTTaskResponse;
+        onUpdate?.(data);
+        transientFailures = 0;
+
+        if (data.status === 'done') {
+          if (!data.result) {
+            throw new Error('任务已完成，但缺少结果文件');
+          }
+          return data.result;
+        }
+
+        if (data.status === 'failed') {
+          throw new Error(data.error || data.message || '任务执行失败');
+        }
+      } catch (err) {
+        transientFailures += 1;
+        if (transientFailures >= 5) {
+          throw err instanceof Error ? err : new Error('任务轮询失败');
+        }
+      }
+
+      await sleep(attempt < 20 ? 1500 : 2500);
+    }
+
+    throw new Error('任务执行超时，请稍后到历史输出目录检查结果');
+  };
+
+  const preloadGeneratedImages = (outputFiles?: string[]) => {
+    if (!outputFiles || !Array.isArray(outputFiles)) return;
+    console.log('预加载所有生成的图片...');
+    outputFiles.forEach((url: string) => {
+      if (url.endsWith('.png') || url.endsWith('.jpg') || url.endsWith('.jpeg')) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  };
 
   // ============== Step 1: 上传处理 ==============
   const validateDocFile = (file: File): boolean => {
@@ -620,6 +715,7 @@ const Paper2PptPage = () => {
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
+    setGenerateTaskMessage('');
     setError(null);
     
     const results: GenerateResult[] = outlineData.map((slide) => ({
@@ -659,29 +755,15 @@ const Paper2PptPage = () => {
       }));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
-      const res = await fetch('/api/v1/paper2ppt/generate', {
-        method: 'POST',
-        headers: { 'X-API-Key': API_KEY },
-        body: formData,
+      const task = await submitPaper2PptTask(formData);
+      setGenerateTaskMessage(task.message || '批量生成任务已提交');
+
+      const data = await pollPaper2PptTask(task.task_id, (status) => {
+        setGenerateTaskMessage(status.message || '正在生成页面');
       });
 
-      if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-
-      if (!data.success) {
-        throw new Error(data.error || '服务器繁忙，请稍后再试');
+      if (data.result_path) {
+        setResultPath(data.result_path);
       }
 
       const updatedResults = results.map((result, index) => {
@@ -704,16 +786,7 @@ const Paper2PptPage = () => {
         };
       });
       
-      // 预加载所有图片到浏览器缓存
-      if (data.all_output_files && Array.isArray(data.all_output_files)) {
-        console.log('预加载所有生成的图片...');
-        data.all_output_files.forEach((url: string) => {
-          if (url.endsWith('.png') || url.endsWith('.jpg') || url.endsWith('.jpeg')) {
-            const img = new Image();
-            img.src = url;
-          }
-        });
-      }
+      preloadGeneratedImages(data.all_output_files);
       
       setGenerateResults(updatedResults);
       
@@ -722,6 +795,7 @@ const Paper2PptPage = () => {
       setError(message);
       setGenerateResults(results.map(r => ({ ...r, status: 'pending' as const })));
     } finally {
+      setGenerateTaskMessage('');
       setIsGenerating(false);
     }
   };
@@ -975,6 +1049,7 @@ const Paper2PptPage = () => {
     }
     
     setIsGeneratingFinal(true);
+    setFinalTaskMessage('');
     setError(null);
     
     try {
@@ -1005,30 +1080,12 @@ const Paper2PptPage = () => {
       }));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
-      const res = await fetch('/api/v1/paper2ppt/generate', {
-        method: 'POST',
-        headers: { 'X-API-Key': API_KEY },
-        body: formData,
+      const task = await submitPaper2PptTask(formData);
+      setFinalTaskMessage(task.message || '最终导出任务已提交');
+
+      const data = await pollPaper2PptTask(task.task_id, (status) => {
+        setFinalTaskMessage(status.message || '正在生成最终文件');
       });
-
-      if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-
-      if (!data.success) {
-        throw new Error(data.error || '服务器繁忙，请稍后再试');
-      }
 
       // 优先使用后端直接返回的路径
       if (data.ppt_pptx_path) {
@@ -1111,6 +1168,7 @@ const Paper2PptPage = () => {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
     } finally {
+      setFinalTaskMessage('');
       setIsGeneratingFinal(false);
     }
   };
@@ -1157,6 +1215,8 @@ const Paper2PptPage = () => {
     setError(null);
     setProgress(0);
     setProgressStatus('');
+    setGenerateTaskMessage('');
+    setFinalTaskMessage('');
   };
 
   return (
@@ -1227,6 +1287,7 @@ const Paper2PptPage = () => {
               setCurrentSlideIndex={setCurrentSlideIndex}
               generateResults={generateResults}
               isGenerating={isGenerating}
+              taskMessage={generateTaskMessage}
               slidePrompt={slidePrompt}
               setSlidePrompt={setSlidePrompt}
               handleRegenerateSlide={handleRegenerateSlide}
@@ -1244,6 +1305,7 @@ const Paper2PptPage = () => {
               downloadUrl={downloadUrl}
               pdfPreviewUrl={pdfPreviewUrl}
               isGeneratingFinal={isGeneratingFinal}
+              taskMessage={finalTaskMessage}
               handleGenerateFinal={handleGenerateFinal}
               handleDownloadPptx={handleDownloadPptx}
               handleDownloadPdf={handleDownloadPdf}
