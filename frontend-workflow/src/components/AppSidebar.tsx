@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Home,
   X,
   Sparkles,
   Presentation,
@@ -68,6 +69,13 @@ export const AppSidebar = ({ isOpen, onClose, activePage, onPageChange }: AppSid
   ]), [t]);
 
   const navigationItems: NavigationItem[] = [
+    {
+      id: 'home',
+      labelKey: t('app.nav.home'),
+      tooltipKey: t('app.navTooltip.home'),
+      icon: Home,
+      gradient: 'from-slate-500 to-cyan-500'
+    },
     {
       id: 'paper2figure',
       labelKey: t('app.nav.paper2figure'),
