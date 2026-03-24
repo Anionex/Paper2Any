@@ -200,6 +200,137 @@ def _extract_image_path_from_pagecontent_item(item: Any) -> Optional[str]:
     return None
 
 
+async def _regenerate_single_page_from_content(
+    state: Paper2FigureState,
+    idx: int,
+    item: Dict[str, Any],
+    save_path: str,
+    ref_img_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    async def _call_image_api_with_retry(coro_factory, retries: int = 3, delay: float = 1.0) -> bool:
+        last_err: Optional[Exception] = None
+        for attempt in range(1, retries + 1):
+            try:
+                await coro_factory()
+                return True
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                log.error(f"[paper2ppt] single page regen failed attempt {attempt}/{retries}: {e}")
+                if attempt < retries:
+                    try:
+                        await asyncio.sleep(delay)
+                    except Exception:
+                        pass
+        log.error(f"[paper2ppt] single page regen failed after {retries} attempts. last_err={last_err}")
+        return False
+
+    style = getattr(state.request, "style", None) or "kartoon"
+    aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
+    image_resolution = getattr(state.request, "image_resolution", None) or "2K"
+
+    style_hint = ""
+    if style and style.strip() and style.strip().lower() != "kartoon":
+        style_hint = f"\nAdditional style guidance: {style.strip()}\n"
+
+    base_content, asset_path, is_edit_originally = await _make_prompt_for_structured_page(
+        item,
+        style=style,
+        state=state,
+    )
+
+    use_ref = bool(ref_img_path and os.path.exists(ref_img_path))
+
+    if use_ref:
+        if is_edit_originally and asset_path:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"--------------------------------------------------\n"
+                f"TASK: Generate a {style} presentation slide.\n"
+                f"INPUT IMAGES:\n"
+                f"  - IMAGE 1 (First Image): STYLE REFERENCE. Strictly follow its color palette, and background style.\n"
+                f"  - IMAGE 2 (Second Image): CONTENT ASSET. Incorporate the chart/table/figure from this image into the slide.\n\n"
+                f"INSTRUCTION: Create a cohesive slide that presents the content from Image 2 but looks exactly like it belongs to the deck of Image 1.\n"
+                f"{style_hint}"
+                f"Language: {state.request.language}"
+            )
+            mode = "regen_multi_edit_ref_asset"
+            ok = await _call_image_api_with_retry(
+                lambda: gemini_multi_image_edit_async(
+                    prompt=final_prompt,
+                    image_paths=[ref_img_path, asset_path],
+                    save_path=save_path,
+                    api_url=state.request.chat_api_url,
+                    api_key=state.request.chat_api_key or os.getenv("DF_API_KEY"),
+                    model=state.request.gen_fig_model,
+                    aspect_ratio=aspect_ratio,
+                    resolution=image_resolution,
+                )
+            )
+        else:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"Reference the style of the provided image (layout, color, background), "
+                f"but generate NEW CONTENT based on the text description above. "
+                f"Keep the background style consistent.\n"
+                f"{style_hint}"
+                f"Language: {state.request.language}"
+            )
+            mode = "regen_ref_style"
+            ok = await _call_image_api_with_retry(
+                lambda: generate_or_edit_and_save_image_async(
+                    prompt=final_prompt,
+                    save_path=save_path,
+                    aspect_ratio=aspect_ratio,
+                    api_url=state.request.chat_api_url,
+                    api_key=state.request.chat_api_key or os.getenv("DF_API_KEY"),
+                    model=state.request.gen_fig_model,
+                    image_path=ref_img_path,
+                    use_edit=True,
+                    resolution=image_resolution,
+                )
+            )
+    else:
+        if is_edit_originally:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"根据上述内容绘制ppt，把这个图作为PPT的一部分。生成{style}风格的PPT. \n "
+                f"使用语言：{state.request.language} !!!"
+            )
+        else:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"根据上述内容。生成{style}风格的 PPT 图像, \n "
+                f"使用语言：{state.request.language}"
+            )
+
+        mode = "regen_origin_edit" if is_edit_originally else "regen_origin_gen"
+        ok = await _call_image_api_with_retry(
+            lambda: generate_or_edit_and_save_image_async(
+                prompt=final_prompt,
+                save_path=save_path,
+                aspect_ratio=aspect_ratio,
+                api_url=state.request.chat_api_url,
+                api_key=state.request.chat_api_key or os.getenv("DF_API_KEY"),
+                model=state.request.gen_fig_model,
+                image_path=asset_path,
+                use_edit=is_edit_originally,
+                resolution=image_resolution,
+            )
+        )
+
+    if not ok:
+        raise ValueError(f"[paper2ppt] failed to regenerate page from outline: idx={idx}")
+
+    out_item = dict(item)
+    out_item.update({
+        "generated_img_path": save_path,
+        "page_idx": idx,
+        "mode": mode,
+        "style": style,
+    })
+    return out_item
+
+
 @register("paper2ppt_parallel_consistent_style")
 def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa: N802
     """
@@ -225,6 +356,8 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
     def _route(state: Paper2FigureState) -> str:
         if getattr(state.request, "all_edited_down", False):
             return "export_ppt_assets"
+        if getattr(state, "regenerate_from_outline", False):
+            return "regenerate_single_page_from_content"
         if not getattr(state, "gen_down", False):
             return "generate_pages"
         return "edit_single_page"
@@ -706,6 +839,81 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         state.edit_page_num = -1
         return state
 
+    async def regenerate_single_page_from_content(state: Paper2FigureState) -> Paper2FigureState:
+        idx = int(getattr(state, "edit_page_num", -1))
+        if idx < 0:
+            raise ValueError("[paper2ppt] edit_page_num 必须是 0-based 且 >=0")
+
+        page_items = state.pagecontent or []
+        if idx >= len(page_items):
+            raise ValueError(f"[paper2ppt] 页面索引超出范围: idx={idx}, total={len(page_items)}")
+
+        item = page_items[idx]
+        if not isinstance(item, dict):
+            raise ValueError(f"[paper2ppt] 当前页面缺少结构化内容，无法按内容重生成: idx={idx}")
+
+        result_root = Path(_ensure_result_path(state))
+        img_dir = result_root / "ppt_pages"
+        img_dir.mkdir(parents=True, exist_ok=True)
+
+        user_ref_img = getattr(state.request, "ref_img", None)
+        ref_img_path: Optional[str] = None
+        if user_ref_img:
+            candidate = _abs_path(str(user_ref_img))
+            if os.path.exists(candidate):
+                ref_img_path = candidate
+            else:
+                log.warning(f"[paper2ppt] regenerate_from_outline ref_img not found: {candidate}")
+
+        if not ref_img_path and idx > 0:
+            anchor_path = ""
+            if page_items and isinstance(page_items[0], dict):
+                anchor_path = str(page_items[0].get("generated_img_path") or "")
+            if not anchor_path and getattr(state, "generated_pages", None):
+                anchor_path = state.generated_pages[0] if len(state.generated_pages) > 0 else ""
+            anchor_path = _abs_path(anchor_path) if anchor_path else ""
+            if anchor_path and os.path.exists(anchor_path):
+                ref_img_path = anchor_path
+
+        temp_save_path = str((img_dir / f"page_{idx:03d}_temp.png").resolve())
+        regenerated_item = await _regenerate_single_page_from_content(
+            state=state,
+            idx=idx,
+            item=item,
+            save_path=temp_save_path,
+            ref_img_path=ref_img_path,
+        )
+
+        version_prompt = "Regenerated from current page content"
+        versioned_path, version_num = ImageVersionManager.save_versioned_image(
+            img_dir=img_dir,
+            page_idx=idx,
+            new_image_path=temp_save_path,
+            prompt=version_prompt,
+        )
+
+        temp_path_obj = Path(temp_save_path)
+        if temp_path_obj.exists():
+            temp_path_obj.unlink()
+
+        save_path = str((img_dir / f"page_{idx:03d}.png").resolve())
+
+        state.generated_pages = state.generated_pages or []
+        while len(state.generated_pages) < len(page_items):
+            state.generated_pages.append("")
+        state.generated_pages[idx] = save_path
+
+        regenerated_item["generated_img_path"] = save_path
+        regenerated_item["mode"] = "regenerate_from_content"
+        regenerated_item["current_version"] = version_num
+        regenerated_item["versioned_img_path"] = versioned_path
+        state.pagecontent[idx] = regenerated_item
+
+        state.regenerate_from_outline = False
+        state.edit_page_prompt = ""
+        state.edit_page_num = -1
+        return state
+
     async def export_ppt_assets(state: Paper2FigureState) -> Paper2FigureState:
         """
         导出节点 (同 paper2ppt_parallel)
@@ -740,6 +948,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         "_start_": _start_,
         "generate_pages": generate_pages,
         "edit_single_page": edit_single_page,
+        "regenerate_single_page_from_content": regenerate_single_page_from_content,
         "export_ppt_assets": export_ppt_assets,
         "_end_": lambda state: state,
     }
@@ -747,6 +956,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
     edges = [
         ("generate_pages", "export_ppt_assets"),
         ("edit_single_page", "export_ppt_assets"),
+        ("regenerate_single_page_from_content", "export_ppt_assets"),
         ("export_ppt_assets", "_end_"),
     ]
 

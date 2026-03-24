@@ -299,6 +299,7 @@ async def run_paper2ppt_wf_api(
     get_down: bool | None = None,
     edit_page_num: int | None = None,
     edit_page_prompt: str | None = None,
+    regenerate_from_outline: bool = False,
     auto_fill_generated_pages: bool = True,
 ) -> Paper2PPTResponse:
     """
@@ -337,6 +338,7 @@ async def run_paper2ppt_wf_api(
             state.edit_page_num = int(edit_page_num)
         if edit_page_prompt is not None:
             state.edit_page_prompt = str(edit_page_prompt)
+        state.regenerate_from_outline = bool(regenerate_from_outline)
 
         if auto_fill_generated_pages and base_dir is not None:
             try:

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FileText, Sparkles, Loader2, MessageSquare, RefreshCw,
-  ArrowLeft, CheckCircle2, AlertCircle
+  ArrowLeft, CheckCircle2, AlertCircle, Plus, Trash2, Pencil, Save, X
 } from 'lucide-react';
 import { SlideOutline, GenerateResult, Step } from './types';
 import VersionHistory from './VersionHistory';
@@ -15,6 +15,8 @@ interface GenerateStepProps {
   taskMessage?: string;
   slidePrompt: string;
   setSlidePrompt: (prompt: string) => void;
+  saveCurrentSlideEdits: (layoutDescription: string, keyPoints: string[]) => void;
+  handleRegenerateSlideFromOutline: () => void;
   handleRegenerateSlide: () => void;
   handleConfirmSlide: () => void;
   setCurrentStep: (step: Step) => void;
@@ -31,6 +33,8 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
   taskMessage,
   slidePrompt,
   setSlidePrompt,
+  saveCurrentSlideEdits,
+  handleRegenerateSlideFromOutline,
   handleRegenerateSlide,
   handleConfirmSlide,
   setCurrentStep,
@@ -39,6 +43,55 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
 }) => {
   const currentSlide = outlineData[currentSlideIndex];
   const currentResult = generateResults[currentSlideIndex];
+  const [isEditingSlideMeta, setIsEditingSlideMeta] = useState(false);
+  const [draftLayoutDescription, setDraftLayoutDescription] = useState('');
+  const [draftKeyPoints, setDraftKeyPoints] = useState<string[]>(['']);
+
+  const syncDraftFromCurrentSlide = () => {
+    setDraftLayoutDescription(currentSlide?.layout_description || '');
+    setDraftKeyPoints(currentSlide?.key_points?.length ? [...currentSlide.key_points] : ['']);
+  };
+
+  useEffect(() => {
+    setIsEditingSlideMeta(false);
+    syncDraftFromCurrentSlide();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSlideIndex, currentSlide?.id]);
+
+  const handleEditStart = () => {
+    syncDraftFromCurrentSlide();
+    setIsEditingSlideMeta(true);
+  };
+
+  const handleEditCancel = () => {
+    syncDraftFromCurrentSlide();
+    setIsEditingSlideMeta(false);
+  };
+
+  const handleEditSave = () => {
+    saveCurrentSlideEdits(
+      draftLayoutDescription,
+      draftKeyPoints.length > 0 ? draftKeyPoints : ['']
+    );
+    setIsEditingSlideMeta(false);
+  };
+
+  const handleDraftKeyPointChange = (index: number, value: string) => {
+    setDraftKeyPoints(prev =>
+      prev.map((point, pointIndex) => (pointIndex === index ? value : point))
+    );
+  };
+
+  const handleAddDraftKeyPoint = () => {
+    setDraftKeyPoints(prev => [...prev, '']);
+  };
+
+  const handleRemoveDraftKeyPoint = (index: number) => {
+    setDraftKeyPoints(prev => {
+      const nextKeyPoints = prev.filter((_, pointIndex) => pointIndex !== index);
+      return nextKeyPoints.length > 0 ? nextKeyPoints : [''];
+    });
+  };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -59,18 +112,91 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
 
       {currentSlide && (
         <div className="glass rounded-xl border border-white/10 p-4 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 className="text-sm font-medium text-white">页面内容</h3>
+            <div className="flex items-center gap-2">
+              {isEditingSlideMeta && (
+                <button
+                  onClick={handleEditCancel}
+                  disabled={isGenerating}
+                  className="p-2 rounded-lg border border-white/15 text-gray-300 hover:text-red-300 hover:border-red-400 hover:bg-white/5 disabled:opacity-50"
+                  title="舍弃当前修改"
+                >
+                  <X size={14} />
+                </button>
+              )}
+              <button
+                onClick={isEditingSlideMeta ? handleEditSave : handleEditStart}
+                disabled={isGenerating}
+                className="p-2 rounded-lg border border-white/15 text-gray-300 hover:text-purple-300 hover:border-purple-400 hover:bg-white/5 disabled:opacity-50"
+                title={isEditingSlideMeta ? '保存当前修改' : '编辑当前页内容'}
+              >
+                {isEditingSlideMeta ? <Save size={14} /> : <Pencil size={14} />}
+              </button>
+            </div>
+          </div>
           <div className="mb-3">
             <h4 className="text-sm text-gray-400 mb-2 flex items-center gap-2"><FileText size={14} className="text-purple-400" /> 布局描述</h4>
-            <p className="text-xs text-purple-400/80 italic">{currentSlide.layout_description}</p>
+            {isEditingSlideMeta ? (
+              <textarea
+                value={draftLayoutDescription}
+                onChange={(e) => setDraftLayoutDescription(e.target.value)}
+                disabled={isGenerating}
+                rows={3}
+                className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-sm text-purple-100 outline-none focus:ring-2 focus:ring-purple-500 resize-none disabled:opacity-60"
+                placeholder="直接调整当前页的布局描述..."
+              />
+            ) : (
+              <p className="text-xs text-purple-400/80 italic">{currentSlide.layout_description}</p>
+            )}
           </div>
           <div className="pt-3 border-t border-white/10">
-            <h4 className="text-sm text-gray-400 mb-2">要点内容</h4>
-            <ul className="grid grid-cols-1 md:grid-cols-2 gap-1">
-              {currentSlide.key_points.slice(0, 4).map((point, idx) => (
-                <li key={idx} className="text-xs text-gray-400 flex items-start gap-1"><span className="text-purple-400">•</span><span className="line-clamp-1">{point}</span></li>
-              ))}
-              {currentSlide.key_points.length > 4 && (<li className="text-xs text-gray-500 italic">...还有 {currentSlide.key_points.length - 4} 条</li>)}
-            </ul>
+            {isEditingSlideMeta ? (
+              <>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <h4 className="text-sm text-gray-400">要点内容</h4>
+                  <button
+                    onClick={handleAddDraftKeyPoint}
+                    disabled={isGenerating}
+                    className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-dashed border-white/20 text-xs text-gray-300 hover:text-purple-300 hover:border-purple-400 disabled:opacity-60 flex items-center gap-1"
+                  >
+                    <Plus size={12} /> 添加要点
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {draftKeyPoints.map((point, idx) => (
+                    <div key={`${currentSlide.id}-kp-${idx}`} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={point}
+                        onChange={(e) => handleDraftKeyPointChange(idx, e.target.value)}
+                        disabled={isGenerating}
+                        className="flex-1 px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60"
+                        placeholder={`要点 ${idx + 1}`}
+                      />
+                      <button
+                        onClick={() => handleRemoveDraftKeyPoint(idx)}
+                        disabled={isGenerating || draftKeyPoints.length <= 1}
+                        className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30"
+                        title="删除该要点"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <h4 className="text-sm text-gray-400 mb-2">要点内容</h4>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                  {currentSlide.key_points.slice(0, 4).map((point, idx) => (
+                    <li key={idx} className="text-xs text-gray-400 flex items-start gap-1"><span className="text-purple-400">•</span><span className="line-clamp-1">{point}</span></li>
+                  ))}
+                  {currentSlide.key_points.length > 4 && (<li className="text-xs text-gray-500 italic">...还有 {currentSlide.key_points.length - 4} 条</li>)}
+                </ul>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -93,6 +219,15 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
               <div className="text-center"><FileText size={32} className="text-gray-500 mx-auto mb-2" /><span className="text-gray-500">等待生成</span></div>
             )}
           </div>
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={handleRegenerateSlideFromOutline}
+              disabled={isGenerating || isEditingSlideMeta}
+              className="px-5 py-2.5 rounded-lg border border-white/20 text-gray-300 hover:bg-white/10 text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw size={14} /> 按当前内容重新生成
+            </button>
+          </div>
         </div>
       </div>
 
@@ -101,22 +236,25 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
           versions={currentResult.versionHistory}
           currentVersionIndex={currentResult.currentVersionIndex}
           onRevert={handleRevertToVersion}
-          isGenerating={isGenerating}
+          isGenerating={isGenerating || isEditingSlideMeta}
         />
       )}
 
       <div className="glass rounded-xl border border-white/10 p-4 mb-6">
         <div className="flex items-center gap-3">
           <MessageSquare size={18} className="text-purple-400" />
-          <input type="text" value={slidePrompt} onChange={e => setSlidePrompt(e.target.value)} placeholder="输入微调 Prompt，然后点击重新生成..." className="flex-1 bg-transparent outline-none text-white text-sm placeholder:text-gray-500" />
-          <button onClick={handleRegenerateSlide} disabled={isGenerating || !slidePrompt.trim()} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-gray-300 text-sm flex items-center gap-2 disabled:opacity-50">
-            <RefreshCw size={14} /> 重新生成
+          <input type="text" value={slidePrompt} onChange={e => setSlidePrompt(e.target.value)} placeholder="输入微调 Prompt，然后点击按提示微调..." disabled={isEditingSlideMeta} className="flex-1 bg-transparent outline-none text-white text-sm placeholder:text-gray-500 disabled:opacity-50" />
+          <button onClick={handleRegenerateSlide} disabled={isGenerating || isEditingSlideMeta || !slidePrompt.trim()} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-gray-300 text-sm flex items-center gap-2 disabled:opacity-50">
+            <RefreshCw size={14} /> 按提示微调
           </button>
         </div>
+        {isEditingSlideMeta && (
+          <p className="mt-3 text-xs text-amber-300">当前正在编辑页面内容，请先选择保存或舍弃更改，再重新生成或切换页面。</p>
+        )}
       </div>
 
       <div className="flex justify-between">
-        <button onClick={() => setCurrentStep('outline')} className="px-6 py-2.5 rounded-lg border border-white/20 text-gray-300 hover:bg-white/10 flex items-center gap-2">
+        <button onClick={() => setCurrentStep('outline')} disabled={isGenerating || isEditingSlideMeta} className="px-6 py-2.5 rounded-lg border border-white/20 text-gray-300 hover:bg-white/10 flex items-center gap-2 disabled:opacity-30">
           <ArrowLeft size={18} /> 返回大纲
         </button>
         <div className="flex gap-3">
@@ -127,12 +265,12 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
                 setSlidePrompt('');
               }
             }}
-            disabled={currentSlideIndex === 0 || isGenerating}
+            disabled={currentSlideIndex === 0 || isGenerating || isEditingSlideMeta}
             className="px-6 py-2.5 rounded-lg border border-white/20 text-gray-300 hover:bg-white/10 flex items-center gap-2 disabled:opacity-30"
           >
             <ArrowLeft size={18} /> 上一页
           </button>
-          <button onClick={handleConfirmSlide} disabled={isGenerating || currentResult?.status !== 'done'} className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold flex items-center gap-2 disabled:opacity-50">
+          <button onClick={handleConfirmSlide} disabled={isGenerating || isEditingSlideMeta || currentResult?.status !== 'done'} className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold flex items-center gap-2 disabled:opacity-50">
             <CheckCircle2 size={18} /> {currentSlideIndex < outlineData.length - 1 ? '确认并继续' : '完成生成'}
           </button>
         </div>
