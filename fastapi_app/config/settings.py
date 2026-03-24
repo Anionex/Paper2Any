@@ -41,6 +41,8 @@ class AppSettings(BaseSettings):
 
     # API Configuration
     DEFAULT_LLM_API_URL: str = "http://123.129.219.111:3000/v1/"
+    LLM_VERIFY_TIMEOUT_SECONDS: int = 25
+    LLM_VERIFY_MAX_TOKENS: int = 32
 
     # RMBG-2.0 background removal model path
     RMBG_MODEL_PATH: str = str(_project_root() / "models" / "RMBG-2.0")

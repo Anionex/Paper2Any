@@ -18,8 +18,6 @@ from fastapi_app.schemas import (
     FeaturePaper2VideoRequest,
     FeaturePaper2VideoResponse,
 )
-from fastapi_app.services.paper2video_service import Paper2VideoService
-from fastapi_app.workflow_adapters import run_paper_to_video_api
 
 from dataflow_agent.logger import get_logger
 
@@ -31,6 +29,8 @@ router = APIRouter(tags=["paper2video"])
 
 def get_service() -> Paper2VideoService:
     """依赖注入：获取 Paper2VideoService 单例。"""
+    from fastapi_app.services.paper2video_service import Paper2VideoService
+
     return Paper2VideoService()
 
 
@@ -93,7 +93,10 @@ async def paper2video_generate_subtitle(
         voice_preset=voice_preset,
         request=request,
     )
-    log.info("[paper2video] generate-subtitle: success, result_path=%s", data.get("result_path"))
+    if data.get("success", True):
+        log.info("[paper2video] generate-subtitle: success, result_path=%s", data.get("result_path"))
+    else:
+        log.warning("[paper2video] generate-subtitle: failed, message=%s", data.get("message") or data.get("error"))
     return data
 
 @router.post(
@@ -124,7 +127,10 @@ async def paper2video_generate_video(
         email=email,
         request=request,
     )
-    log.info("[paper2video] generate-video: success, video_url=%s", data.get("video_url") or data.get("video_path"))
+    if data.get("success", True):
+        log.info("[paper2video] generate-video: success, video_url=%s", data.get("video_url") or data.get("video_path"))
+    else:
+        log.warning("[paper2video] generate-video: failed, message=%s", data.get("message") or data.get("error"))
     return data
 
 
@@ -140,4 +146,6 @@ async def paper2video_generate_video(
 async def paper2video_endpoint(body: FeaturePaper2VideoRequest) -> FeaturePaper2VideoResponse:
     """旧版：单次请求跑完整 paper2video 工作流。"""
     log.info("[paper2video] legacy /paper2video endpoint called")
+    from fastapi_app.workflow_adapters import run_paper_to_video_api
+
     return await run_paper_to_video_api(body)

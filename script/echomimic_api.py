@@ -27,8 +27,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import Response
 import uvicorn
 
-# 默认路径（与 p2v_tool.run_echomimic_inference 一致）
-# fixme: 硬编码了大量的路径，后续可能需要修改
+# 默认路径；建议在线上通过 ECHOMIMIC_* 环境变量覆盖。
 DEFAULT_ECHOMIMIC_CWD = "/data/users/ligang/EchoMimic"
 DEFAULT_CONFIG = "/data/users/ligang/EchoMimic/configs/prompts/animation.yaml"
 DEFAULT_SCRIPT = "/data/users/ligang/EchoMimic/infer_audio2vid.py"

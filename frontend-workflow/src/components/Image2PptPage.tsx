@@ -2,7 +2,7 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   UploadCloud, Download, Loader2, CheckCircle2,
-  AlertCircle, Github, Star, X, FileImage, ArrowRight, Key, Globe, Sparkles, Image as ImageIcon, MessageSquare, Copy
+  AlertCircle, Github, Star, X, FileImage, ArrowRight, Key, Globe, Sparkles, Image as ImageIcon, MessageSquare, Copy, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { uploadAndSaveFile } from '../services/fileService';
 import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../config/api';
@@ -14,6 +14,9 @@ import { getApiSettings, saveApiSettings } from '../services/apiSettingsService'
 import QRCodeTooltip from './QRCodeTooltip';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for images
+const STORAGE_KEY = 'paper2any:image2ppt:config';
+const DEFAULT_USE_AI_EDIT =
+  String(import.meta.env.VITE_IMAGE2PPT_USE_AI_EDIT_DEFAULT || 'false').toLowerCase() === 'true';
 
 // ============== 主组件 ==============
 const Image2PptPage = () => {
@@ -102,28 +105,53 @@ const Image2PptPage = () => {
   }, []);
   
   // 配置
-  // 强制开启 AI 增强
-  const useAiEdit = true; 
+  const [useAiEdit, setUseAiEdit] = useState(DEFAULT_USE_AI_EDIT);
   const [llmApiUrl, setLlmApiUrl] = useState(DEFAULT_LLM_API_URL);
   const [apiKey, setApiKey] = useState('');
   const [genFigModel, setGenFigModel] = useState(DEFAULT_IMAGE2PPT_GEN_FIG_MODEL);
   const genFigModelOptions = withModelOptions(IMAGE2PPT_GEN_FIG_MODELS, genFigModel);
 
-  // Load user-specific API settings
+  // Restore frontend config
   useEffect(() => {
-    const userApiSettings = getApiSettings(user?.id || null);
-    if (userApiSettings) {
-      if (userApiSettings.apiUrl) setLlmApiUrl(userApiSettings.apiUrl);
-      if (userApiSettings.apiKey) setApiKey(userApiSettings.apiKey);
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.useAiEdit !== undefined) setUseAiEdit(Boolean(saved.useAiEdit));
+        if (saved.llmApiUrl) setLlmApiUrl(saved.llmApiUrl);
+        if (saved.apiKey) setApiKey(saved.apiKey);
+        if (saved.genFigModel) setGenFigModel(saved.genFigModel);
+      }
+    } catch (e) {
+      console.error('Failed to restore image2ppt config', e);
     }
+
+    const userApiSettings = getApiSettings(user?.id || null);
+    if (userApiSettings?.apiUrl) setLlmApiUrl(userApiSettings.apiUrl);
+    if (userApiSettings?.apiKey) setApiKey(userApiSettings.apiKey);
   }, [user?.id]);
 
-  // Save API settings when changed
+  // Persist frontend config
   useEffect(() => {
-    if (user?.id && llmApiUrl && apiKey) {
-      saveApiSettings(user.id, { apiUrl: llmApiUrl, apiKey });
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          useAiEdit,
+          llmApiUrl,
+          apiKey,
+          genFigModel,
+        }),
+      );
+      if (user?.id && llmApiUrl && apiKey) {
+        saveApiSettings(user.id, { apiUrl: llmApiUrl, apiKey });
+      }
+    } catch (e) {
+      console.error('Failed to persist image2ppt config', e);
     }
-  }, [llmApiUrl, apiKey, user?.id]);
+  }, [useAiEdit, llmApiUrl, apiKey, genFigModel, user?.id]);
 
   const validateImageFile = (file: File): boolean => {
     const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
@@ -449,14 +477,29 @@ const Image2PptPage = () => {
                   )}
                 </div>
 
-                {/* AI 增强配置面板 - 强制开启 */}
-                <div className="space-y-4 mb-6 p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 animate-in fade-in slide-in-from-top-2">
-                    {/* 提示信息 */}
-                    <div className="flex items-center gap-2 mb-4 text-cyan-300 bg-cyan-500/10 p-2 rounded-lg text-xs">
-                         <Sparkles size={14} className="flex-shrink-0" />
-                         <span>{t('config.aiEditDesc')}</span>
+                <div className="mb-6 p-4 rounded-xl border border-white/10 bg-white/5 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-white font-medium">
+                      <Sparkles size={16} className="text-cyan-400" />
+                      <span>{t('config.aiEdit')}</span>
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">{t('config.aiEditDesc')}</p>
+                  </div>
+                  <button
+                    onClick={() => setUseAiEdit(!useAiEdit)}
+                    className="focus:outline-none transition-colors"
+                    type="button"
+                  >
+                    {useAiEdit ? (
+                      <ToggleRight size={32} className="text-cyan-400" />
+                    ) : (
+                      <ToggleLeft size={32} className="text-gray-500" />
+                    )}
+                  </button>
+                </div>
 
+                {useAiEdit && (
+                  <div className="space-y-4 mb-6 p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 animate-in fade-in slide-in-from-top-2">
                     <div>
                       <label className="block text-xs text-gray-400 mb-1.5 flex items-center gap-1">
                         <Globe size={12} /> {t('config.apiUrl')} <span className="text-red-400">*</span>
@@ -522,6 +565,7 @@ const Image2PptPage = () => {
                       </div>
                     </div>
                   </div>
+                )}
 
                 {/* 验证状态 */}
                 {isValidating && (

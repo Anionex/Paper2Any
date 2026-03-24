@@ -58,22 +58,45 @@ class Paper2AnyService:
         payload = {
             "model": req.model,
             "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 1024
+            "max_tokens": settings.LLM_VERIFY_MAX_TOKENS,
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # This machine may have local proxy env vars (HTTP_PROXY / HTTPS_PROXY)
+            # that are not always reachable from backend service processes.
+            # LLM verification should test direct connectivity to the user-provided API URL.
+            timeout_seconds = max(1, int(settings.LLM_VERIFY_TIMEOUT_SECONDS))
+            connect_timeout = min(10.0, float(timeout_seconds))
+            timeout = httpx.Timeout(
+                timeout=float(timeout_seconds),
+                connect=connect_timeout,
+            )
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                 resp = await client.post(target_url, json=payload, headers=headers)
-                
+
                 if resp.status_code != 200:
-                    error_msg = f"API Error {resp.status_code}: {resp.text[:200]}"
+                    body = (resp.text or "").strip()
+                    error_msg = f"API Error {resp.status_code}"
+                    if body:
+                        error_msg = f"{error_msg}: {body[:200]}"
                     return VerifyLlmResponse(success=False, error=error_msg)
-                
+
                 return VerifyLlmResponse(success=True)
-                
+
+        except httpx.TimeoutException as e:
+            log.error(f"LLM Verification timeout [{type(e).__name__}] url={target_url} model={req.model}: {e!r}")
+            return VerifyLlmResponse(
+                success=False,
+                error=f"{type(e).__name__}: request timed out after {settings.LLM_VERIFY_TIMEOUT_SECONDS}s",
+            )
+        except httpx.HTTPError as e:
+            detail = str(e).strip() or repr(e)
+            log.error(f"LLM Verification failed [{type(e).__name__}] url={target_url} model={req.model}: {detail}")
+            return VerifyLlmResponse(success=False, error=f"{type(e).__name__}: {detail}")
         except Exception as e:
-            log.error(f"LLM Verification failed: {e}")
-            return VerifyLlmResponse(success=False, error=str(e))
+            detail = str(e).strip() or repr(e)
+            log.error(f"LLM Verification failed [{type(e).__name__}] url={target_url} model={req.model}: {detail}")
+            return VerifyLlmResponse(success=False, error=f"{type(e).__name__}: {detail}")
 
     async def list_history_files(self, email: str, request: Request) -> Dict[str, Any]:
         """
@@ -405,6 +428,7 @@ class Paper2AnyService:
 
         return {
             "success": p2f_resp.success,
+            "error": p2f_resp.error,
             "ppt_filename": safe_ppt,
             "drawio_filename": drawio_url,
             "svg_filename": safe_svg,

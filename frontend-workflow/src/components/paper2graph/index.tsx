@@ -805,7 +805,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
         // 校验关键文件路径是否有效，防止后端返回 success 但实际未生成文件
         const hasSvg = !!(data.svg_image_filename || data.svg_bw_image_filename || data.svg_color_image_filename);
         if (!hasSvg && !data.ppt_filename) {
-          throw new Error(data.error || '生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
+          throw new Error(data.error || '生成失败：后端未返回有效文件，请查看后端日志后重试');
         }
 
         setPptPath(data.ppt_filename);
@@ -881,7 +881,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
         const blob = await res.blob();
         if (!blob || blob.size === 0) {
-          throw new Error('生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
+          throw new Error('生成失败：后端未返回有效文件，请查看后端日志后重试');
         }
         const url = URL.createObjectURL(blob);
         setDownloadUrl(url);

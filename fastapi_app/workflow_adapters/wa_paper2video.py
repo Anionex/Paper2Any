@@ -179,12 +179,13 @@ async def run_paper2video_generate_subtitle_wf_api(
         log.info("[wa_paper2video] running workflow %s, the state is %s", workflow_name, state)
         final_state: Paper2VideoState= await run_workflow(workflow_name, state)
     except Exception as e:
-        log.warning("[wa_paper2video] workflow %s not found or failed: %s; returning placeholder script_pages", workflow_name, e)
+        log.exception("[wa_paper2video] workflow %s failed during generate_subtitle: %s", workflow_name, e)
         return {
-            "success": True,
-            "result_path": str(result_root),
+            "success": False,
+            "message": f"脚本生成失败：{str(e)}",
+            "result_path": "",
             "script_pages": [],
-            "state_snapshot": _state_to_snapshot(state),
+            "state_snapshot": None,
         }
 
     script_pages = getattr(final_state, "script_pages", None) or (final_state.get("script_pages") if isinstance(final_state, dict) else [])
