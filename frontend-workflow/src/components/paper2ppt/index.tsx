@@ -800,6 +800,50 @@ const Paper2PptPage = () => {
     }
   };
 
+  const updateCurrentSlideLayout = (value: string) => {
+    setOutlineData(prev =>
+      prev.map((slide, index) =>
+        index === currentSlideIndex
+          ? { ...slide, layout_description: value }
+          : slide
+      )
+    );
+  };
+
+  const updateCurrentSlideKeyPoint = (keyPointIndex: number, value: string) => {
+    setOutlineData(prev =>
+      prev.map((slide, slideIndex) => {
+        if (slideIndex !== currentSlideIndex) return slide;
+        const nextKeyPoints = [...slide.key_points];
+        nextKeyPoints[keyPointIndex] = value;
+        return { ...slide, key_points: nextKeyPoints };
+      })
+    );
+  };
+
+  const addCurrentSlideKeyPoint = () => {
+    setOutlineData(prev =>
+      prev.map((slide, index) =>
+        index === currentSlideIndex
+          ? { ...slide, key_points: [...slide.key_points, ''] }
+          : slide
+      )
+    );
+  };
+
+  const removeCurrentSlideKeyPoint = (keyPointIndex: number) => {
+    setOutlineData(prev =>
+      prev.map((slide, slideIndex) => {
+        if (slideIndex !== currentSlideIndex) return slide;
+        const nextKeyPoints = slide.key_points.filter((_, index) => index !== keyPointIndex);
+        return {
+          ...slide,
+          key_points: nextKeyPoints.length > 0 ? nextKeyPoints : [''],
+        };
+      })
+    );
+  };
+
   // ============== 版本历史相关函数 ==============
   const convertToHttpUrl = (path: string): string => {
     // 如果已经是HTTP URL，直接返回
@@ -1290,6 +1334,10 @@ const Paper2PptPage = () => {
               taskMessage={generateTaskMessage}
               slidePrompt={slidePrompt}
               setSlidePrompt={setSlidePrompt}
+              updateCurrentSlideLayout={updateCurrentSlideLayout}
+              updateCurrentSlideKeyPoint={updateCurrentSlideKeyPoint}
+              addCurrentSlideKeyPoint={addCurrentSlideKeyPoint}
+              removeCurrentSlideKeyPoint={removeCurrentSlideKeyPoint}
               handleRegenerateSlide={handleRegenerateSlide}
               handleConfirmSlide={handleConfirmSlide}
               setCurrentStep={setCurrentStep}

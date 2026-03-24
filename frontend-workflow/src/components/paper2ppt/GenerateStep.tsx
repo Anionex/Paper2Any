@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   FileText, Sparkles, Loader2, MessageSquare, RefreshCw,
-  ArrowLeft, CheckCircle2, AlertCircle
+  ArrowLeft, CheckCircle2, AlertCircle, Plus, Trash2
 } from 'lucide-react';
 import { SlideOutline, GenerateResult, Step } from './types';
 import VersionHistory from './VersionHistory';
@@ -15,6 +15,10 @@ interface GenerateStepProps {
   taskMessage?: string;
   slidePrompt: string;
   setSlidePrompt: (prompt: string) => void;
+  updateCurrentSlideLayout: (value: string) => void;
+  updateCurrentSlideKeyPoint: (index: number, value: string) => void;
+  addCurrentSlideKeyPoint: () => void;
+  removeCurrentSlideKeyPoint: (index: number) => void;
   handleRegenerateSlide: () => void;
   handleConfirmSlide: () => void;
   setCurrentStep: (step: Step) => void;
@@ -31,6 +35,10 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
   taskMessage,
   slidePrompt,
   setSlidePrompt,
+  updateCurrentSlideLayout,
+  updateCurrentSlideKeyPoint,
+  addCurrentSlideKeyPoint,
+  removeCurrentSlideKeyPoint,
   handleRegenerateSlide,
   handleConfirmSlide,
   setCurrentStep,
@@ -61,16 +69,48 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
         <div className="glass rounded-xl border border-white/10 p-4 mb-4">
           <div className="mb-3">
             <h4 className="text-sm text-gray-400 mb-2 flex items-center gap-2"><FileText size={14} className="text-purple-400" /> 布局描述</h4>
-            <p className="text-xs text-purple-400/80 italic">{currentSlide.layout_description}</p>
+            <textarea
+              value={currentSlide.layout_description}
+              onChange={(e) => updateCurrentSlideLayout(e.target.value)}
+              disabled={isGenerating}
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-sm text-purple-100 outline-none focus:ring-2 focus:ring-purple-500 resize-none disabled:opacity-60"
+              placeholder="直接调整当前页的布局描述..."
+            />
           </div>
           <div className="pt-3 border-t border-white/10">
-            <h4 className="text-sm text-gray-400 mb-2">要点内容</h4>
-            <ul className="grid grid-cols-1 md:grid-cols-2 gap-1">
-              {currentSlide.key_points.slice(0, 4).map((point, idx) => (
-                <li key={idx} className="text-xs text-gray-400 flex items-start gap-1"><span className="text-purple-400">•</span><span className="line-clamp-1">{point}</span></li>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h4 className="text-sm text-gray-400">要点内容</h4>
+              <button
+                onClick={addCurrentSlideKeyPoint}
+                disabled={isGenerating}
+                className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-dashed border-white/20 text-xs text-gray-300 hover:text-purple-300 hover:border-purple-400 disabled:opacity-60 flex items-center gap-1"
+              >
+                <Plus size={12} /> 添加要点
+              </button>
+            </div>
+            <div className="space-y-2">
+              {currentSlide.key_points.map((point, idx) => (
+                <div key={`${currentSlide.id}-kp-${idx}`} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={point}
+                    onChange={(e) => updateCurrentSlideKeyPoint(idx, e.target.value)}
+                    disabled={isGenerating}
+                    className="flex-1 px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-60"
+                    placeholder={`要点 ${idx + 1}`}
+                  />
+                  <button
+                    onClick={() => removeCurrentSlideKeyPoint(idx)}
+                    disabled={isGenerating || currentSlide.key_points.length <= 1}
+                    className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30"
+                    title="删除该要点"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
-              {currentSlide.key_points.length > 4 && (<li className="text-xs text-gray-500 italic">...还有 {currentSlide.key_points.length - 4} 条</li>)}
-            </ul>
+            </div>
           </div>
         </div>
       )}
