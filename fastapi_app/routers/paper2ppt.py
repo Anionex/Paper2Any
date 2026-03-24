@@ -117,6 +117,7 @@ async def paper2ppt_ppt_json(
     page_id: Optional[int] = Form(None),
     # 页面编辑提示词（get_down=true 时必传）
     edit_prompt: Optional[str] = Form(None),
+    regenerate_from_outline: str = Form("false"),
     service: Paper2PPTService = Depends(get_service),
 ):
     """
@@ -140,6 +141,7 @@ async def paper2ppt_ppt_json(
         pagecontent=pagecontent,
         page_id=page_id,
         edit_prompt=edit_prompt,
+        regenerate_from_outline=regenerate_from_outline,
         image_resolution=image_resolution,
     )
 
@@ -173,6 +175,7 @@ async def paper2ppt_generate_task(
     pagecontent: Optional[str] = Form(None),
     page_id: Optional[int] = Form(None),
     edit_prompt: Optional[str] = Form(None),
+    regenerate_from_outline: str = Form("false"),
     task_service: Paper2PPTTaskService = Depends(get_task_service),
 ):
     req = PPTGenerationRequest(
@@ -190,6 +193,7 @@ async def paper2ppt_generate_task(
         pagecontent=pagecontent,
         page_id=page_id,
         edit_prompt=edit_prompt,
+        regenerate_from_outline=regenerate_from_outline,
         image_resolution=image_resolution,
     )
     return await task_service.submit_generate_task(req=req, reference_img=reference_img)

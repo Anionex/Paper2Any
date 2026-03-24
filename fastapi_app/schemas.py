@@ -469,6 +469,7 @@ class PPTGenerationRequest(BaseModel):
     pagecontent: Optional[str] = None
     page_id: Optional[int] = None
     edit_prompt: Optional[str] = None
+    regenerate_from_outline: str = "false"
     # 图像生成分辨率（1K/2K/4K 等）
     image_resolution: Optional[str] = None
 
