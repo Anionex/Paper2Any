@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   GripVertical, Check, Trash2, Edit3, ChevronUp, ChevronDown, Plus,
-  ArrowLeft, ArrowRight, AlertCircle, Sparkles
+  ArrowLeft, ArrowRight, AlertCircle, Sparkles, ImagePlus, X
 } from 'lucide-react';
 import { SlideOutline, Step } from './types';
 
@@ -12,11 +12,13 @@ interface OutlineStepProps {
     title: string;
     layout_description: string;
     key_points: string[];
+    asset_ref: string | null;
   };
   setEditContent: React.Dispatch<React.SetStateAction<{
     title: string;
     layout_description: string;
     key_points: string[];
+    asset_ref: string | null;
   }>>;
   handleEditStart: (slide: SlideOutline) => void;
   handleEditSave: () => void;
@@ -29,11 +31,14 @@ interface OutlineStepProps {
   handleMoveSlide: (index: number, direction: 'up' | 'down') => void;
   handleConfirmOutline: () => void;
   handleRefineOutline: () => void;
+  handleSlideAssetUpload: (slideId: string, file: File) => Promise<void>;
+  handleRemoveSlideAsset: (slideId: string) => void;
   setCurrentStep: (step: Step) => void;
   error: string | null;
   outlineFeedback: string;
   setOutlineFeedback: React.Dispatch<React.SetStateAction<string>>;
   isRefiningOutline: boolean;
+  uploadingAssetSlideId: string | null;
 }
 
 const OutlineStep: React.FC<OutlineStepProps> = ({
@@ -52,13 +57,26 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
   handleMoveSlide,
   handleConfirmOutline,
   handleRefineOutline,
+  handleSlideAssetUpload,
+  handleRemoveSlideAsset,
   setCurrentStep,
   error,
   outlineFeedback,
   setOutlineFeedback,
-  isRefiningOutline
+  isRefiningOutline,
+  uploadingAssetSlideId,
 }) => {
   const disabledClass = "disabled:opacity-50 disabled:cursor-not-allowed";
+  const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>, slideId: string) => {
+    const imageItem = Array.from(event.clipboardData.items).find((item) => item.type.startsWith('image/'));
+    const file = imageItem?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    await handleSlideAssetUpload(slideId, file);
+  };
+
+  const isImageAsset = (assetRef: string | null) => Boolean(assetRef && !/^table/i.test(assetRef));
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="text-center mb-8">
@@ -71,6 +89,8 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
           {outlineData.map((slide, index) => (
             <div 
               key={slide.id} 
+              onPaste={(event) => void handlePaste(event, slide.id)}
+              tabIndex={0}
               className={`flex items-start gap-4 p-4 rounded-lg border transition-all ${
                 editingId === slide.id 
                   ? 'bg-purple-500/10 border-purple-500/40' 
@@ -89,6 +109,24 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
                   <div className="space-y-3">
                     <input type="text" value={editContent.title} onChange={e => setEditContent(p => ({ ...p, title: e.target.value }))} disabled={isRefiningOutline} className={`w-full px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-white text-sm outline-none focus:ring-2 focus:ring-purple-500 ${disabledClass}`} placeholder="标题" />
                     <textarea value={editContent.layout_description} onChange={e => setEditContent(p => ({ ...p, layout_description: e.target.value }))} rows={2} disabled={isRefiningOutline} className={`w-full px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-white text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none ${disabledClass}`} placeholder="布局描述" />
+                    {isImageAsset(editContent.asset_ref) && (
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-2">
+                        <div className="relative overflow-hidden rounded-lg border border-white/10">
+                          <img src={editContent.asset_ref || ''} alt="配图素材" className="h-32 w-full object-cover" />
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <span className="text-xs text-gray-400">已附加配图素材</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSlideAsset(slide.id)}
+                            disabled={isRefiningOutline}
+                            className={`inline-flex items-center gap-1 text-xs text-red-300 hover:text-red-200 ${disabledClass}`}
+                          >
+                            <X size={12} /> 移除
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       {editContent.key_points.map((p, i) => (
                         <div key={i} className="flex gap-2">
@@ -107,6 +145,11 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
                   <>
                     <div className="mb-2"><h4 className="text-white font-medium">{slide.title}</h4></div>
                     <p className="text-xs text-purple-400/70 mb-2 italic">📐 {slide.layout_description}</p>
+                    {isImageAsset(slide.asset_ref) && (
+                      <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                        <img src={slide.asset_ref || ''} alt="页面配图" className="h-32 w-full object-cover" />
+                      </div>
+                    )}
                     <ul className="space-y-1">
                       {slide.key_points.map((p, i) => (
                         <li key={i} className="text-sm text-gray-400 flex items-start gap-2">
@@ -125,6 +168,36 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
                     <button onClick={() => handleMoveSlide(index, 'down')} disabled={isRefiningOutline || index === outlineData.length - 1} className={`p-2 text-gray-400 hover:text-white disabled:opacity-30 ${disabledClass}`}><ChevronDown size={16} /></button>
                     <button onClick={() => handleEditStart(slide)} disabled={isRefiningOutline} className={`p-2 text-gray-400 hover:text-purple-400 ${disabledClass}`}><Edit3 size={16} /></button>
                     <button onClick={() => handleDeleteSlide(slide.id)} disabled={isRefiningOutline} className={`p-2 text-gray-400 hover:text-red-400 ${disabledClass}`}><Trash2 size={16} /></button>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/5 px-3 py-2 text-xs text-gray-300 hover:border-purple-400 hover:text-purple-300 ${isRefiningOutline ? 'pointer-events-none opacity-50' : ''}`}>
+                      <ImagePlus size={14} />
+                      {uploadingAssetSlideId === slide.id ? '上传中...' : '上传/粘贴图片'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) {
+                            void handleSlideAssetUpload(slide.id, file);
+                          }
+                          event.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    {slide.asset_ref && (
+                      <button
+                        onClick={() => handleRemoveSlideAsset(slide.id)}
+                        disabled={isRefiningOutline}
+                        className={`text-xs text-red-300 hover:text-red-200 ${disabledClass}`}
+                      >
+                        移除素材
+                      </button>
+                    )}
+                    <span className="max-w-[140px] text-right text-[10px] leading-relaxed text-gray-500">
+                      点击后可上传，也可聚焦卡片直接 Ctrl/Cmd+V 粘贴图片
+                    </span>
                   </div>
                   <button onClick={() => handleAddSlide(index)} disabled={isRefiningOutline} className={`p-2 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors ${disabledClass}`} title="在此后添加新页面">
                     <Plus size={18} />

@@ -162,7 +162,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     if (error) {
-      set({ error: error.message, loading: false });
+      let friendlyError = error.message;
+      if (error.message.toLowerCase().includes("already registered")) {
+        friendlyError = "该邮箱已注册，请直接登录或使用找回密码";
+      }
+      set({ error: friendlyError, loading: false });
+      return { needsVerification: false };
+    }
+
+    const identities = data.user?.identities;
+    if (data.user && !data.session && Array.isArray(identities) && identities.length === 0) {
+      set({
+        error: "该邮箱已注册，请直接登录；如果忘记密码，请使用找回密码流程",
+        loading: false,
+        pendingEmail: null,
+        needsOtpVerification: false,
+      });
       return { needsVerification: false };
     }
 

@@ -1,5 +1,6 @@
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 export const STORAGE_KEY = 'paper2ppt-storage';
+export const DRAFT_STORAGE_KEY = 'paper2ppt-draft';
 
 export const STYLE_PRESETS: Record<string, string> = {
   modern: '现代简约风格，使用干净的线条和充足的留白',
@@ -7,3 +8,22 @@ export const STYLE_PRESETS: Record<string, string> = {
   academic: '学术报告风格，清晰的层次结构，适合论文汇报',
   creative: '创意设计风格，活泼生动，色彩丰富',
 };
+
+export const STYLE_PRESET_META = {
+  modern: {
+    preview: '/paper2ppt/ouput_1.png',
+    description: '极简留白、轻量装饰、信息清爽',
+  },
+  business: {
+    preview: '/paper2ppt/ouput_2.png',
+    description: '稳重配色、强结构感、适合汇报答辩',
+  },
+  academic: {
+    preview: '/paper2ppt/ouput_3.png',
+    description: '图表友好、层级清晰、论文表达优先',
+  },
+  creative: {
+    preview: '/paper2ppt/ouput_4.png',
+    description: '更强视觉冲击与版式变化',
+  },
+} as const;

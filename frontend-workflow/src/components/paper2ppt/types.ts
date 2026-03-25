@@ -10,6 +10,13 @@ export interface SlideOutline {
   generated_img_path?: string;
 }
 
+export interface SlideEditRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ImageVersion {
   versionNumber: number;
   imageUrl: string;
@@ -20,12 +27,16 @@ export interface ImageVersion {
 
 export interface GenerateResult {
   slideId: string;
+  slideSignature?: string;
   beforeImage: string;
   afterImage: string;
+  afterImagePath?: string;
   status: 'pending' | 'processing' | 'done';
   userPrompt?: string;
   versionHistory: ImageVersion[];
   currentVersionIndex: number;
+  currentVersionNumber?: number | null;
+  wasReused?: boolean;
 }
 
 export type Paper2PPTTaskStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -45,6 +56,13 @@ export interface Paper2PPTTaskResponse {
     result_path?: string;
     all_output_files?: string[];
   } | null;
+}
+
+export type Paper2PPTTaskKind = 'generate' | 'finalize' | 'edit';
+
+export interface Paper2PPTActiveTask {
+  taskId: string;
+  kind: Paper2PPTTaskKind;
 }
 
 export type UploadMode = 'file' | 'text' | 'topic';

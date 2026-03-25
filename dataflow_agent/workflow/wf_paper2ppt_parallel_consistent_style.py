@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -331,6 +333,41 @@ async def _regenerate_single_page_from_content(
     return out_item
 
 
+def _parse_page_index_from_image_path(path: str) -> Optional[int]:
+    if not path:
+        return None
+    match = re.search(r"page_(\d{3})(?:_v\d+)?\.png$", Path(path).name)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _parse_edit_region(raw_region: str) -> Optional[Dict[str, float]]:
+    if not raw_region:
+        return None
+    try:
+        region = json.loads(raw_region)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(region, dict):
+        return None
+
+    keys = ("x", "y", "width", "height")
+    if not all(isinstance(region.get(key), (int, float)) for key in keys):
+        return None
+
+    parsed = {
+        "x": max(0.0, min(1.0, float(region["x"]))),
+        "y": max(0.0, min(1.0, float(region["y"]))),
+        "width": max(0.0, min(1.0, float(region["width"]))),
+        "height": max(0.0, min(1.0, float(region["height"]))),
+    }
+    if parsed["width"] <= 0 or parsed["height"] <= 0:
+        return None
+    return parsed
+
+
 @register("paper2ppt_parallel_consistent_style")
 def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa: N802
     """
@@ -390,6 +427,10 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         result_root = Path(_ensure_result_path(state))
         img_dir = result_root / "ppt_pages"
         img_dir.mkdir(parents=True, exist_ok=True)
+        reuse_snapshot_dir = result_root / ".reuse_snapshot"
+        if reuse_snapshot_dir.exists():
+            shutil.rmtree(reuse_snapshot_dir, ignore_errors=True)
+        reuse_snapshot_dir.mkdir(parents=True, exist_ok=True)
 
         style = getattr(state.request, "style", None) or "kartoon"
         aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
@@ -399,6 +440,26 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         if not page_items:
             log.warning("Pagecontent is empty, nothing to generate.")
             return state
+
+        for item in page_items:
+            if not isinstance(item, dict):
+                continue
+            source_path = _abs_path(str(item.get("generated_img_path") or ""))
+            source_page_idx = _parse_page_index_from_image_path(source_path)
+            if not source_path or source_page_idx is None:
+                continue
+            if Path(source_path).parent.resolve() != img_dir.resolve():
+                continue
+            if (reuse_snapshot_dir / f"page_{source_page_idx:03d}.png").exists():
+                continue
+            cloned = ImageVersionManager.clone_page_versions_from_dir(
+                source_dir=img_dir,
+                source_page_idx=source_page_idx,
+                target_dir=reuse_snapshot_dir,
+                target_page_idx=source_page_idx,
+            )
+            if cloned:
+                log.info(f"[paper2ppt] Snapshotted reusable page {source_page_idx} -> {cloned}")
 
         # 检查是否有用户传入的参考图
         user_ref_img = getattr(state.request, "ref_img", None)
@@ -418,6 +479,37 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         ) -> Dict[str, Any]:
             
             save_path = str((img_dir / f"page_{idx:03d}.png").resolve())
+
+            if isinstance(item, dict):
+                existing_generated = _abs_path(str(item.get("generated_img_path") or ""))
+                if existing_generated and os.path.exists(existing_generated):
+                    source_page_idx = _parse_page_index_from_image_path(existing_generated)
+                    source_parent = Path(existing_generated).parent.resolve()
+                    if source_page_idx is not None and source_parent == img_dir.resolve():
+                        cloned = ImageVersionManager.clone_page_versions_from_dir(
+                            source_dir=reuse_snapshot_dir,
+                            source_page_idx=source_page_idx,
+                            target_dir=img_dir,
+                            target_page_idx=idx,
+                        )
+                        if cloned:
+                            out_item = dict(item)
+                            out_item.update({
+                                "generated_img_path": cloned,
+                                "page_idx": idx,
+                                "mode": "reused_existing",
+                                "style": style,
+                            })
+                            return out_item
+                    shutil.copy2(existing_generated, save_path)
+                    out_item = dict(item)
+                    out_item.update({
+                        "generated_img_path": save_path,
+                        "page_idx": idx,
+                        "mode": "reused_existing",
+                        "style": style,
+                    })
+                    return out_item
 
             # 构建可选的额外风格说明（当同时有参考图和 style 文本时融合使用）
             style_hint = ""
@@ -698,6 +790,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
 
         state.pagecontent = new_pagecontent
         state.gen_down = True
+        shutil.rmtree(reuse_snapshot_dir, ignore_errors=True)
         return state
 
     async def edit_single_page(state: Paper2FigureState) -> Paper2FigureState:
@@ -736,6 +829,8 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
         style = getattr(state.request, "style", None) or "kartoon"
         image_resolution = getattr(state.request, "image_resolution", None) or "2K"
+        preserve_current = bool(getattr(state.request, "regenerate_from_current", True))
+        edit_region = _parse_edit_region(getattr(state.request, "edit_region", "") or "")
 
         # 检查 ref_img
         user_ref_img = getattr(state.request, "ref_img", None)
@@ -751,22 +846,39 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         style_hint = ""
         if style and style.strip() and style.strip().lower() != "kartoon":
             style_hint = f" Additional style guidance: {style.strip()}."
+        region_hint = ""
+        if edit_region:
+            region_hint = (
+                " Only modify the content inside the selected region "
+                f"(x={edit_region['x']:.3f}, y={edit_region['y']:.3f}, "
+                f"width={edit_region['width']:.3f}, height={edit_region['height']:.3f}) "
+                "relative to the full slide. Preserve everything outside that region exactly."
+            )
 
         if user_ref_img:
             # 有参考图 -> 多图融合
             if prompt:
-                full_prompt = (
-                    f"Refine this slide image (second image) based on instruction: '{prompt}'. "
-                    f"CRITICAL: You MUST strictly match the style of the first image (Reference). "
-                    f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
-                    f"to be consistent with the {style} style of the first image."
-                    f"{style_hint}"
-                )
+                if preserve_current:
+                    full_prompt = (
+                        f"Update the second slide image based on this instruction: '{prompt}'. "
+                        "Treat the second image as the canonical current slide. Preserve its layout hierarchy, typography rhythm, "
+                        "existing content blocks, and overall composition unless the instruction explicitly requires a change. "
+                        "Use the first image only as a style anchor for palette, texture, decoration, and deck consistency. "
+                        f"Keep the edited result fully aligned with the current slide template.{region_hint}{style_hint}"
+                    )
+                else:
+                    full_prompt = (
+                        f"Refine this slide image (second image) based on instruction: '{prompt}'. "
+                        f"CRITICAL: You MUST strictly match the style of the first image (Reference). "
+                        f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
+                        f"to be consistent with the {style} style of the first image.{region_hint}"
+                        f"{style_hint}"
+                    )
             else:
                 full_prompt = (
                     f"Refine this slide image (second image) to match the style of the first image (Reference). "
                     f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
-                    f"to be consistent with the {style} style of the first image."
+                    f"to be consistent with the {style} style of the first image.{region_hint}"
                     f"{style_hint}"
                 )
             
@@ -783,16 +895,24 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         else:
             # 无参考图 -> 单图编辑
             if prompt:
-                full_prompt = (
-                    f"Beautify this PowerPoint slide based on this instruction: '{prompt}'. "
-                    # f"Transform the existing design into a high-end, professional {style} style presentation. "
-                    f"Enhance the visual aesthetics, layout, and background while preserving the core message."
-                )
+                if preserve_current:
+                    full_prompt = (
+                        f"Edit this PowerPoint slide using this instruction: '{prompt}'. "
+                        "Use the current slide image as the strict baseline. Preserve its deck template, color system, layout structure, "
+                        "content ordering, and typography unless the instruction explicitly asks for a specific change. "
+                        "Do not redesign the page from scratch or drift to a different slide style. "
+                        f"Keep the result consistent with the existing slide family.{region_hint}{style_hint}"
+                    )
+                else:
+                    full_prompt = (
+                        f"Beautify this PowerPoint slide based on this instruction: '{prompt}'. "
+                        f"Enhance the visual aesthetics, layout, and background while preserving the core message.{region_hint}"
+                    )
             else:
                 full_prompt = (
                     f"Beautify and re-design this PowerPoint slide. "
                     f"Transform the existing design into a high-end, professional {style} style presentation. "
-                    f"Enhance the visual aesthetics, layout, and background while preserving the core message."
+                    f"Enhance the visual aesthetics, layout, and background while preserving the core message.{region_hint}"
                 )
 
             await generate_or_edit_and_save_image_async(

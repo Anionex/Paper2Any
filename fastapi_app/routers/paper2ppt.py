@@ -118,6 +118,8 @@ async def paper2ppt_ppt_json(
     # 页面编辑提示词（get_down=true 时必传）
     edit_prompt: Optional[str] = Form(None),
     regenerate_from_outline: str = Form("false"),
+    regenerate_from_current: str = Form("true"),
+    edit_region: Optional[str] = Form(None),
     service: Paper2PPTService = Depends(get_service),
 ):
     """
@@ -142,6 +144,8 @@ async def paper2ppt_ppt_json(
         page_id=page_id,
         edit_prompt=edit_prompt,
         regenerate_from_outline=regenerate_from_outline,
+        regenerate_from_current=regenerate_from_current,
+        edit_region=edit_region,
         image_resolution=image_resolution,
     )
 
@@ -176,6 +180,8 @@ async def paper2ppt_generate_task(
     page_id: Optional[int] = Form(None),
     edit_prompt: Optional[str] = Form(None),
     regenerate_from_outline: str = Form("false"),
+    regenerate_from_current: str = Form("true"),
+    edit_region: Optional[str] = Form(None),
     task_service: Paper2PPTTaskService = Depends(get_task_service),
 ):
     req = PPTGenerationRequest(
@@ -194,6 +200,8 @@ async def paper2ppt_generate_task(
         page_id=page_id,
         edit_prompt=edit_prompt,
         regenerate_from_outline=regenerate_from_outline,
+        regenerate_from_current=regenerate_from_current,
+        edit_region=edit_region,
         image_resolution=image_resolution,
     )
     return await task_service.submit_generate_task(req=req, reference_img=reference_img)
@@ -281,7 +289,11 @@ async def get_version_history(
             # 使用 _to_outputs_url 转换路径为完整的 HTTP URL
             item["imageUrl"] = _to_outputs_url(item["image_path"], request)
 
-        return {"success": True, "versions": history}
+        return {
+            "success": True,
+            "versions": history,
+            "current_version": ImageVersionManager.get_current_version(img_dir, page_id),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取版本历史失败: {str(e)}")
@@ -330,10 +342,30 @@ async def revert_to_version(
         return {
             "success": True,
             "currentImageUrl": image_url,
-            "revertedToVersion": target_version
+            "revertedToVersion": target_version,
+            "currentVersion": ImageVersionManager.get_current_version(img_dir, page_id),
         }
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"恢复版本失败: {str(e)}")
+
+
+@router.post(
+    "/paper2ppt/assets/upload",
+    response_model=Dict[str, Any],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def upload_slide_asset(
+    request: Request,
+    result_path: str = Form(...),
+    asset_file: UploadFile = File(...),
+    service: Paper2PPTService = Depends(get_service),
+):
+    data = await service.upload_slide_asset(
+        result_path=result_path,
+        asset_file=asset_file,
+        request=request,
+    )
+    return data

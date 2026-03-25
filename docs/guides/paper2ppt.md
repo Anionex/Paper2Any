@@ -10,3 +10,7 @@
 *   **多种模板**：支持 Beamer 风格及多种自定义 PPT 模板。
 
 *(详细文档正在编写中...)*
+
+开发与架构说明见：
+
+- `docs/guides/paper2ppt_development_manual.md`

@@ -96,6 +96,8 @@ paper2ppt 业务 Service 层
 
 import copy
 import os
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -289,6 +291,7 @@ class Paper2PPTService:
         get_down_bool = str(req.get_down).lower() in ("true", "1", "yes")
         all_edited_down_bool = str(req.all_edited_down).lower() in ("true", "1", "yes")
         regenerate_from_outline_bool = str(req.regenerate_from_outline).lower() in ("true", "1", "yes")
+        regenerate_from_current_bool = str(req.regenerate_from_current).lower() in ("true", "1", "yes")
 
         # 校验编辑/生成模式
         if get_down_bool:
@@ -318,6 +321,8 @@ class Paper2PPTService:
             ref_img=str(reference_img_path) if reference_img_path else "",
             email=req.email or "",
             all_edited_down=all_edited_down_bool,
+            regenerate_from_current=regenerate_from_current_bool,
+            edit_region=req.edit_region or "",
             image_resolution=req.image_resolution or "2K",
         )
 
@@ -427,6 +432,31 @@ class Paper2PPTService:
         if not base_dir.exists():
             raise HTTPException(status_code=400, detail=f"result_path not exists: {base_dir}")
         return await self._ensure_reference_image(base_dir, reference_img)
+
+    async def upload_slide_asset(
+        self,
+        result_path: str,
+        asset_file: UploadFile,
+        request: Request | None,
+    ) -> Dict[str, Any]:
+        base_dir = self.resolve_result_path(result_path)
+        if not base_dir.exists():
+            raise HTTPException(status_code=400, detail=f"result_path not exists: {base_dir}")
+
+        suffix = Path(asset_file.filename or "").suffix.lower() or ".png"
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            raise HTTPException(status_code=400, detail="unsupported asset image type")
+
+        asset_dir = (base_dir / "input" / "pasted_assets").resolve()
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        asset_path = asset_dir / f"{int(time.time())}_{uuid.uuid4().hex[:8]}{suffix}"
+        asset_path.write_bytes(await asset_file.read())
+
+        return {
+            "success": True,
+            "asset_path": str(asset_path),
+            "asset_url": _to_outputs_url(str(asset_path), request),
+        }
 
     def normalize_ppt_response(
         self,

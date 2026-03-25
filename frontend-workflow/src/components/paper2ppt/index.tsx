@@ -1,5 +1,4 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { uploadAndSaveFile } from '../../services/fileService';
 import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
 import { DEFAULT_PAPER2PPT_GEN_FIG_MODEL, DEFAULT_PAPER2PPT_MODEL } from '../../config/models';
@@ -12,12 +11,16 @@ import {
   Step,
   SlideOutline,
   GenerateResult,
+  ImageVersion,
+  SlideEditRegion,
   UploadMode,
   StyleMode,
   StylePreset,
+  Paper2PPTActiveTask,
   Paper2PPTTaskResponse,
 } from './types';
-import { MAX_FILE_SIZE, STORAGE_KEY } from './constants';
+import { DRAFT_STORAGE_KEY, MAX_FILE_SIZE, STORAGE_KEY, STYLE_PRESETS } from './constants';
+import { buildResultForSlide, buildSlideSignature, stripImageQuery, withCacheBust } from './utils';
 
 import Banner from './Banner';
 import StepIndicator from './StepIndicator';
@@ -25,6 +28,16 @@ import UploadStep from './UploadStep';
 import OutlineStep from './OutlineStep';
 import GenerateStep from './GenerateStep';
 import CompleteStep from './CompleteStep';
+
+const normalizeSlideOutline = (slide: Partial<SlideOutline>, index: number): SlideOutline => ({
+  id: slide.id || String(index + 1),
+  pageNum: index + 1,
+  title: slide.title || `第 ${index + 1} 页`,
+  layout_description: slide.layout_description || '',
+  key_points: Array.isArray(slide.key_points) ? slide.key_points : [],
+  asset_ref: slide.asset_ref || null,
+  generated_img_path: slide.generated_img_path,
+});
 
 const Paper2PptPage = () => {
   const { user, refreshQuota } = useAuthStore();
@@ -56,15 +69,18 @@ const Paper2PptPage = () => {
     title: string;
     layout_description: string;
     key_points: string[];
-  }>({ title: '', layout_description: '', key_points: [] });
+    asset_ref: string | null;
+  }>({ title: '', layout_description: '', key_points: [], asset_ref: null });
   const [outlineFeedback, setOutlineFeedback] = useState('');
   const [isRefiningOutline, setIsRefiningOutline] = useState(false);
+  const [uploadingAssetSlideId, setUploadingAssetSlideId] = useState<string | null>(null);
   
   // Step 3: 生成相关状态
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [generateResults, setGenerateResults] = useState<GenerateResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [slidePrompt, setSlidePrompt] = useState('');
+  const [slideEditRegion, setSlideEditRegion] = useState<SlideEditRegion | null>(null);
   const [generateTaskMessage, setGenerateTaskMessage] = useState('');
   
   // Step 4: 完成状态
@@ -84,6 +100,8 @@ const Paper2PptPage = () => {
   const [genFigModel, setGenFigModel] = useState(DEFAULT_PAPER2PPT_GEN_FIG_MODEL);
   const [language, setLanguage] = useState<'zh' | 'en'>('en');
   const [resultPath, setResultPath] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<Paper2PPTActiveTask | null>(null);
+  const isResumingTaskRef = useRef(false);
 
   // GitHub Stars
   const [stars, setStars] = useState<{dataflow: number | null, agent: number | null, dataflex: number | null}>({
@@ -160,9 +178,9 @@ const Paper2PptPage = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
+      const rawConfig = localStorage.getItem(STORAGE_KEY);
+      if (rawConfig) {
+        const saved = JSON.parse(rawConfig);
         
         if (saved.uploadMode) setUploadMode(saved.uploadMode);
         if (saved.textContent) setTextContent(saved.textContent);
@@ -185,8 +203,25 @@ const Paper2PptPage = () => {
           if (saved.apiKey) setApiKey(saved.apiKey);
         }
       }
+
+      const rawDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (rawDraft) {
+      const draft = JSON.parse(rawDraft);
+        if (draft.currentStep) setCurrentStep(draft.currentStep);
+        if (Array.isArray(draft.outlineData)) {
+          setOutlineData(draft.outlineData.map((slide: SlideOutline, index: number) => normalizeSlideOutline(slide, index)));
+        }
+        if (Array.isArray(draft.generateResults)) setGenerateResults(draft.generateResults);
+        if (typeof draft.currentSlideIndex === 'number') setCurrentSlideIndex(draft.currentSlideIndex);
+        if (draft.resultPath) setResultPath(draft.resultPath);
+        if (draft.downloadUrl) setDownloadUrl(draft.downloadUrl);
+        if (draft.pdfPreviewUrl) setPdfPreviewUrl(draft.pdfPreviewUrl);
+        if (draft.activeTask?.taskId && draft.activeTask?.kind) {
+          setActiveTask(draft.activeTask);
+        }
+      }
     } catch (e) {
-      console.error('Failed to restore paper2ppt config', e);
+      console.error('Failed to restore paper2ppt state', e);
     }
   }, [user?.id]);
 
@@ -221,18 +256,99 @@ const Paper2PptPage = () => {
     model, genFigModel, language, user?.id
   ]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const draft = {
+      currentStep,
+      outlineData,
+      generateResults,
+      currentSlideIndex,
+      resultPath,
+      downloadUrl,
+      pdfPreviewUrl,
+      activeTask,
+    };
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch (e) {
+      console.error('Failed to persist paper2ppt draft', e);
+    }
+  }, [
+    currentStep,
+    outlineData,
+    generateResults,
+    currentSlideIndex,
+    resultPath,
+    downloadUrl,
+    pdfPreviewUrl,
+    activeTask,
+  ]);
+
   // 自动加载版本历史
   useEffect(() => {
     if (currentStep === 'generate' && currentSlideIndex >= 0 && generateResults[currentSlideIndex]) {
       const currentResult = generateResults[currentSlideIndex];
       // 如果版本历史为空且页面已生成，则自动加载版本历史
-      if (currentResult.versionHistory.length === 0 && currentResult.afterImage) {
+      if (currentResult.versionHistory.length === 0 && (currentResult.afterImagePath || currentResult.afterImage)) {
         console.log(`[Paper2PptPage] 自动加载页面 ${currentSlideIndex} 的版本历史`);
         fetchVersionHistory(currentSlideIndex);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, currentSlideIndex]); // 移除 generateResults 依赖，避免无限循环
+
+  useEffect(() => {
+    if (!activeTask || isResumingTaskRef.current) return;
+    if (activeTask.kind === 'finalize' && isGeneratingFinal) return;
+    if (activeTask.kind !== 'finalize' && isGenerating) return;
+
+    isResumingTaskRef.current = true;
+    if (activeTask.kind === 'finalize') {
+      setIsGeneratingFinal(true);
+    } else {
+      setIsGenerating(true);
+      setCurrentStep('generate');
+    }
+
+    const baseResults = generateResults.length > 0
+      ? generateResults
+      : outlineData.map((slide) => buildResultForSlide(slide, buildSlideSignature(slide)));
+
+    pollPaper2PptTask(activeTask.taskId, (status) => {
+      if (activeTask.kind === 'finalize') {
+        setFinalTaskMessage(status.message || '正在恢复最终导出任务');
+      } else if (activeTask.kind === 'edit') {
+        setGenerateTaskMessage(status.message || '正在恢复当前页重生成任务');
+      } else {
+        setGenerateTaskMessage(status.message || '正在恢复批量生成任务');
+      }
+    })
+      .then((data) => {
+        if (activeTask.kind === 'finalize') {
+          if (data.ppt_pptx_path) setDownloadUrl(data.ppt_pptx_path);
+          if (data.ppt_pdf_path) setPdfPreviewUrl(data.ppt_pdf_path);
+          setCurrentStep('complete');
+        } else if (activeTask.kind === 'edit') {
+          applyEditTaskResult(currentSlideIndex, data);
+          void fetchVersionHistory(currentSlideIndex);
+        } else {
+          applyBatchGenerateResult(data, baseResults);
+        }
+        setActiveTask(null);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : '任务恢复失败';
+        setError(message);
+        setActiveTask(null);
+      })
+      .finally(() => {
+        setGenerateTaskMessage('');
+        setFinalTaskMessage('');
+        setIsGenerating(false);
+        setIsGeneratingFinal(false);
+        isResumingTaskRef.current = false;
+      });
+  }, [activeTask, currentSlideIndex, generateResults, isGenerating, isGeneratingFinal, outlineData]);
 
   const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
@@ -319,6 +435,70 @@ const Paper2PptPage = () => {
     });
   };
 
+  const findPageImage = (outputFiles: string[] | undefined, pageIndex: number) => {
+    if (!outputFiles || !Array.isArray(outputFiles)) return '';
+    const pageNumStr = String(pageIndex).padStart(3, '0');
+    return outputFiles.find((url: string) => url.includes(`ppt_pages/page_${pageNumStr}.png`)) || '';
+  };
+
+  const applyBatchGenerateResult = (
+    data: NonNullable<Paper2PPTTaskResponse['result']>,
+    baseResults: GenerateResult[],
+  ) => {
+    if (data.result_path) {
+      setResultPath(data.result_path);
+    }
+
+    const updatedResults = baseResults.map((result, index) => {
+      const page = data.pagecontent?.[index] as Record<string, unknown> | undefined;
+      const pageImg = typeof page?.generated_img_path === 'string'
+        ? page.generated_img_path
+        : findPageImage(data.all_output_files, index);
+      const pageImagePath = stripImageQuery(pageImg || result.afterImagePath || result.afterImage);
+      return {
+        ...result,
+        afterImagePath: pageImagePath,
+        afterImage: pageImagePath ? withCacheBust(pageImagePath) : '',
+        status: pageImagePath ? 'done' as const : 'pending' as const,
+        versionHistory: [],
+        currentVersionIndex: -1,
+        currentVersionNumber: typeof page?.current_version === 'number' ? page.current_version : null,
+      };
+    });
+
+    preloadGeneratedImages(data.all_output_files);
+    setGenerateResults(updatedResults);
+  };
+
+  const applyEditTaskResult = (pageIndex: number, data: NonNullable<Paper2PPTTaskResponse['result']>) => {
+    const page = data.pagecontent?.[pageIndex] as Record<string, unknown> | undefined;
+    const pageImg = typeof page?.generated_img_path === 'string'
+      ? page.generated_img_path
+      : findPageImage(data.all_output_files, pageIndex);
+    if (!pageImg) return;
+
+    setGenerateResults(prev => prev.map((result, index) => (
+      index === pageIndex
+        ? {
+            ...result,
+            afterImagePath: stripImageQuery(pageImg),
+            afterImage: withCacheBust(pageImg),
+            status: 'done' as const,
+            currentVersionNumber: typeof page?.current_version === 'number'
+              ? page.current_version
+              : result.currentVersionNumber ?? null,
+          }
+        : result
+    )));
+  };
+
+  const clearDraftAndTasks = () => {
+    setActiveTask(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    }
+  };
+
   // ============== Step 1: 上传处理 ==============
   const validateDocFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -375,13 +555,7 @@ const Paper2PptPage = () => {
   };
 
   const getStyleDescription = (preset: string): string => {
-    const styles: Record<string, string> = {
-      modern: '现代简约风格，使用干净的线条和充足的留白',
-      business: '商务专业风格，稳重大气，适合企业演示',
-      academic: '学术报告风格，清晰的层次结构，适合论文汇报',
-      creative: '创意设计风格，活泼生动，色彩丰富',
-    };
-    return styles[preset] || styles.modern;
+    return STYLE_PRESETS[preset] || STYLE_PRESETS.modern;
   };
 
   const handleUploadAndParse = async () => {
@@ -423,6 +597,11 @@ const Paper2PptPage = () => {
 
     setIsUploading(true);
     setError(null);
+    setActiveTask(null);
+    setDownloadUrl(null);
+    setPdfPreviewUrl(null);
+    setGenerateResults([]);
+    setSlideEditRegion(null);
     setProgress(0);
     setProgressStatus('正在初始化...');
     
@@ -514,12 +693,8 @@ const Paper2PptPage = () => {
       }
       
       const convertedSlides: SlideOutline[] = data.pagecontent.map((item: any, index: number) => ({
-        id: String(index + 1),
-        pageNum: index + 1,
-        title: item.title || `第 ${index + 1} 页`,
-        layout_description: item.layout_description || '',
-        key_points: item.key_points || [],
-        asset_ref: item.asset_ref || null,
+        ...normalizeSlideOutline(item, index),
+        id: `${Date.now()}-${index}`,
       }));
       
       clearInterval(progressInterval);
@@ -529,6 +704,11 @@ const Paper2PptPage = () => {
       // 稍微延迟一下跳转，让用户看到 100%
       setTimeout(() => {
         setOutlineData(convertedSlides);
+        setGenerateResults([]);
+        setCurrentSlideIndex(0);
+        setDownloadUrl(null);
+        setPdfPreviewUrl(null);
+        setActiveTask(null);
         setCurrentStep('outline');
       }, 500);
       
@@ -548,12 +728,39 @@ const Paper2PptPage = () => {
   };
 
   // ============== Step 2: Outline 编辑处理 ==============
+  const uploadSlideAsset = async (file: File): Promise<string> => {
+    if (!resultPath) {
+      throw new Error('缺少 result_path，请重新解析内容后再粘贴图片');
+    }
+
+    const formData = new FormData();
+    formData.append('result_path', resultPath);
+    formData.append('asset_file', file);
+
+    const res = await fetch('/api/v1/paper2ppt/assets/upload', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, '图片上传失败'));
+    }
+
+    const data = await res.json();
+    if (!data.success || !data.asset_url) {
+      throw new Error('图片上传失败');
+    }
+    return data.asset_url as string;
+  };
+
   const handleEditStart = (slide: SlideOutline) => {
     setEditingId(slide.id);
     setEditContent({ 
       title: slide.title, 
       layout_description: slide.layout_description,
-      key_points: [...slide.key_points]
+      key_points: [...slide.key_points],
+      asset_ref: slide.asset_ref,
     });
   };
 
@@ -561,7 +768,13 @@ const Paper2PptPage = () => {
     if (!editingId) return;
     setOutlineData(prev => prev.map(s => 
       s.id === editingId 
-        ? { ...s, title: editContent.title, layout_description: editContent.layout_description, key_points: editContent.key_points }
+        ? {
+            ...s,
+            title: editContent.title,
+            layout_description: editContent.layout_description,
+            key_points: editContent.key_points,
+            asset_ref: editContent.asset_ref,
+          }
         : s
     ));
     setEditingId(null);
@@ -584,6 +797,34 @@ const Paper2PptPage = () => {
   };
 
   const handleEditCancel = () => setEditingId(null);
+
+  const handleSlideAssetUpload = async (slideId: string, file: File) => {
+    try {
+      setError(null);
+      setUploadingAssetSlideId(slideId);
+      const assetUrl = await uploadSlideAsset(file);
+      setOutlineData(prev => prev.map((slide) => (
+        slide.id === slideId ? { ...slide, asset_ref: assetUrl } : slide
+      )));
+      if (editingId === slideId) {
+        setEditContent(prev => ({ ...prev, asset_ref: assetUrl }));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '图片上传失败';
+      setError(message);
+    } finally {
+      setUploadingAssetSlideId(null);
+    }
+  };
+
+  const handleRemoveSlideAsset = (slideId: string) => {
+    setOutlineData(prev => prev.map((slide) => (
+      slide.id === slideId ? { ...slide, asset_ref: null } : slide
+    )));
+    if (editingId === slideId) {
+      setEditContent(prev => ({ ...prev, asset_ref: null }));
+    }
+  };
   
   const handleDeleteSlide = (id: string) => {
     setOutlineData(prev => prev.filter(s => s.id !== id).map((s, i) => ({ ...s, pageNum: i + 1 })));
@@ -635,6 +876,7 @@ const Paper2PptPage = () => {
                 title: editContent.title,
                 layout_description: editContent.layout_description,
                 key_points: editContent.key_points,
+                asset_ref: editContent.asset_ref,
               }
             : s
         )
@@ -691,14 +933,16 @@ const Paper2PptPage = () => {
         throw new Error('AI 调整失败，请重试');
       }
 
-      const refinedSlides: SlideOutline[] = data.pagecontent.map((item: any, index: number) => ({
-        id: String(index + 1),
-        pageNum: index + 1,
-        title: item.title || `第 ${index + 1} 页`,
-        layout_description: item.layout_description || '',
-        key_points: item.key_points || [],
-        asset_ref: item.asset_ref || null,
-      }));
+      const previousBySignature = new Map(
+        currentOutline.map((slide) => [buildSlideSignature(slide), slide.id]),
+      );
+      const refinedSlides: SlideOutline[] = data.pagecontent.map((item: any, index: number) => {
+        const nextSlide = normalizeSlideOutline(item, index);
+        return {
+          ...nextSlide,
+          id: previousBySignature.get(buildSlideSignature(nextSlide)) || String(Date.now() + index),
+        };
+      });
 
       setOutlineData(refinedSlides);
       setOutlineFeedback('');
@@ -712,21 +956,34 @@ const Paper2PptPage = () => {
 
   const handleConfirmOutline = async () => {
     if (isRefiningOutline) return;
+
+    const previousBySignature = new Map<string, GenerateResult[]>();
+    generateResults.forEach((result) => {
+      if (result.slideSignature && (result.afterImagePath || result.afterImage)) {
+        const bucket = previousBySignature.get(result.slideSignature) || [];
+        bucket.push(result);
+        previousBySignature.set(result.slideSignature, bucket);
+      }
+    });
+
+    const nextResults: GenerateResult[] = outlineData.map((slide) => {
+      const signature = buildSlideSignature(slide);
+      const bucket = previousBySignature.get(signature) || [];
+      const previous = bucket.shift();
+      if (bucket.length === 0) {
+        previousBySignature.delete(signature);
+      } else {
+        previousBySignature.set(signature, bucket);
+      }
+      return buildResultForSlide(slide, signature, previous);
+    });
+
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
     setGenerateTaskMessage('');
     setError(null);
-    
-    const results: GenerateResult[] = outlineData.map((slide) => ({
-      slideId: slide.id,
-      beforeImage: '',
-      afterImage: '',
-      status: 'processing' as const,
-      versionHistory: [],
-      currentVersionIndex: -1,
-    }));
-    setGenerateResults(results);
+    setGenerateResults(nextResults);
     
     try {
       const formData = new FormData();
@@ -747,53 +1004,30 @@ const Paper2PptPage = () => {
         formData.set('style', globalPrompt || '');
       }
 
-      const pagecontent = outlineData.map((slide) => ({
+      const pagecontent = outlineData.map((slide, index) => ({
         title: slide.title,
         layout_description: slide.layout_description,
         key_points: slide.key_points,
         asset_ref: slide.asset_ref,
+        generated_img_path: nextResults[index].afterImagePath || undefined,
       }));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
       const task = await submitPaper2PptTask(formData);
+      setActiveTask({ taskId: task.task_id, kind: 'generate' });
       setGenerateTaskMessage(task.message || '批量生成任务已提交');
 
       const data = await pollPaper2PptTask(task.task_id, (status) => {
         setGenerateTaskMessage(status.message || '正在生成页面');
       });
-
-      if (data.result_path) {
-        setResultPath(data.result_path);
-      }
-
-      const updatedResults = results.map((result, index) => {
-        const pageNumStr = String(index).padStart(3, '0');
-        let afterImage = '';
-        
-        if (data.all_output_files && Array.isArray(data.all_output_files)) {
-          const pageImg = data.all_output_files.find((url: string) => 
-            url.includes(`ppt_pages/page_${pageNumStr}.png`)
-          );
-          if (pageImg) {
-            afterImage = pageImg;
-          }
-        }
-        
-        return {
-          ...result,
-          afterImage,
-          status: 'done' as const,
-        };
-      });
-      
-      preloadGeneratedImages(data.all_output_files);
-      
-      setGenerateResults(updatedResults);
+      applyBatchGenerateResult(data, nextResults);
+      setActiveTask(null);
       
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
-      setGenerateResults(results.map(r => ({ ...r, status: 'pending' as const })));
+      setActiveTask(null);
+      setGenerateResults(nextResults.map(r => ({ ...r, status: 'pending' as const })));
     } finally {
       setGenerateTaskMessage('');
       setIsGenerating(false);
@@ -816,7 +1050,7 @@ const Paper2PptPage = () => {
   const buildPagecontentForGeneration = () => (
     outlineData.map((slide, idx) => {
       const result = generateResults[idx];
-      const generatedPath = result?.afterImage || '';
+      const generatedPath = result?.afterImagePath || stripImageQuery(result?.afterImage) || '';
       return {
         title: slide.title,
         layout_description: slide.layout_description,
@@ -830,7 +1064,7 @@ const Paper2PptPage = () => {
   // ============== 版本历史相关函数 ==============
   const convertToHttpUrl = (path: string): string => {
     // 如果已经是HTTP URL，直接返回
-    if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/outputs/')) {
       return path;
     }
 
@@ -865,17 +1099,28 @@ const Paper2PptPage = () => {
       if (data.success && data.versions) {
         setGenerateResults(prev => prev.map((result, idx) =>
           idx === pageIndex
-            ? {
-                ...result,
-                versionHistory: data.versions.map((v: any) => ({
+            ? (() => {
+                const versionHistory = data.versions.map((v: any) => ({
                   versionNumber: v.version,
-                  imageUrl: convertToHttpUrl(v.imageUrl), // 转换文件系统路径为HTTP URL
+                  imageUrl: convertToHttpUrl(v.imageUrl),
                   prompt: v.prompt,
                   timestamp: v.timestamp,
-                  isCurrentVersion: v.version === data.versions.length
-                })),
-                currentVersionIndex: data.versions.length - 1
-              }
+                  isCurrentVersion: Boolean(v.is_current_version),
+                }));
+                const selectedVersion = data.current_version
+                  ?? versionHistory.find((item: ImageVersion) => item.isCurrentVersion)?.versionNumber
+                  ?? result.currentVersionNumber
+                  ?? null;
+                const selectedIndex = selectedVersion == null
+                  ? -1
+                  : versionHistory.findIndex((item: ImageVersion) => item.versionNumber === selectedVersion);
+                return {
+                  ...result,
+                  versionHistory,
+                  currentVersionNumber: selectedVersion,
+                  currentVersionIndex: selectedIndex,
+                };
+              })()
             : result
         ));
       }
@@ -913,13 +1158,15 @@ const Paper2PptPage = () => {
         const updatedResults = [...generateResults];
         updatedResults[currentSlideIndex] = {
           ...updatedResults[currentSlideIndex],
-          afterImage: data.currentImageUrl + '?t=' + Date.now(),
-          currentVersionIndex: versionNumber - 1,
+          afterImagePath: stripImageQuery(data.currentImageUrl),
+          afterImage: withCacheBust(data.currentImageUrl),
+          currentVersionNumber: data.currentVersion ?? versionNumber,
+          currentVersionIndex: updatedResults[currentSlideIndex].versionHistory.findIndex(
+            item => item.versionNumber === (data.currentVersion ?? versionNumber),
+          ),
         };
         setGenerateResults(updatedResults);
-
-        // 不需要重新获取版本历史，因为版本历史不会改变
-        // 只是切换了当前显示的版本
+        await fetchVersionHistory(currentSlideIndex);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '恢复版本失败';
@@ -1059,6 +1306,10 @@ const Paper2PptPage = () => {
       formData.append('get_down', 'true');
       formData.append('page_id', String(currentSlideIndex));
       formData.append('edit_prompt', slidePrompt);
+      formData.append('regenerate_from_current', 'true');
+      if (slideEditRegion) {
+        formData.append('edit_region', JSON.stringify(slideEditRegion));
+      }
 
       // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
       if (styleMode === 'reference' && referenceImage) {
@@ -1067,71 +1318,32 @@ const Paper2PptPage = () => {
       }
 
       const pagecontent = buildPagecontentForGeneration();
-      console.log(`[handleRegenerateSlide] 当前编辑页面: ${currentSlideIndex}`);
-      console.log(`[handleRegenerateSlide] 完整pagecontent:`, JSON.stringify(pagecontent.map((p, i) => ({
-        idx: i,
-        title: p.title,
-        generated_img_path: p.generated_img_path
-      })), null, 2));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
-      const res = await fetch('/api/v1/paper2ppt/generate', {
-        method: 'POST',
-        headers: { 'X-API-Key': API_KEY },
-        body: formData,
+      const task = await submitPaper2PptTask(formData);
+      setActiveTask({ taskId: task.task_id, kind: 'edit' });
+      setGenerateTaskMessage(task.message || '单页重生成任务已提交');
+
+      const data = await pollPaper2PptTask(task.task_id, (status) => {
+        setGenerateTaskMessage(status.message || '正在重生成当前页');
       });
-      
-      if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
-      }
 
-      const data = await res.json();
-
-      if (!data.success) {
-        throw new Error(data.error || '服务器繁忙，请稍后再试');
-      }
-
-      const pageNumStr = String(currentSlideIndex).padStart(3, '0');
-      let afterImage = updatedResults[currentSlideIndex].afterImage;
-      
-      if (data.all_output_files && Array.isArray(data.all_output_files)) {
-        const pageImg = data.all_output_files.find((url: string) => 
-          url.includes(`ppt_pages/page_${pageNumStr}.png`)
-        );
-        if (pageImg) {
-          afterImage = pageImg + '?t=' + Date.now();
-        }
-      }
-      
-      updatedResults[currentSlideIndex] = {
-        ...updatedResults[currentSlideIndex],
-        afterImage,
-        status: 'done',
-      };
-      setGenerateResults([...updatedResults]);
+      applyEditTaskResult(currentSlideIndex, data);
+      setActiveTask(null);
       setSlidePrompt('');
-
-      // 获取更新的版本历史
+      setSlideEditRegion(null);
       await fetchVersionHistory(currentSlideIndex);
-
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
+      setActiveTask(null);
       updatedResults[currentSlideIndex] = { 
         ...updatedResults[currentSlideIndex], 
         status: 'done',
       };
       setGenerateResults([...updatedResults]);
     } finally {
+      setGenerateTaskMessage('');
       setIsGenerating(false);
     }
   };
@@ -1142,6 +1354,7 @@ const Paper2PptPage = () => {
       const nextIndex = currentSlideIndex + 1;
       setCurrentSlideIndex(nextIndex);
       setSlidePrompt('');
+      setSlideEditRegion(null);
     } else {
       setCurrentStep('complete');
     }
@@ -1187,11 +1400,13 @@ const Paper2PptPage = () => {
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
       const task = await submitPaper2PptTask(formData);
+      setActiveTask({ taskId: task.task_id, kind: 'finalize' });
       setFinalTaskMessage(task.message || '最终导出任务已提交');
 
       const data = await pollPaper2PptTask(task.task_id, (status) => {
         setFinalTaskMessage(status.message || '正在生成最终文件');
       });
+      setActiveTask(null);
 
       // 优先使用后端直接返回的路径
       if (data.ppt_pptx_path) {
@@ -1273,6 +1488,7 @@ const Paper2PptPage = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
+      setActiveTask(null);
     } finally {
       setFinalTaskMessage('');
       setIsGeneratingFinal(false);
@@ -1313,6 +1529,7 @@ const Paper2PptPage = () => {
   const handleReset = () => {
     setCurrentStep('upload');
     setSelectedFile(null);
+    setEditingId(null);
     setOutlineData([]);
     setGenerateResults([]);
     setDownloadUrl(null);
@@ -1323,6 +1540,9 @@ const Paper2PptPage = () => {
     setProgressStatus('');
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
+    setSlideEditRegion(null);
+    setUploadingAssetSlideId(null);
+    clearDraftAndTasks();
   };
 
   return (
@@ -1373,6 +1593,8 @@ const Paper2PptPage = () => {
           handleKeyPointChange={handleKeyPointChange}
           handleAddKeyPoint={handleAddKeyPoint}
           handleRemoveKeyPoint={handleRemoveKeyPoint}
+          handleSlideAssetUpload={handleSlideAssetUpload}
+          handleRemoveSlideAsset={handleRemoveSlideAsset}
           handleDeleteSlide={handleDeleteSlide}
           handleAddSlide={handleAddSlide}
           handleMoveSlide={handleMoveSlide}
@@ -1383,6 +1605,7 @@ const Paper2PptPage = () => {
           outlineFeedback={outlineFeedback}
           setOutlineFeedback={setOutlineFeedback}
           isRefiningOutline={isRefiningOutline}
+          uploadingAssetSlideId={uploadingAssetSlideId}
         />
       )}
           
@@ -1398,6 +1621,8 @@ const Paper2PptPage = () => {
               setSlidePrompt={setSlidePrompt}
               saveCurrentSlideEdits={saveCurrentSlideEdits}
               handleRegenerateSlideFromOutline={handleRegenerateSlideFromOutline}
+              slideEditRegion={slideEditRegion}
+              setSlideEditRegion={setSlideEditRegion}
               handleRegenerateSlide={handleRegenerateSlide}
               handleConfirmSlide={handleConfirmSlide}
               setCurrentStep={setCurrentStep}
