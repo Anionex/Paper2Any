@@ -597,6 +597,10 @@ const Paper2PptPage = () => {
     setIsUploading(true);
     setError(null);
     setActiveTask(null);
+    setDownloadUrl(null);
+    setPdfPreviewUrl(null);
+    setGenerateResults([]);
+    setSlideEditRegion(null);
     setProgress(0);
     setProgressStatus('正在初始化...');
     
@@ -1331,6 +1335,7 @@ const Paper2PptPage = () => {
   const handleReset = () => {
     setCurrentStep('upload');
     setSelectedFile(null);
+    setEditingId(null);
     setOutlineData([]);
     setGenerateResults([]);
     setDownloadUrl(null);
