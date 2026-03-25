@@ -92,3 +92,31 @@ def test_clone_page_versions_from_snapshot_dir(tmp_path: Path) -> None:
     history = ImageVersionManager.get_version_history(target_dir, 0)
     assert [item["version"] for item in history] == [1, 2]
     assert history[-1]["prompt"] == "update"
+
+
+def test_cleanup_preserves_reverted_current_version(tmp_path: Path, monkeypatch) -> None:
+    img_dir = tmp_path / "ppt_pages"
+    img_dir.mkdir()
+    monkeypatch.setattr(ImageVersionManager, "MAX_VERSIONS", 3)
+
+    current = img_dir / "page_003.png"
+    _write_png(current, b"v1")
+
+    for version_num in range(2, 5):
+        edited = tmp_path / f"edited_{version_num}.png"
+        _write_png(edited, f"v{version_num}".encode())
+        ImageVersionManager.save_versioned_image(img_dir, 3, str(edited), f"pass {version_num}")
+
+    reverted = ImageVersionManager.revert_to_version(img_dir, 3, 2)
+    assert reverted is not None
+    assert ImageVersionManager.get_current_version(img_dir, 3) == 2
+
+    edited = tmp_path / "edited_5.png"
+    _write_png(edited, b"v5")
+    ImageVersionManager.save_versioned_image(img_dir, 3, str(edited), "pass 5")
+
+    history = ImageVersionManager.get_version_history(img_dir, 3)
+    versions = [item["version"] for item in history]
+    assert versions == [2, 4, 5]
+    assert ImageVersionManager.get_current_version(img_dir, 3) == 5
+    assert any(item["version"] == 2 for item in history)
