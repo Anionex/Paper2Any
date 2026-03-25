@@ -144,9 +144,15 @@ class ImageVersionManager:
         pattern = f"page_{page_idx:03d}_v*.png"
         versions = sorted(img_dir.glob(pattern))
         current_version = ImageVersionManager.get_current_version(img_dir, page_idx)
+        current_version_path = (
+            ImageVersionManager._version_file(img_dir, page_idx, current_version)
+            if current_version is not None
+            else None
+        )
 
         if len(versions) > ImageVersionManager.MAX_VERSIONS:
-            to_delete = versions[:-ImageVersionManager.MAX_VERSIONS]
+            delete_count = len(versions) - ImageVersionManager.MAX_VERSIONS
+            to_delete = [path for path in versions if path != current_version_path][:delete_count]
             for old_file in to_delete:
                 old_file.unlink()
                 # 同时删除对应的元数据
@@ -268,7 +274,7 @@ class ImageVersionManager:
             if meta_file.exists():
                 try:
                     metadata = json.loads(meta_file.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, OSError):
                     metadata = {
                         "version": version_num,
                         "page_index": target_page_idx,
