@@ -1,5 +1,4 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
-import { useTranslation } from 'react-i18next';
 import { uploadAndSaveFile } from '../../services/fileService';
 import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
 import { DEFAULT_PAPER2PPT_GEN_FIG_MODEL, DEFAULT_PAPER2PPT_MODEL } from '../../config/models';
@@ -12,6 +11,8 @@ import {
   Step,
   SlideOutline,
   GenerateResult,
+  ImageVersion,
+  SlideEditRegion,
   UploadMode,
   StyleMode,
   StylePreset,
@@ -26,6 +27,16 @@ import UploadStep from './UploadStep';
 import OutlineStep from './OutlineStep';
 import GenerateStep from './GenerateStep';
 import CompleteStep from './CompleteStep';
+
+const normalizeSlideOutline = (slide: Partial<SlideOutline>, index: number): SlideOutline => ({
+  id: slide.id || String(index + 1),
+  pageNum: index + 1,
+  title: slide.title || `第 ${index + 1} 页`,
+  layout_description: slide.layout_description || '',
+  key_points: Array.isArray(slide.key_points) ? slide.key_points : [],
+  asset_ref: slide.asset_ref || null,
+  generated_img_path: slide.generated_img_path,
+});
 
 const Paper2PptPage = () => {
   const { user, refreshQuota } = useAuthStore();
@@ -66,6 +77,7 @@ const Paper2PptPage = () => {
   const [generateResults, setGenerateResults] = useState<GenerateResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [slidePrompt, setSlidePrompt] = useState('');
+  const [slideEditRegion, setSlideEditRegion] = useState<SlideEditRegion | null>(null);
   const [generateTaskMessage, setGenerateTaskMessage] = useState('');
   
   // Step 4: 完成状态
@@ -974,6 +986,99 @@ const Paper2PptPage = () => {
   };
 
   // ============== Step 3: 重新生成单页 ==============
+  const handleRegenerateSlideFromOutline = async () => {
+    if (!resultPath) {
+      setError('缺少 result_path，请重新上传文件');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+
+    const updatedResults = [...generateResults];
+    updatedResults[currentSlideIndex] = {
+      ...updatedResults[currentSlideIndex],
+      status: 'processing',
+    };
+    setGenerateResults(updatedResults);
+
+    try {
+      const formData = new FormData();
+      formData.append('img_gen_model_name', genFigModel);
+      formData.append('chat_api_url', llmApiUrl.trim());
+      formData.append('api_key', apiKey.trim());
+      formData.append('model', model);
+      formData.append('language', language);
+      formData.append('style', globalPrompt || getStyleDescription(stylePreset));
+      formData.append('aspect_ratio', '16:9');
+      formData.append('email', user?.id || user?.email || '');
+      formData.append('result_path', resultPath);
+      formData.append('get_down', 'true');
+      formData.append('page_id', String(currentSlideIndex));
+      formData.append('regenerate_from_outline', 'true');
+
+      if (styleMode === 'reference' && referenceImage) {
+        formData.append('reference_img', referenceImage);
+        formData.set('style', globalPrompt || '');
+      }
+
+      formData.append('pagecontent', JSON.stringify(buildPagecontentForGeneration()));
+
+      const res = await fetch('/api/v1/paper2ppt/generate', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        let msg = '服务器繁忙，请稍后再试';
+        if (res.status === 429) {
+          msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
+        }
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
+      }
+
+      const pageNumStr = String(currentSlideIndex).padStart(3, '0');
+      let afterImage = updatedResults[currentSlideIndex].afterImage;
+      if (data.all_output_files && Array.isArray(data.all_output_files)) {
+        const pageImg = data.all_output_files.find((url: string) =>
+          url.includes(`ppt_pages/page_${pageNumStr}.png`)
+        );
+        if (pageImg) {
+          afterImage = pageImg + '?t=' + Date.now();
+        }
+      }
+
+      updatedResults[currentSlideIndex] = {
+        ...updatedResults[currentSlideIndex],
+        afterImage,
+        status: 'done',
+      };
+      setGenerateResults([...updatedResults]);
+      await fetchVersionHistory(currentSlideIndex);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
+      setError(message);
+      updatedResults[currentSlideIndex] = {
+        ...updatedResults[currentSlideIndex],
+        status: 'done',
+      };
+      setGenerateResults([...updatedResults]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleRegenerateSlide = async () => {
     if (!resultPath) {
       setError('缺少 result_path，请重新上传文件');
@@ -1011,6 +1116,9 @@ const Paper2PptPage = () => {
       formData.append('page_id', String(currentSlideIndex));
       formData.append('edit_prompt', slidePrompt);
       formData.append('regenerate_from_current', 'true');
+      if (slideEditRegion) {
+        formData.append('edit_region', JSON.stringify(slideEditRegion));
+      }
 
       // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
       if (styleMode === 'reference' && referenceImage) {
@@ -1085,8 +1193,7 @@ const Paper2PptPage = () => {
       };
       setGenerateResults([...updatedResults]);
       setSlidePrompt('');
-
-      // 获取更新的版本历史
+      setSlideEditRegion(null);
       await fetchVersionHistory(currentSlideIndex);
 
     } catch (err) {
@@ -1108,6 +1215,7 @@ const Paper2PptPage = () => {
       const nextIndex = currentSlideIndex + 1;
       setCurrentSlideIndex(nextIndex);
       setSlidePrompt('');
+      setSlideEditRegion(null);
     } else {
       setCurrentStep('complete');
     }
@@ -1289,6 +1397,7 @@ const Paper2PptPage = () => {
     setProgressStatus('');
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
+    setSlideEditRegion(null);
   };
 
   return (
@@ -1362,6 +1471,10 @@ const Paper2PptPage = () => {
               taskMessage={generateTaskMessage}
               slidePrompt={slidePrompt}
               setSlidePrompt={setSlidePrompt}
+              saveCurrentSlideEdits={saveCurrentSlideEdits}
+              handleRegenerateSlideFromOutline={handleRegenerateSlideFromOutline}
+              slideEditRegion={slideEditRegion}
+              setSlideEditRegion={setSlideEditRegion}
               handleRegenerateSlide={handleRegenerateSlide}
               handleConfirmSlide={handleConfirmSlide}
               setCurrentStep={setCurrentStep}
