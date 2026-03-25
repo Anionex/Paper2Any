@@ -47,6 +47,13 @@ export interface Paper2PPTTaskResponse {
   } | null;
 }
 
+export type Paper2PPTTaskKind = 'generate' | 'finalize' | 'edit';
+
+export interface Paper2PPTActiveTask {
+  taskId: string;
+  kind: Paper2PPTTaskKind;
+}
+
 export type UploadMode = 'file' | 'text' | 'topic';
 export type StyleMode = 'prompt' | 'reference';
 export type StylePreset = 'modern' | 'business' | 'academic' | 'creative';

@@ -1,5 +1,6 @@
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 export const STORAGE_KEY = 'paper2ppt-storage';
+export const DRAFT_STORAGE_KEY = 'paper2ppt-draft';
 
 export const STYLE_PRESETS: Record<string, string> = {
   modern: '现代简约风格，使用干净的线条和充足的留白',
