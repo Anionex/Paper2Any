@@ -64,3 +64,31 @@ def test_revert_to_version_updates_current_pointer(tmp_path: Path) -> None:
     assert reverted is not None
     assert ImageVersionManager.get_current_version(img_dir, 1) == 2
     assert (img_dir / "page_001.png").read_bytes() == b"v2"
+
+
+def test_clone_page_versions_from_snapshot_dir(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    target_dir = tmp_path / "target"
+    source_dir.mkdir()
+    target_dir.mkdir()
+
+    current = source_dir / "page_002.png"
+    _write_png(current, b"orig")
+    edited = tmp_path / "edited.png"
+    _write_png(edited, b"edited")
+    ImageVersionManager.save_versioned_image(source_dir, 2, str(edited), "update")
+
+    cloned = ImageVersionManager.clone_page_versions_from_dir(
+        source_dir=source_dir,
+        source_page_idx=2,
+        target_dir=target_dir,
+        target_page_idx=0,
+    )
+
+    assert cloned is not None
+    assert (target_dir / "page_000.png").exists()
+    assert ImageVersionManager.get_current_version(target_dir, 0) == ImageVersionManager.get_current_version(source_dir, 2)
+
+    history = ImageVersionManager.get_version_history(target_dir, 0)
+    assert [item["version"] for item in history] == [1, 2]
+    assert history[-1]["prompt"] == "update"

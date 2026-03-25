@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -331,6 +333,15 @@ async def _regenerate_single_page_from_content(
     return out_item
 
 
+def _parse_page_index_from_image_path(path: str) -> Optional[int]:
+    if not path:
+        return None
+    match = re.search(r"page_(\d{3})(?:_v\d+)?\.png$", Path(path).name)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
 @register("paper2ppt_parallel_consistent_style")
 def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa: N802
     """
@@ -390,6 +401,10 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         result_root = Path(_ensure_result_path(state))
         img_dir = result_root / "ppt_pages"
         img_dir.mkdir(parents=True, exist_ok=True)
+        reuse_snapshot_dir = result_root / ".reuse_snapshot"
+        if reuse_snapshot_dir.exists():
+            shutil.rmtree(reuse_snapshot_dir, ignore_errors=True)
+        reuse_snapshot_dir.mkdir(parents=True, exist_ok=True)
 
         style = getattr(state.request, "style", None) or "kartoon"
         aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
@@ -399,6 +414,26 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         if not page_items:
             log.warning("Pagecontent is empty, nothing to generate.")
             return state
+
+        for item in page_items:
+            if not isinstance(item, dict):
+                continue
+            source_path = _abs_path(str(item.get("generated_img_path") or ""))
+            source_page_idx = _parse_page_index_from_image_path(source_path)
+            if not source_path or source_page_idx is None:
+                continue
+            if Path(source_path).parent.resolve() != img_dir.resolve():
+                continue
+            if (reuse_snapshot_dir / f"page_{source_page_idx:03d}.png").exists():
+                continue
+            cloned = ImageVersionManager.clone_page_versions_from_dir(
+                source_dir=img_dir,
+                source_page_idx=source_page_idx,
+                target_dir=reuse_snapshot_dir,
+                target_page_idx=source_page_idx,
+            )
+            if cloned:
+                log.info(f"[paper2ppt] Snapshotted reusable page {source_page_idx} -> {cloned}")
 
         # 检查是否有用户传入的参考图
         user_ref_img = getattr(state.request, "ref_img", None)
@@ -418,6 +453,37 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         ) -> Dict[str, Any]:
             
             save_path = str((img_dir / f"page_{idx:03d}.png").resolve())
+
+            if isinstance(item, dict):
+                existing_generated = _abs_path(str(item.get("generated_img_path") or ""))
+                if existing_generated and os.path.exists(existing_generated):
+                    source_page_idx = _parse_page_index_from_image_path(existing_generated)
+                    source_parent = Path(existing_generated).parent.resolve()
+                    if source_page_idx is not None and source_parent == img_dir.resolve():
+                        cloned = ImageVersionManager.clone_page_versions_from_dir(
+                            source_dir=reuse_snapshot_dir,
+                            source_page_idx=source_page_idx,
+                            target_dir=img_dir,
+                            target_page_idx=idx,
+                        )
+                        if cloned:
+                            out_item = dict(item)
+                            out_item.update({
+                                "generated_img_path": cloned,
+                                "page_idx": idx,
+                                "mode": "reused_existing",
+                                "style": style,
+                            })
+                            return out_item
+                    shutil.copy2(existing_generated, save_path)
+                    out_item = dict(item)
+                    out_item.update({
+                        "generated_img_path": save_path,
+                        "page_idx": idx,
+                        "mode": "reused_existing",
+                        "style": style,
+                    })
+                    return out_item
 
             # 构建可选的额外风格说明（当同时有参考图和 style 文本时融合使用）
             style_hint = ""
@@ -698,6 +764,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
 
         state.pagecontent = new_pagecontent
         state.gen_down = True
+        shutil.rmtree(reuse_snapshot_dir, ignore_errors=True)
         return state
 
     async def edit_single_page(state: Paper2FigureState) -> Paper2FigureState:
