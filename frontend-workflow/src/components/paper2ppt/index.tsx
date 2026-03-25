@@ -1,5 +1,4 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { uploadAndSaveFile } from '../../services/fileService';
 import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
 import { DEFAULT_PAPER2PPT_GEN_FIG_MODEL, DEFAULT_PAPER2PPT_MODEL } from '../../config/models';
@@ -12,12 +11,14 @@ import {
   Step,
   SlideOutline,
   GenerateResult,
+  ImageVersion,
   UploadMode,
   StyleMode,
   StylePreset,
+  Paper2PPTActiveTask,
   Paper2PPTTaskResponse,
 } from './types';
-import { MAX_FILE_SIZE, STORAGE_KEY } from './constants';
+import { DRAFT_STORAGE_KEY, MAX_FILE_SIZE, STORAGE_KEY } from './constants';
 
 import Banner from './Banner';
 import StepIndicator from './StepIndicator';
@@ -25,6 +26,16 @@ import UploadStep from './UploadStep';
 import OutlineStep from './OutlineStep';
 import GenerateStep from './GenerateStep';
 import CompleteStep from './CompleteStep';
+
+const normalizeSlideOutline = (slide: Partial<SlideOutline>, index: number): SlideOutline => ({
+  id: slide.id || String(index + 1),
+  pageNum: index + 1,
+  title: slide.title || `第 ${index + 1} 页`,
+  layout_description: slide.layout_description || '',
+  key_points: Array.isArray(slide.key_points) ? slide.key_points : [],
+  asset_ref: slide.asset_ref || null,
+  generated_img_path: slide.generated_img_path,
+});
 
 const Paper2PptPage = () => {
   const { user, refreshQuota } = useAuthStore();
@@ -84,6 +95,8 @@ const Paper2PptPage = () => {
   const [genFigModel, setGenFigModel] = useState(DEFAULT_PAPER2PPT_GEN_FIG_MODEL);
   const [language, setLanguage] = useState<'zh' | 'en'>('en');
   const [resultPath, setResultPath] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<Paper2PPTActiveTask | null>(null);
+  const isResumingTaskRef = useRef(false);
 
   // GitHub Stars
   const [stars, setStars] = useState<{dataflow: number | null, agent: number | null, dataflex: number | null}>({
@@ -160,9 +173,9 @@ const Paper2PptPage = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
+      const rawConfig = localStorage.getItem(STORAGE_KEY);
+      if (rawConfig) {
+        const saved = JSON.parse(rawConfig);
         
         if (saved.uploadMode) setUploadMode(saved.uploadMode);
         if (saved.textContent) setTextContent(saved.textContent);
@@ -185,8 +198,25 @@ const Paper2PptPage = () => {
           if (saved.apiKey) setApiKey(saved.apiKey);
         }
       }
+
+      const rawDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (rawDraft) {
+        const draft = JSON.parse(rawDraft);
+        if (draft.currentStep) setCurrentStep(draft.currentStep);
+        if (Array.isArray(draft.outlineData)) {
+          setOutlineData(draft.outlineData.map((slide: SlideOutline, index: number) => normalizeSlideOutline(slide, index)));
+        }
+        if (Array.isArray(draft.generateResults)) setGenerateResults(draft.generateResults);
+        if (typeof draft.currentSlideIndex === 'number') setCurrentSlideIndex(draft.currentSlideIndex);
+        if (draft.resultPath) setResultPath(draft.resultPath);
+        if (draft.downloadUrl) setDownloadUrl(draft.downloadUrl);
+        if (draft.pdfPreviewUrl) setPdfPreviewUrl(draft.pdfPreviewUrl);
+        if (draft.activeTask?.taskId && draft.activeTask?.kind) {
+          setActiveTask(draft.activeTask);
+        }
+      }
     } catch (e) {
-      console.error('Failed to restore paper2ppt config', e);
+      console.error('Failed to restore paper2ppt state', e);
     }
   }, [user?.id]);
 
@@ -221,6 +251,34 @@ const Paper2PptPage = () => {
     model, genFigModel, language, user?.id
   ]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const draft = {
+      currentStep,
+      outlineData,
+      generateResults,
+      currentSlideIndex,
+      resultPath,
+      downloadUrl,
+      pdfPreviewUrl,
+      activeTask,
+    };
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch (e) {
+      console.error('Failed to persist paper2ppt draft', e);
+    }
+  }, [
+    currentStep,
+    outlineData,
+    generateResults,
+    currentSlideIndex,
+    resultPath,
+    downloadUrl,
+    pdfPreviewUrl,
+    activeTask,
+  ]);
+
   // 自动加载版本历史
   useEffect(() => {
     if (currentStep === 'generate' && currentSlideIndex >= 0 && generateResults[currentSlideIndex]) {
@@ -233,6 +291,66 @@ const Paper2PptPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, currentSlideIndex]); // 移除 generateResults 依赖，避免无限循环
+
+  useEffect(() => {
+    if (!activeTask || isResumingTaskRef.current) return;
+    if (activeTask.kind === 'finalize' && isGeneratingFinal) return;
+    if (activeTask.kind !== 'finalize' && isGenerating) return;
+
+    isResumingTaskRef.current = true;
+    if (activeTask.kind === 'finalize') {
+      setIsGeneratingFinal(true);
+    } else {
+      setIsGenerating(true);
+      setCurrentStep('generate');
+    }
+
+    const baseResults = generateResults.length > 0
+      ? generateResults
+      : outlineData.map((slide) => ({
+          slideId: slide.id,
+          beforeImage: '',
+          afterImage: '',
+          status: 'processing' as const,
+          versionHistory: [],
+          currentVersionIndex: -1,
+        }));
+
+    pollPaper2PptTask(activeTask.taskId, (status) => {
+      if (activeTask.kind === 'finalize') {
+        setFinalTaskMessage(status.message || '正在恢复最终导出任务');
+      } else if (activeTask.kind === 'edit') {
+        setGenerateTaskMessage(status.message || '正在恢复当前页重生成任务');
+      } else {
+        setGenerateTaskMessage(status.message || '正在恢复批量生成任务');
+      }
+    })
+      .then((data) => {
+        if (activeTask.kind === 'finalize') {
+          if (data.ppt_pptx_path) setDownloadUrl(data.ppt_pptx_path);
+          if (data.ppt_pdf_path) setPdfPreviewUrl(data.ppt_pdf_path);
+          setCurrentStep('complete');
+        } else if (activeTask.kind === 'edit') {
+          applyEditTaskResult(currentSlideIndex, data);
+          void fetchVersionHistory(currentSlideIndex);
+        } else {
+          applyBatchGenerateResult(data, baseResults);
+        }
+        setActiveTask(null);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : '任务恢复失败';
+        setError(message);
+        setActiveTask(null);
+      })
+      .finally(() => {
+        setGenerateTaskMessage('');
+        setFinalTaskMessage('');
+        setIsGenerating(false);
+        setIsGeneratingFinal(false);
+        isResumingTaskRef.current = false;
+      });
+  }, [activeTask, currentSlideIndex, generateResults, isGenerating, isGeneratingFinal, outlineData]);
 
   const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
@@ -317,6 +435,61 @@ const Paper2PptPage = () => {
         img.src = url;
       }
     });
+  };
+
+  const findPageImage = (outputFiles: string[] | undefined, pageIndex: number) => {
+    if (!outputFiles || !Array.isArray(outputFiles)) return '';
+    const pageNumStr = String(pageIndex).padStart(3, '0');
+    return outputFiles.find((url: string) => url.includes(`ppt_pages/page_${pageNumStr}.png`)) || '';
+  };
+
+  const applyBatchGenerateResult = (
+    data: NonNullable<Paper2PPTTaskResponse['result']>,
+    baseResults: GenerateResult[],
+  ) => {
+    if (data.result_path) {
+      setResultPath(data.result_path);
+    }
+
+    const updatedResults = baseResults.map((result, index) => {
+      const page = data.pagecontent?.[index] as Record<string, unknown> | undefined;
+      const pageImg = typeof page?.generated_img_path === 'string'
+        ? page.generated_img_path
+        : findPageImage(data.all_output_files, index);
+      return {
+        ...result,
+        afterImage: pageImg ? `${pageImg}?t=${Date.now()}` : '',
+        status: pageImg ? 'done' as const : 'pending' as const,
+      };
+    });
+
+    preloadGeneratedImages(data.all_output_files);
+    setGenerateResults(updatedResults);
+  };
+
+  const applyEditTaskResult = (pageIndex: number, data: NonNullable<Paper2PPTTaskResponse['result']>) => {
+    const page = data.pagecontent?.[pageIndex] as Record<string, unknown> | undefined;
+    const pageImg = typeof page?.generated_img_path === 'string'
+      ? page.generated_img_path
+      : findPageImage(data.all_output_files, pageIndex);
+    if (!pageImg) return;
+
+    setGenerateResults(prev => prev.map((result, index) => (
+      index === pageIndex
+        ? {
+            ...result,
+            afterImage: `${pageImg}?t=${Date.now()}`,
+            status: 'done' as const,
+          }
+        : result
+    )));
+  };
+
+  const clearDraftAndTasks = () => {
+    setActiveTask(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    }
   };
 
   // ============== Step 1: 上传处理 ==============
@@ -423,6 +596,7 @@ const Paper2PptPage = () => {
 
     setIsUploading(true);
     setError(null);
+    setActiveTask(null);
     setProgress(0);
     setProgressStatus('正在初始化...');
     
@@ -529,6 +703,11 @@ const Paper2PptPage = () => {
       // 稍微延迟一下跳转，让用户看到 100%
       setTimeout(() => {
         setOutlineData(convertedSlides);
+        setGenerateResults([]);
+        setCurrentSlideIndex(0);
+        setDownloadUrl(null);
+        setPdfPreviewUrl(null);
+        setActiveTask(null);
         setCurrentStep('outline');
       }, 500);
       
@@ -756,43 +935,19 @@ const Paper2PptPage = () => {
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
       const task = await submitPaper2PptTask(formData);
+      setActiveTask({ taskId: task.task_id, kind: 'generate' });
       setGenerateTaskMessage(task.message || '批量生成任务已提交');
 
       const data = await pollPaper2PptTask(task.task_id, (status) => {
         setGenerateTaskMessage(status.message || '正在生成页面');
       });
-
-      if (data.result_path) {
-        setResultPath(data.result_path);
-      }
-
-      const updatedResults = results.map((result, index) => {
-        const pageNumStr = String(index).padStart(3, '0');
-        let afterImage = '';
-        
-        if (data.all_output_files && Array.isArray(data.all_output_files)) {
-          const pageImg = data.all_output_files.find((url: string) => 
-            url.includes(`ppt_pages/page_${pageNumStr}.png`)
-          );
-          if (pageImg) {
-            afterImage = pageImg;
-          }
-        }
-        
-        return {
-          ...result,
-          afterImage,
-          status: 'done' as const,
-        };
-      });
-      
-      preloadGeneratedImages(data.all_output_files);
-      
-      setGenerateResults(updatedResults);
+      applyBatchGenerateResult(data, results);
+      setActiveTask(null);
       
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
+      setActiveTask(null);
       setGenerateResults(results.map(r => ({ ...r, status: 'pending' as const })));
     } finally {
       setGenerateTaskMessage('');
@@ -874,14 +1029,14 @@ const Paper2PptPage = () => {
                   isCurrentVersion: Boolean(v.is_current_version),
                 }));
                 const selectedVersion = data.current_version
-                  ?? versionHistory.find((item) => item.isCurrentVersion)?.versionNumber
+                  ?? versionHistory.find((item: ImageVersion) => item.isCurrentVersion)?.versionNumber
                   ?? null;
                 return {
                   ...result,
                   versionHistory,
                   currentVersionIndex: selectedVersion == null
                     ? -1
-                    : versionHistory.findIndex((item) => item.versionNumber === selectedVersion),
+                    : versionHistory.findIndex((item: ImageVersion) => item.versionNumber === selectedVersion),
                 };
               })()
             : result
@@ -1083,63 +1238,29 @@ const Paper2PptPage = () => {
       })), null, 2));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
-      const res = await fetch('/api/v1/paper2ppt/generate', {
-        method: 'POST',
-        headers: { 'X-API-Key': API_KEY },
-        body: formData,
+      const task = await submitPaper2PptTask(formData);
+      setActiveTask({ taskId: task.task_id, kind: 'edit' });
+      setGenerateTaskMessage(task.message || '单页重生成任务已提交');
+
+      const data = await pollPaper2PptTask(task.task_id, (status) => {
+        setGenerateTaskMessage(status.message || '正在重生成当前页');
       });
-      
-      if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
-      }
 
-      const data = await res.json();
-
-      if (!data.success) {
-        throw new Error(data.error || '服务器繁忙，请稍后再试');
-      }
-
-      const pageNumStr = String(currentSlideIndex).padStart(3, '0');
-      let afterImage = updatedResults[currentSlideIndex].afterImage;
-      
-      if (data.all_output_files && Array.isArray(data.all_output_files)) {
-        const pageImg = data.all_output_files.find((url: string) => 
-          url.includes(`ppt_pages/page_${pageNumStr}.png`)
-        );
-        if (pageImg) {
-          afterImage = pageImg + '?t=' + Date.now();
-        }
-      }
-      
-      updatedResults[currentSlideIndex] = {
-        ...updatedResults[currentSlideIndex],
-        afterImage,
-        status: 'done',
-      };
-      setGenerateResults([...updatedResults]);
+      applyEditTaskResult(currentSlideIndex, data);
+      setActiveTask(null);
       setSlidePrompt('');
-
-      // 获取更新的版本历史
       await fetchVersionHistory(currentSlideIndex);
-
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
+      setActiveTask(null);
       updatedResults[currentSlideIndex] = { 
         ...updatedResults[currentSlideIndex], 
         status: 'done',
       };
       setGenerateResults([...updatedResults]);
     } finally {
+      setGenerateTaskMessage('');
       setIsGenerating(false);
     }
   };
@@ -1195,11 +1316,13 @@ const Paper2PptPage = () => {
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
       const task = await submitPaper2PptTask(formData);
+      setActiveTask({ taskId: task.task_id, kind: 'finalize' });
       setFinalTaskMessage(task.message || '最终导出任务已提交');
 
       const data = await pollPaper2PptTask(task.task_id, (status) => {
         setFinalTaskMessage(status.message || '正在生成最终文件');
       });
+      setActiveTask(null);
 
       // 优先使用后端直接返回的路径
       if (data.ppt_pptx_path) {
@@ -1281,6 +1404,7 @@ const Paper2PptPage = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
+      setActiveTask(null);
     } finally {
       setFinalTaskMessage('');
       setIsGeneratingFinal(false);
@@ -1331,6 +1455,7 @@ const Paper2PptPage = () => {
     setProgressStatus('');
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
+    clearDraftAndTasks();
   };
 
   return (
