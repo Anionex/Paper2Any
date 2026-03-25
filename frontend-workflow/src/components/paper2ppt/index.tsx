@@ -600,7 +600,6 @@ const Paper2PptPage = () => {
     setDownloadUrl(null);
     setPdfPreviewUrl(null);
     setGenerateResults([]);
-    setSlideEditRegion(null);
     setProgress(0);
     setProgressStatus('正在初始化...');
     
