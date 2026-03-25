@@ -803,7 +803,7 @@ const Paper2PptPage = () => {
   // ============== 版本历史相关函数 ==============
   const convertToHttpUrl = (path: string): string => {
     // 如果已经是HTTP URL，直接返回
-    if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/outputs/')) {
       return path;
     }
 
@@ -838,17 +838,25 @@ const Paper2PptPage = () => {
       if (data.success && data.versions) {
         setGenerateResults(prev => prev.map((result, idx) =>
           idx === pageIndex
-            ? {
-                ...result,
-                versionHistory: data.versions.map((v: any) => ({
+            ? (() => {
+                const versionHistory = data.versions.map((v: any) => ({
                   versionNumber: v.version,
-                  imageUrl: convertToHttpUrl(v.imageUrl), // 转换文件系统路径为HTTP URL
+                  imageUrl: convertToHttpUrl(v.imageUrl),
                   prompt: v.prompt,
                   timestamp: v.timestamp,
-                  isCurrentVersion: v.version === data.versions.length
-                })),
-                currentVersionIndex: data.versions.length - 1
-              }
+                  isCurrentVersion: Boolean(v.is_current_version),
+                }));
+                const selectedVersion = data.current_version
+                  ?? versionHistory.find((item) => item.isCurrentVersion)?.versionNumber
+                  ?? null;
+                return {
+                  ...result,
+                  versionHistory,
+                  currentVersionIndex: selectedVersion == null
+                    ? -1
+                    : versionHistory.findIndex((item) => item.versionNumber === selectedVersion),
+                };
+              })()
             : result
         ));
       }
@@ -887,12 +895,12 @@ const Paper2PptPage = () => {
         updatedResults[currentSlideIndex] = {
           ...updatedResults[currentSlideIndex],
           afterImage: data.currentImageUrl + '?t=' + Date.now(),
-          currentVersionIndex: versionNumber - 1,
+          currentVersionIndex: updatedResults[currentSlideIndex].versionHistory.findIndex(
+            item => item.versionNumber === (data.currentVersion ?? versionNumber),
+          ),
         };
         setGenerateResults(updatedResults);
-
-        // 不需要重新获取版本历史，因为版本历史不会改变
-        // 只是切换了当前显示的版本
+        await fetchVersionHistory(currentSlideIndex);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '恢复版本失败';

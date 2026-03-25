@@ -49,7 +49,7 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
 
       <div className="flex gap-2 overflow-x-auto pb-2">
         {versions.map((version, index) => {
-          const isCurrent = index === currentVersionIndex;
+          const isCurrent = version.isCurrentVersion || index === currentVersionIndex;
 
           return (
             <div

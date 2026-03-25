@@ -11,6 +11,7 @@ paper2ppt 工作流封装。
 """
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, List, Tuple
@@ -342,7 +343,10 @@ async def run_paper2ppt_wf_api(
             try:
                 img_dir = base_dir / "ppt_pages"
                 if img_dir.exists():
-                    imgs = sorted(img_dir.glob("page_*.png"))
+                    imgs = sorted(
+                        p for p in img_dir.glob("page_*.png")
+                        if re.match(r"^page_\d{3}\.png$", p.name)
+                    )
                     state.generated_pages = [str(p.resolve()) for p in imgs]
             except Exception as e:  # pragma: no cover
                 log.warning(f"[paper2ppt_wf_api] auto_fill_generated_pages failed: {e}")
@@ -374,7 +378,6 @@ async def run_paper2ppt_wf_api(
     )
 
     # final_state: Paper2FigureState = await run_workflow("paper2ppt_parallel", state)
-    log.critical(f'[wa_paper2ppt] req.ref_img 路径 {req.ref_img}')
     final_state: Paper2FigureState = await run_workflow("paper2ppt_parallel_consistent_style", state)
 
     # 提取关键输出

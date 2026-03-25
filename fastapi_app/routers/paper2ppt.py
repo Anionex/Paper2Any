@@ -277,7 +277,11 @@ async def get_version_history(
             # 使用 _to_outputs_url 转换路径为完整的 HTTP URL
             item["imageUrl"] = _to_outputs_url(item["image_path"], request)
 
-        return {"success": True, "versions": history}
+        return {
+            "success": True,
+            "versions": history,
+            "current_version": ImageVersionManager.get_current_version(img_dir, page_id),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取版本历史失败: {str(e)}")
@@ -326,7 +330,8 @@ async def revert_to_version(
         return {
             "success": True,
             "currentImageUrl": image_url,
-            "revertedToVersion": target_version
+            "revertedToVersion": target_version,
+            "currentVersion": ImageVersionManager.get_current_version(img_dir, page_id),
         }
 
     except HTTPException:
