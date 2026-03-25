@@ -320,6 +320,7 @@ class Paper2PPTService:
             email=req.email or "",
             all_edited_down=all_edited_down_bool,
             regenerate_from_current=regenerate_from_current_bool,
+            edit_region=req.edit_region or "",
             image_resolution=req.image_resolution or "2K",
         )
 

@@ -471,6 +471,7 @@ class PPTGenerationRequest(BaseModel):
     edit_prompt: Optional[str] = None
     regenerate_from_outline: str = "false"
     regenerate_from_current: str = "true"
+    edit_region: Optional[str] = None
     # 图像生成分辨率（1K/2K/4K 等）
     image_resolution: Optional[str] = None
 
@@ -540,6 +541,7 @@ class Paper2PPTRequest(BaseModel):
     all_edited_down: bool = False
     use_ai_edit: bool = False
     regenerate_from_current: bool = True
+    edit_region: str = ""
 
     def get(self, key: str, default=None):
         """

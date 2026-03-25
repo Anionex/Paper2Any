@@ -12,6 +12,7 @@ import {
   SlideOutline,
   GenerateResult,
   ImageVersion,
+  SlideEditRegion,
   UploadMode,
   StyleMode,
   StylePreset,
@@ -77,6 +78,7 @@ const Paper2PptPage = () => {
   const [generateResults, setGenerateResults] = useState<GenerateResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [slidePrompt, setSlidePrompt] = useState('');
+  const [slideEditRegion, setSlideEditRegion] = useState<SlideEditRegion | null>(null);
   const [generateTaskMessage, setGenerateTaskMessage] = useState('');
   
   // Step 4: 完成状态
@@ -1233,6 +1235,9 @@ const Paper2PptPage = () => {
       formData.append('page_id', String(currentSlideIndex));
       formData.append('edit_prompt', slidePrompt);
       formData.append('regenerate_from_current', 'true');
+      if (slideEditRegion) {
+        formData.append('edit_region', JSON.stringify(slideEditRegion));
+      }
 
       // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
       if (styleMode === 'reference' && referenceImage) {
@@ -1260,6 +1265,7 @@ const Paper2PptPage = () => {
       applyEditTaskResult(currentSlideIndex, data);
       setActiveTask(null);
       setSlidePrompt('');
+      setSlideEditRegion(null);
       await fetchVersionHistory(currentSlideIndex);
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
@@ -1282,6 +1288,7 @@ const Paper2PptPage = () => {
       const nextIndex = currentSlideIndex + 1;
       setCurrentSlideIndex(nextIndex);
       setSlidePrompt('');
+      setSlideEditRegion(null);
     } else {
       setCurrentStep('complete');
     }
@@ -1466,6 +1473,7 @@ const Paper2PptPage = () => {
     setProgressStatus('');
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
+    setSlideEditRegion(null);
     clearDraftAndTasks();
   };
 
@@ -1542,6 +1550,8 @@ const Paper2PptPage = () => {
               setSlidePrompt={setSlidePrompt}
               saveCurrentSlideEdits={saveCurrentSlideEdits}
               handleRegenerateSlideFromOutline={handleRegenerateSlideFromOutline}
+              slideEditRegion={slideEditRegion}
+              setSlideEditRegion={setSlideEditRegion}
               handleRegenerateSlide={handleRegenerateSlide}
               handleConfirmSlide={handleConfirmSlide}
               setCurrentStep={setCurrentStep}

@@ -342,6 +342,32 @@ def _parse_page_index_from_image_path(path: str) -> Optional[int]:
     return int(match.group(1))
 
 
+def _parse_edit_region(raw_region: str) -> Optional[Dict[str, float]]:
+    if not raw_region:
+        return None
+    try:
+        region = json.loads(raw_region)
+    except Exception:
+        return None
+
+    if not isinstance(region, dict):
+        return None
+
+    keys = ("x", "y", "width", "height")
+    if not all(isinstance(region.get(key), (int, float)) for key in keys):
+        return None
+
+    parsed = {
+        "x": max(0.0, min(1.0, float(region["x"]))),
+        "y": max(0.0, min(1.0, float(region["y"]))),
+        "width": max(0.0, min(1.0, float(region["width"]))),
+        "height": max(0.0, min(1.0, float(region["height"]))),
+    }
+    if parsed["width"] <= 0 or parsed["height"] <= 0:
+        return None
+    return parsed
+
+
 @register("paper2ppt_parallel_consistent_style")
 def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa: N802
     """
@@ -804,6 +830,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         style = getattr(state.request, "style", None) or "kartoon"
         image_resolution = getattr(state.request, "image_resolution", None) or "2K"
         preserve_current = bool(getattr(state.request, "regenerate_from_current", True))
+        edit_region = _parse_edit_region(getattr(state.request, "edit_region", "") or "")
 
         # 检查 ref_img
         user_ref_img = getattr(state.request, "ref_img", None)
@@ -819,6 +846,14 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         style_hint = ""
         if style and style.strip() and style.strip().lower() != "kartoon":
             style_hint = f" Additional style guidance: {style.strip()}."
+        region_hint = ""
+        if edit_region:
+            region_hint = (
+                " Only modify the content inside the selected region "
+                f"(x={edit_region['x']:.3f}, y={edit_region['y']:.3f}, "
+                f"width={edit_region['width']:.3f}, height={edit_region['height']:.3f}) "
+                "relative to the full slide. Preserve everything outside that region exactly."
+            )
 
         if user_ref_img:
             # 有参考图 -> 多图融合
@@ -829,20 +864,21 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
                         "Treat the second image as the canonical current slide. Preserve its layout hierarchy, typography rhythm, "
                         "existing content blocks, and overall composition unless the instruction explicitly requires a change. "
                         "Use the first image only as a style anchor for palette, texture, decoration, and deck consistency. "
-                        f"Keep the edited result fully aligned with the current slide template.{style_hint}"
+                        f"Keep the edited result fully aligned with the current slide template.{region_hint}{style_hint}"
                     )
                 else:
                     full_prompt = (
                         f"Refine this slide image (second image) based on instruction: '{prompt}'. "
                         f"CRITICAL: You MUST strictly match the style of the first image (Reference). "
                         f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
-                        f"to be consistent with the {style} style of the first image.{style_hint}"
+                        f"to be consistent with the {style} style of the first image.{region_hint}"
+                        f"{style_hint}"
                     )
             else:
                 full_prompt = (
                     f"Refine this slide image (second image) to match the style of the first image (Reference). "
                     f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
-                    f"to be consistent with the {style} style of the first image."
+                    f"to be consistent with the {style} style of the first image.{region_hint}"
                     f"{style_hint}"
                 )
             
@@ -865,18 +901,18 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
                         "Use the current slide image as the strict baseline. Preserve its deck template, color system, layout structure, "
                         "content ordering, and typography unless the instruction explicitly asks for a specific change. "
                         "Do not redesign the page from scratch or drift to a different slide style. "
-                        f"Keep the result consistent with the existing slide family.{style_hint}"
+                        f"Keep the result consistent with the existing slide family.{region_hint}{style_hint}"
                     )
                 else:
                     full_prompt = (
                         f"Beautify this PowerPoint slide based on this instruction: '{prompt}'. "
-                        f"Enhance the visual aesthetics, layout, and background while preserving the core message."
+                        f"Enhance the visual aesthetics, layout, and background while preserving the core message.{region_hint}"
                     )
             else:
                 full_prompt = (
                     f"Beautify and re-design this PowerPoint slide. "
                     f"Transform the existing design into a high-end, professional {style} style presentation. "
-                    f"Enhance the visual aesthetics, layout, and background while preserving the core message."
+                    f"Enhance the visual aesthetics, layout, and background while preserving the core message.{region_hint}"
                 )
 
             await generate_or_edit_and_save_image_async(

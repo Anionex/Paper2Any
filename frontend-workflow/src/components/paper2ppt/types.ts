@@ -10,6 +10,13 @@ export interface SlideOutline {
   generated_img_path?: string;
 }
 
+export interface SlideEditRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ImageVersion {
   versionNumber: number;
   imageUrl: string;
