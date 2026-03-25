@@ -454,13 +454,15 @@ const Paper2PptPage = () => {
       const pageImg = typeof page?.generated_img_path === 'string'
         ? page.generated_img_path
         : findPageImage(data.all_output_files, index);
+      const pageImagePath = stripImageQuery(pageImg || result.afterImagePath || result.afterImage);
       return {
         ...result,
-        afterImagePath: stripImageQuery(pageImg || result.afterImagePath || result.afterImage),
-        afterImage: pageImg ? withCacheBust(pageImg) : '',
-        status: pageImg ? 'done' as const : 'pending' as const,
+        afterImagePath: pageImagePath,
+        afterImage: pageImagePath ? withCacheBust(pageImagePath) : '',
+        status: pageImagePath ? 'done' as const : 'pending' as const,
         versionHistory: [],
         currentVersionIndex: -1,
+        currentVersionNumber: typeof page?.current_version === 'number' ? page.current_version : null,
       };
     });
 
@@ -482,6 +484,9 @@ const Paper2PptPage = () => {
             afterImagePath: stripImageQuery(pageImg),
             afterImage: withCacheBust(pageImg),
             status: 'done' as const,
+            currentVersionNumber: typeof page?.current_version === 'number'
+              ? page.current_version
+              : result.currentVersionNumber ?? null,
           }
         : result
     )));
@@ -1100,13 +1105,16 @@ const Paper2PptPage = () => {
                 }));
                 const selectedVersion = data.current_version
                   ?? versionHistory.find((item: ImageVersion) => item.isCurrentVersion)?.versionNumber
+                  ?? result.currentVersionNumber
                   ?? null;
+                const selectedIndex = selectedVersion == null
+                  ? -1
+                  : versionHistory.findIndex((item: ImageVersion) => item.versionNumber === selectedVersion);
                 return {
                   ...result,
                   versionHistory,
-                  currentVersionIndex: selectedVersion == null
-                    ? -1
-                    : versionHistory.findIndex((item: ImageVersion) => item.versionNumber === selectedVersion),
+                  currentVersionNumber: selectedVersion,
+                  currentVersionIndex: selectedIndex,
                 };
               })()
             : result
@@ -1146,7 +1154,9 @@ const Paper2PptPage = () => {
         const updatedResults = [...generateResults];
         updatedResults[currentSlideIndex] = {
           ...updatedResults[currentSlideIndex],
-          afterImage: data.currentImageUrl + '?t=' + Date.now(),
+          afterImagePath: stripImageQuery(data.currentImageUrl),
+          afterImage: withCacheBust(data.currentImageUrl),
+          currentVersionNumber: data.currentVersion ?? versionNumber,
           currentVersionIndex: updatedResults[currentSlideIndex].versionHistory.findIndex(
             item => item.versionNumber === (data.currentVersion ?? versionNumber),
           ),
@@ -1304,12 +1314,6 @@ const Paper2PptPage = () => {
       }
 
       const pagecontent = buildPagecontentForGeneration();
-      console.log(`[handleRegenerateSlide] 当前编辑页面: ${currentSlideIndex}`);
-      console.log(`[handleRegenerateSlide] 完整pagecontent:`, JSON.stringify(pagecontent.map((p, i) => ({
-        idx: i,
-        title: p.title,
-        generated_img_path: p.generated_img_path
-      })), null, 2));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
       const task = await submitPaper2PptTask(formData);
