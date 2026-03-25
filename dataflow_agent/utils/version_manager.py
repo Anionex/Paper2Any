@@ -56,7 +56,7 @@ class ImageVersionManager:
                 version_num = payload.get("current_version")
                 if isinstance(version_num, int):
                     return version_num
-            except Exception:
+            except json.JSONDecodeError:
                 pass
 
         current_path = ImageVersionManager._page_file(img_dir, page_idx)
@@ -268,7 +268,7 @@ class ImageVersionManager:
             if meta_file.exists():
                 try:
                     metadata = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
+                except json.JSONDecodeError:
                     metadata = {
                         "version": version_num,
                         "page_index": target_page_idx,

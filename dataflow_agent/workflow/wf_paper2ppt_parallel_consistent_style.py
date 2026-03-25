@@ -347,7 +347,7 @@ def _parse_edit_region(raw_region: str) -> Optional[Dict[str, float]]:
         return None
     try:
         region = json.loads(raw_region)
-    except Exception:
+    except json.JSONDecodeError:
         return None
 
     if not isinstance(region, dict):
