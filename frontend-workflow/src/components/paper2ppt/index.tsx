@@ -17,7 +17,7 @@ import {
   StylePreset,
   Paper2PPTTaskResponse,
 } from './types';
-import { MAX_FILE_SIZE, STORAGE_KEY } from './constants';
+import { MAX_FILE_SIZE, STORAGE_KEY, STYLE_PRESETS } from './constants';
 
 import Banner from './Banner';
 import StepIndicator from './StepIndicator';
@@ -375,13 +375,7 @@ const Paper2PptPage = () => {
   };
 
   const getStyleDescription = (preset: string): string => {
-    const styles: Record<string, string> = {
-      modern: '现代简约风格，使用干净的线条和充足的留白',
-      business: '商务专业风格，稳重大气，适合企业演示',
-      academic: '学术报告风格，清晰的层次结构，适合论文汇报',
-      creative: '创意设计风格，活泼生动，色彩丰富',
-    };
-    return styles[preset] || styles.modern;
+    return STYLE_PRESETS[preset] || STYLE_PRESETS.modern;
   };
 
   const handleUploadAndParse = async () => {

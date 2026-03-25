@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import QRCodeTooltip from '../QRCodeTooltip';
 import DemoCard from './DemoCard';
+import { STYLE_PRESET_META } from './constants';
 import { UploadMode, StyleMode, StylePreset } from './types';
 
 interface UploadStepProps {
@@ -422,17 +423,46 @@ const UploadStep: React.FC<UploadStepProps> = ({
             {styleMode === 'prompt' ? (
               <>
                 <div className="mb-3">
-                  <label className="block text-xs text-gray-400 mb-1">{t('upload.config.stylePreset')}</label>
-                  <select 
-                    value={stylePreset} 
-                    onChange={e => setStylePreset(e.target.value as typeof stylePreset)} 
-                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="modern">{t('upload.config.presets.modern')}</option>
-                    <option value="business">{t('upload.config.presets.business')}</option>
-                    <option value="academic">{t('upload.config.presets.academic')}</option>
-                    <option value="creative">{t('upload.config.presets.creative')}</option>
-                  </select>
+                  <label className="block text-xs text-gray-400 mb-2">{t('upload.config.stylePreset')}</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                      ['modern', t('upload.config.presets.modern')],
+                      ['business', t('upload.config.presets.business')],
+                      ['academic', t('upload.config.presets.academic')],
+                      ['creative', t('upload.config.presets.creative')],
+                    ] as const).map(([preset, label]) => {
+                      const meta = STYLE_PRESET_META[preset];
+                      const active = stylePreset === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setStylePreset(preset)}
+                          className={`overflow-hidden rounded-2xl border text-left transition-all ${
+                            active
+                              ? 'border-purple-400 bg-purple-500/10 shadow-[0_10px_30px_rgba(168,85,247,0.18)]'
+                              : 'border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/10'
+                          }`}
+                        >
+                          <div className="aspect-[16/9] overflow-hidden border-b border-white/10 bg-black/30">
+                            <img
+                              src={meta.preview}
+                              alt={label}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-sm font-semibold text-white">{label}</div>
+                              {active && <span className="text-[10px] text-purple-300">已选择</span>}
+                            </div>
+                            <div className="mt-1 text-[11px] leading-relaxed text-gray-400">{meta.description}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">{t('upload.config.promptLabel')}</label>
