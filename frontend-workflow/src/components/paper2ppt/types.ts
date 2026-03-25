@@ -20,12 +20,15 @@ export interface ImageVersion {
 
 export interface GenerateResult {
   slideId: string;
+  slideSignature?: string;
   beforeImage: string;
   afterImage: string;
+  afterImagePath?: string;
   status: 'pending' | 'processing' | 'done';
   userPrompt?: string;
   versionHistory: ImageVersion[];
   currentVersionIndex: number;
+  wasReused?: boolean;
 }
 
 export type Paper2PPTTaskStatus = 'queued' | 'running' | 'done' | 'failed';

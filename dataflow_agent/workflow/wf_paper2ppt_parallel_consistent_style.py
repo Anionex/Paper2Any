@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -200,6 +202,144 @@ def _extract_image_path_from_pagecontent_item(item: Any) -> Optional[str]:
     return None
 
 
+async def _regenerate_single_page_from_content(
+    state: Paper2FigureState,
+    idx: int,
+    item: Dict[str, Any],
+    save_path: str,
+    ref_img_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    async def _call_image_api_with_retry(coro_factory, retries: int = 3, delay: float = 1.0) -> bool:
+        last_err: Optional[Exception] = None
+        for attempt in range(1, retries + 1):
+            try:
+                await coro_factory()
+                return True
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                log.error(f"[paper2ppt] single page regen failed attempt {attempt}/{retries}: {e}")
+                if attempt < retries:
+                    try:
+                        await asyncio.sleep(delay)
+                    except Exception:
+                        pass
+        log.error(f"[paper2ppt] single page regen failed after {retries} attempts. last_err={last_err}")
+        return False
+
+    style = getattr(state.request, "style", None) or "kartoon"
+    aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
+    image_resolution = getattr(state.request, "image_resolution", None) or "2K"
+
+    style_hint = ""
+    if style and style.strip() and style.strip().lower() != "kartoon":
+        style_hint = f"\nAdditional style guidance: {style.strip()}\n"
+
+    base_content, asset_path, is_edit_originally = await _make_prompt_for_structured_page(
+        item,
+        style=style,
+        state=state,
+    )
+
+    use_ref = bool(ref_img_path and os.path.exists(ref_img_path))
+
+    if use_ref:
+        if is_edit_originally and asset_path:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"--------------------------------------------------\n"
+                f"TASK: Generate a {style} presentation slide.\n"
+                f"INPUT IMAGES:\n"
+                f"  - IMAGE 1 (First Image): STYLE REFERENCE. Strictly follow its color palette, and background style.\n"
+                f"  - IMAGE 2 (Second Image): CONTENT ASSET. Incorporate the chart/table/figure from this image into the slide.\n\n"
+                f"INSTRUCTION: Create a cohesive slide that presents the content from Image 2 but looks exactly like it belongs to the deck of Image 1.\n"
+                f"{style_hint}"
+                f"Language: {state.request.language}"
+            )
+            mode = "regen_multi_edit_ref_asset"
+            ok = await _call_image_api_with_retry(
+                lambda: gemini_multi_image_edit_async(
+                    prompt=final_prompt,
+                    image_paths=[ref_img_path, asset_path],
+                    save_path=save_path,
+                    api_url=state.request.chat_api_url,
+                    api_key=state.request.chat_api_key or os.getenv("DF_API_KEY"),
+                    model=state.request.gen_fig_model,
+                    aspect_ratio=aspect_ratio,
+                    resolution=image_resolution,
+                )
+            )
+        else:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"Reference the style of the provided image (layout, color, background), "
+                f"but generate NEW CONTENT based on the text description above. "
+                f"Keep the background style consistent.\n"
+                f"{style_hint}"
+                f"Language: {state.request.language}"
+            )
+            mode = "regen_ref_style"
+            ok = await _call_image_api_with_retry(
+                lambda: generate_or_edit_and_save_image_async(
+                    prompt=final_prompt,
+                    save_path=save_path,
+                    aspect_ratio=aspect_ratio,
+                    api_url=state.request.chat_api_url,
+                    api_key=state.request.chat_api_key or os.getenv("DF_API_KEY"),
+                    model=state.request.gen_fig_model,
+                    image_path=ref_img_path,
+                    use_edit=True,
+                    resolution=image_resolution,
+                )
+            )
+    else:
+        if is_edit_originally:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"根据上述内容绘制ppt，把这个图作为PPT的一部分。生成{style}风格的PPT. \n "
+                f"使用语言：{state.request.language} !!!"
+            )
+        else:
+            final_prompt = (
+                f"{base_content}\n\n"
+                f"根据上述内容。生成{style}风格的 PPT 图像, \n "
+                f"使用语言：{state.request.language}"
+            )
+
+        mode = "regen_origin_edit" if is_edit_originally else "regen_origin_gen"
+        ok = await _call_image_api_with_retry(
+            lambda: generate_or_edit_and_save_image_async(
+                prompt=final_prompt,
+                save_path=save_path,
+                aspect_ratio=aspect_ratio,
+                api_url=state.request.chat_api_url,
+                api_key=state.request.chat_api_key or os.getenv("DF_API_KEY"),
+                model=state.request.gen_fig_model,
+                image_path=asset_path,
+                use_edit=is_edit_originally,
+                resolution=image_resolution,
+            )
+        )
+
+    if not ok:
+        raise ValueError(f"[paper2ppt] failed to regenerate page from outline: idx={idx}")
+
+    out_item = dict(item)
+    out_item.update({
+        "generated_img_path": save_path,
+        "page_idx": idx,
+        "mode": mode,
+        "style": style,
+    })
+    return out_item
+
+
+def _parse_page_index_from_image_path(path: str) -> Optional[int]:
+    if not path:
+        return None
+    match = re.search(r"page_(\d{3})(?:_v\d+)?\.png$", Path(path).name)
+    if not match:
+        return None
+    return int(match.group(1))
 @register("paper2ppt_parallel_consistent_style")
 def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa: N802
     """
@@ -257,6 +397,10 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         result_root = Path(_ensure_result_path(state))
         img_dir = result_root / "ppt_pages"
         img_dir.mkdir(parents=True, exist_ok=True)
+        reuse_snapshot_dir = result_root / ".reuse_snapshot"
+        if reuse_snapshot_dir.exists():
+            shutil.rmtree(reuse_snapshot_dir, ignore_errors=True)
+        reuse_snapshot_dir.mkdir(parents=True, exist_ok=True)
 
         style = getattr(state.request, "style", None) or "kartoon"
         aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
@@ -266,6 +410,26 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         if not page_items:
             log.warning("Pagecontent is empty, nothing to generate.")
             return state
+
+        for item in page_items:
+            if not isinstance(item, dict):
+                continue
+            source_path = _abs_path(str(item.get("generated_img_path") or ""))
+            source_page_idx = _parse_page_index_from_image_path(source_path)
+            if not source_path or source_page_idx is None:
+                continue
+            if Path(source_path).parent.resolve() != img_dir.resolve():
+                continue
+            if (reuse_snapshot_dir / f"page_{source_page_idx:03d}.png").exists():
+                continue
+            cloned = ImageVersionManager.clone_page_versions_from_dir(
+                source_dir=img_dir,
+                source_page_idx=source_page_idx,
+                target_dir=reuse_snapshot_dir,
+                target_page_idx=source_page_idx,
+            )
+            if cloned:
+                log.info(f"[paper2ppt] Snapshotted reusable page {source_page_idx} -> {cloned}")
 
         # 检查是否有用户传入的参考图
         user_ref_img = getattr(state.request, "ref_img", None)
@@ -285,6 +449,37 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         ) -> Dict[str, Any]:
             
             save_path = str((img_dir / f"page_{idx:03d}.png").resolve())
+
+            if isinstance(item, dict):
+                existing_generated = _abs_path(str(item.get("generated_img_path") or ""))
+                if existing_generated and os.path.exists(existing_generated):
+                    source_page_idx = _parse_page_index_from_image_path(existing_generated)
+                    source_parent = Path(existing_generated).parent.resolve()
+                    if source_page_idx is not None and source_parent == img_dir.resolve():
+                        cloned = ImageVersionManager.clone_page_versions_from_dir(
+                            source_dir=reuse_snapshot_dir,
+                            source_page_idx=source_page_idx,
+                            target_dir=img_dir,
+                            target_page_idx=idx,
+                        )
+                        if cloned:
+                            out_item = dict(item)
+                            out_item.update({
+                                "generated_img_path": cloned,
+                                "page_idx": idx,
+                                "mode": "reused_existing",
+                                "style": style,
+                            })
+                            return out_item
+                    shutil.copy2(existing_generated, save_path)
+                    out_item = dict(item)
+                    out_item.update({
+                        "generated_img_path": save_path,
+                        "page_idx": idx,
+                        "mode": "reused_existing",
+                        "style": style,
+                    })
+                    return out_item
 
             # 构建可选的额外风格说明（当同时有参考图和 style 文本时融合使用）
             style_hint = ""
@@ -565,6 +760,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
 
         state.pagecontent = new_pagecontent
         state.gen_down = True
+        shutil.rmtree(reuse_snapshot_dir, ignore_errors=True)
         return state
 
     async def edit_single_page(state: Paper2FigureState) -> Paper2FigureState:

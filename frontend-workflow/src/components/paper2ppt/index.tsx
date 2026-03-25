@@ -18,6 +18,7 @@ import {
   Paper2PPTTaskResponse,
 } from './types';
 import { MAX_FILE_SIZE, STORAGE_KEY } from './constants';
+import { buildResultForSlide, buildSlideSignature, stripImageQuery, withCacheBust } from './utils';
 
 import Banner from './Banner';
 import StepIndicator from './StepIndicator';
@@ -226,7 +227,7 @@ const Paper2PptPage = () => {
     if (currentStep === 'generate' && currentSlideIndex >= 0 && generateResults[currentSlideIndex]) {
       const currentResult = generateResults[currentSlideIndex];
       // 如果版本历史为空且页面已生成，则自动加载版本历史
-      if (currentResult.versionHistory.length === 0 && currentResult.afterImage) {
+      if (currentResult.versionHistory.length === 0 && (currentResult.afterImagePath || currentResult.afterImage)) {
         console.log(`[Paper2PptPage] 自动加载页面 ${currentSlideIndex} 的版本历史`);
         fetchVersionHistory(currentSlideIndex);
       }
@@ -319,6 +320,57 @@ const Paper2PptPage = () => {
     });
   };
 
+  const findPageImage = (outputFiles: string[] | undefined, pageIndex: number) => {
+    if (!outputFiles || !Array.isArray(outputFiles)) return '';
+    const pageNumStr = String(pageIndex).padStart(3, '0');
+    return outputFiles.find((url: string) => url.includes(`ppt_pages/page_${pageNumStr}.png`)) || '';
+  };
+
+  const applyBatchGenerateResult = (
+    data: NonNullable<Paper2PPTTaskResponse['result']>,
+    baseResults: GenerateResult[],
+  ) => {
+    if (data.result_path) {
+      setResultPath(data.result_path);
+    }
+
+    const updatedResults = baseResults.map((result, index) => {
+      const page = data.pagecontent?.[index] as Record<string, unknown> | undefined;
+      const pageImg = typeof page?.generated_img_path === 'string'
+        ? page.generated_img_path
+        : findPageImage(data.all_output_files, index);
+      return {
+        ...result,
+        afterImagePath: stripImageQuery(pageImg || result.afterImagePath || result.afterImage),
+        afterImage: pageImg ? withCacheBust(pageImg) : '',
+        status: pageImg ? 'done' as const : 'pending' as const,
+        versionHistory: [],
+        currentVersionIndex: -1,
+      };
+    });
+
+    preloadGeneratedImages(data.all_output_files);
+    setGenerateResults(updatedResults);
+  };
+
+  const applyEditTaskResult = (pageIndex: number, data: NonNullable<Paper2PPTTaskResponse['result']>) => {
+    const page = data.pagecontent?.[pageIndex] as Record<string, unknown> | undefined;
+    const pageImg = typeof page?.generated_img_path === 'string'
+      ? page.generated_img_path
+      : findPageImage(data.all_output_files, pageIndex);
+    if (!pageImg) return;
+
+    setGenerateResults(prev => prev.map((result, index) => (
+      index === pageIndex
+        ? {
+            ...result,
+            afterImagePath: stripImageQuery(pageImg),
+            afterImage: withCacheBust(pageImg),
+            status: 'done' as const,
+          }
+        : result
+    )));
+  };
   // ============== Step 1: 上传处理 ==============
   const validateDocFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -514,12 +566,8 @@ const Paper2PptPage = () => {
       }
       
       const convertedSlides: SlideOutline[] = data.pagecontent.map((item: any, index: number) => ({
-        id: String(index + 1),
-        pageNum: index + 1,
-        title: item.title || `第 ${index + 1} 页`,
-        layout_description: item.layout_description || '',
-        key_points: item.key_points || [],
-        asset_ref: item.asset_ref || null,
+        ...normalizeSlideOutline(item, index),
+        id: `${Date.now()}-${index}`,
       }));
       
       clearInterval(progressInterval);
@@ -691,14 +739,16 @@ const Paper2PptPage = () => {
         throw new Error('AI 调整失败，请重试');
       }
 
-      const refinedSlides: SlideOutline[] = data.pagecontent.map((item: any, index: number) => ({
-        id: String(index + 1),
-        pageNum: index + 1,
-        title: item.title || `第 ${index + 1} 页`,
-        layout_description: item.layout_description || '',
-        key_points: item.key_points || [],
-        asset_ref: item.asset_ref || null,
-      }));
+      const previousBySignature = new Map(
+        currentOutline.map((slide) => [buildSlideSignature(slide), slide.id]),
+      );
+      const refinedSlides: SlideOutline[] = data.pagecontent.map((item: any, index: number) => {
+        const nextSlide = normalizeSlideOutline(item, index);
+        return {
+          ...nextSlide,
+          id: previousBySignature.get(buildSlideSignature(nextSlide)) || String(Date.now() + index),
+        };
+      });
 
       setOutlineData(refinedSlides);
       setOutlineFeedback('');
@@ -712,21 +762,34 @@ const Paper2PptPage = () => {
 
   const handleConfirmOutline = async () => {
     if (isRefiningOutline) return;
+
+    const previousBySignature = new Map<string, GenerateResult[]>();
+    generateResults.forEach((result) => {
+      if (result.slideSignature && (result.afterImagePath || result.afterImage)) {
+        const bucket = previousBySignature.get(result.slideSignature) || [];
+        bucket.push(result);
+        previousBySignature.set(result.slideSignature, bucket);
+      }
+    });
+
+    const nextResults: GenerateResult[] = outlineData.map((slide) => {
+      const signature = buildSlideSignature(slide);
+      const bucket = previousBySignature.get(signature) || [];
+      const previous = bucket.shift();
+      if (bucket.length === 0) {
+        previousBySignature.delete(signature);
+      } else {
+        previousBySignature.set(signature, bucket);
+      }
+      return buildResultForSlide(slide, signature, previous);
+    });
+
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
     setGenerateTaskMessage('');
     setError(null);
-    
-    const results: GenerateResult[] = outlineData.map((slide) => ({
-      slideId: slide.id,
-      beforeImage: '',
-      afterImage: '',
-      status: 'processing' as const,
-      versionHistory: [],
-      currentVersionIndex: -1,
-    }));
-    setGenerateResults(results);
+    setGenerateResults(nextResults);
     
     try {
       const formData = new FormData();
@@ -747,11 +810,12 @@ const Paper2PptPage = () => {
         formData.set('style', globalPrompt || '');
       }
 
-      const pagecontent = outlineData.map((slide) => ({
+      const pagecontent = outlineData.map((slide, index) => ({
         title: slide.title,
         layout_description: slide.layout_description,
         key_points: slide.key_points,
         asset_ref: slide.asset_ref,
+        generated_img_path: nextResults[index].afterImagePath || undefined,
       }));
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
@@ -761,45 +825,44 @@ const Paper2PptPage = () => {
       const data = await pollPaper2PptTask(task.task_id, (status) => {
         setGenerateTaskMessage(status.message || '正在生成页面');
       });
-
-      if (data.result_path) {
-        setResultPath(data.result_path);
-      }
-
-      const updatedResults = results.map((result, index) => {
-        const pageNumStr = String(index).padStart(3, '0');
-        let afterImage = '';
-        
-        if (data.all_output_files && Array.isArray(data.all_output_files)) {
-          const pageImg = data.all_output_files.find((url: string) => 
-            url.includes(`ppt_pages/page_${pageNumStr}.png`)
-          );
-          if (pageImg) {
-            afterImage = pageImg;
-          }
-        }
-        
-        return {
-          ...result,
-          afterImage,
-          status: 'done' as const,
-        };
-      });
-      
-      preloadGeneratedImages(data.all_output_files);
-      
-      setGenerateResults(updatedResults);
+      applyBatchGenerateResult(data, nextResults);
       
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
-      setGenerateResults(results.map(r => ({ ...r, status: 'pending' as const })));
+      setGenerateResults(nextResults.map(r => ({ ...r, status: 'pending' as const })));
     } finally {
       setGenerateTaskMessage('');
       setIsGenerating(false);
     }
   };
 
+  const saveCurrentSlideEdits = (layoutDescription: string, keyPoints: string[]) => {
+    setOutlineData(prev =>
+      prev.map((slide, slideIndex) => {
+        if (slideIndex !== currentSlideIndex) return slide;
+        return {
+          ...slide,
+          layout_description: layoutDescription,
+          key_points: keyPoints.length > 0 ? keyPoints : [''],
+        };
+      })
+    );
+  };
+
+  const buildPagecontentForGeneration = () => (
+    outlineData.map((slide, idx) => {
+      const result = generateResults[idx];
+      const generatedPath = result?.afterImagePath || stripImageQuery(result?.afterImage) || '';
+      return {
+        title: slide.title,
+        layout_description: slide.layout_description,
+        key_points: slide.key_points,
+        asset_ref: slide.asset_ref,
+        generated_img_path: generatedPath || undefined,
+      };
+    })
+  );
   // ============== 版本历史相关函数 ==============
   const convertToHttpUrl = (path: string): string => {
     // 如果已经是HTTP URL，直接返回

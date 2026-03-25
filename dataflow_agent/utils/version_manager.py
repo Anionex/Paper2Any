@@ -228,3 +228,81 @@ class ImageVersionManager:
         ImageVersionManager.set_current_version(img_dir, page_idx, target_version)
 
         return str(current_path)
+
+    @staticmethod
+    def clone_page_versions(img_dir: Path, source_page_idx: int, target_page_idx: int) -> Optional[str]:
+        """Clone a page image and its version history to another page index."""
+        return ImageVersionManager.clone_page_versions_from_dir(
+            source_dir=img_dir,
+            source_page_idx=source_page_idx,
+            target_dir=img_dir,
+            target_page_idx=target_page_idx,
+        )
+
+    @staticmethod
+    def clone_page_versions_from_dir(
+        source_dir: Path,
+        source_page_idx: int,
+        target_dir: Path,
+        target_page_idx: int,
+    ) -> Optional[str]:
+        """Clone a page image and its version history across directories."""
+        source_current = ImageVersionManager._page_file(source_dir, source_page_idx)
+        if not source_current.exists():
+            return None
+
+        ImageVersionManager.remove_page_versions(target_dir, target_page_idx)
+
+        target_current = ImageVersionManager._page_file(target_dir, target_page_idx)
+        shutil.copy2(source_current, target_current)
+
+        pattern = f"page_{source_page_idx:03d}_v*.png"
+        for img_file in sorted(source_dir.glob(pattern)):
+            match = re.search(r"_v(\d+)\.png$", img_file.name)
+            if not match:
+                continue
+            version_num = int(match.group(1))
+            target_version = ImageVersionManager._version_file(target_dir, target_page_idx, version_num)
+            shutil.copy2(img_file, target_version)
+            meta_file = img_file.with_suffix(".json")
+            if meta_file.exists():
+                try:
+                    metadata = json.loads(meta_file.read_text(encoding="utf-8"))
+                except Exception:
+                    metadata = {
+                        "version": version_num,
+                        "page_index": target_page_idx,
+                        "prompt": "",
+                        "timestamp": int(time.time()),
+                    }
+                metadata["page_index"] = target_page_idx
+                target_version.with_suffix(".json").write_text(
+                    json.dumps(metadata, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+
+        current_version = ImageVersionManager.get_current_version(source_dir, source_page_idx)
+        if current_version is not None:
+            ImageVersionManager.set_current_version(target_dir, target_page_idx, current_version)
+        else:
+            pointer_file = ImageVersionManager._pointer_file(target_dir, target_page_idx)
+            if pointer_file.exists():
+                pointer_file.unlink()
+
+        return str(target_current)
+
+    @staticmethod
+    def remove_page_versions(img_dir: Path, page_idx: int) -> None:
+        current_file = ImageVersionManager._page_file(img_dir, page_idx)
+        if current_file.exists():
+            current_file.unlink()
+
+        pointer_file = ImageVersionManager._pointer_file(img_dir, page_idx)
+        if pointer_file.exists():
+            pointer_file.unlink()
+
+        for version_file in img_dir.glob(f"page_{page_idx:03d}_v*.png"):
+            version_file.unlink()
+            meta_file = version_file.with_suffix(".json")
+            if meta_file.exists():
+                meta_file.unlink()
