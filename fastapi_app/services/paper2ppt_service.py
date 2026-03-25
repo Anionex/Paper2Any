@@ -96,6 +96,8 @@ paper2ppt 业务 Service 层
 
 import copy
 import os
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -430,6 +432,31 @@ class Paper2PPTService:
         if not base_dir.exists():
             raise HTTPException(status_code=400, detail=f"result_path not exists: {base_dir}")
         return await self._ensure_reference_image(base_dir, reference_img)
+
+    async def upload_slide_asset(
+        self,
+        result_path: str,
+        asset_file: UploadFile,
+        request: Request | None,
+    ) -> Dict[str, Any]:
+        base_dir = self.resolve_result_path(result_path)
+        if not base_dir.exists():
+            raise HTTPException(status_code=400, detail=f"result_path not exists: {base_dir}")
+
+        suffix = Path(asset_file.filename or "").suffix.lower() or ".png"
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            raise HTTPException(status_code=400, detail="unsupported asset image type")
+
+        asset_dir = (base_dir / "input" / "pasted_assets").resolve()
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        asset_path = asset_dir / f"{int(time.time())}_{uuid.uuid4().hex[:8]}{suffix}"
+        asset_path.write_bytes(await asset_file.read())
+
+        return {
+            "success": True,
+            "asset_path": str(asset_path),
+            "asset_url": _to_outputs_url(str(asset_path), request),
+        }
 
     def normalize_ppt_response(
         self,

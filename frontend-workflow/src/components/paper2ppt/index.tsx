@@ -69,9 +69,11 @@ const Paper2PptPage = () => {
     title: string;
     layout_description: string;
     key_points: string[];
-  }>({ title: '', layout_description: '', key_points: [] });
+    asset_ref: string | null;
+  }>({ title: '', layout_description: '', key_points: [], asset_ref: null });
   const [outlineFeedback, setOutlineFeedback] = useState('');
   const [isRefiningOutline, setIsRefiningOutline] = useState(false);
+  const [uploadingAssetSlideId, setUploadingAssetSlideId] = useState<string | null>(null);
   
   // Step 3: 生成相关状态
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -723,12 +725,39 @@ const Paper2PptPage = () => {
   };
 
   // ============== Step 2: Outline 编辑处理 ==============
+  const uploadSlideAsset = async (file: File): Promise<string> => {
+    if (!resultPath) {
+      throw new Error('缺少 result_path，请重新解析内容后再粘贴图片');
+    }
+
+    const formData = new FormData();
+    formData.append('result_path', resultPath);
+    formData.append('asset_file', file);
+
+    const res = await fetch('/api/v1/paper2ppt/assets/upload', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, '图片上传失败'));
+    }
+
+    const data = await res.json();
+    if (!data.success || !data.asset_url) {
+      throw new Error('图片上传失败');
+    }
+    return data.asset_url as string;
+  };
+
   const handleEditStart = (slide: SlideOutline) => {
     setEditingId(slide.id);
     setEditContent({ 
       title: slide.title, 
       layout_description: slide.layout_description,
-      key_points: [...slide.key_points]
+      key_points: [...slide.key_points],
+      asset_ref: slide.asset_ref,
     });
   };
 
@@ -736,7 +765,13 @@ const Paper2PptPage = () => {
     if (!editingId) return;
     setOutlineData(prev => prev.map(s => 
       s.id === editingId 
-        ? { ...s, title: editContent.title, layout_description: editContent.layout_description, key_points: editContent.key_points }
+        ? {
+            ...s,
+            title: editContent.title,
+            layout_description: editContent.layout_description,
+            key_points: editContent.key_points,
+            asset_ref: editContent.asset_ref,
+          }
         : s
     ));
     setEditingId(null);
@@ -759,6 +794,34 @@ const Paper2PptPage = () => {
   };
 
   const handleEditCancel = () => setEditingId(null);
+
+  const handleSlideAssetUpload = async (slideId: string, file: File) => {
+    try {
+      setError(null);
+      setUploadingAssetSlideId(slideId);
+      const assetUrl = await uploadSlideAsset(file);
+      setOutlineData(prev => prev.map((slide) => (
+        slide.id === slideId ? { ...slide, asset_ref: assetUrl } : slide
+      )));
+      if (editingId === slideId) {
+        setEditContent(prev => ({ ...prev, asset_ref: assetUrl }));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '图片上传失败';
+      setError(message);
+    } finally {
+      setUploadingAssetSlideId(null);
+    }
+  };
+
+  const handleRemoveSlideAsset = (slideId: string) => {
+    setOutlineData(prev => prev.map((slide) => (
+      slide.id === slideId ? { ...slide, asset_ref: null } : slide
+    )));
+    if (editingId === slideId) {
+      setEditContent(prev => ({ ...prev, asset_ref: null }));
+    }
+  };
   
   const handleDeleteSlide = (id: string) => {
     setOutlineData(prev => prev.filter(s => s.id !== id).map((s, i) => ({ ...s, pageNum: i + 1 })));
@@ -810,6 +873,7 @@ const Paper2PptPage = () => {
                 title: editContent.title,
                 layout_description: editContent.layout_description,
                 key_points: editContent.key_points,
+                asset_ref: editContent.asset_ref,
               }
             : s
         )
@@ -1474,6 +1538,7 @@ const Paper2PptPage = () => {
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
     setSlideEditRegion(null);
+    setUploadingAssetSlideId(null);
     clearDraftAndTasks();
   };
 
@@ -1525,6 +1590,8 @@ const Paper2PptPage = () => {
           handleKeyPointChange={handleKeyPointChange}
           handleAddKeyPoint={handleAddKeyPoint}
           handleRemoveKeyPoint={handleRemoveKeyPoint}
+          handleSlideAssetUpload={handleSlideAssetUpload}
+          handleRemoveSlideAsset={handleRemoveSlideAsset}
           handleDeleteSlide={handleDeleteSlide}
           handleAddSlide={handleAddSlide}
           handleMoveSlide={handleMoveSlide}
@@ -1535,6 +1602,7 @@ const Paper2PptPage = () => {
           outlineFeedback={outlineFeedback}
           setOutlineFeedback={setOutlineFeedback}
           isRefiningOutline={isRefiningOutline}
+          uploadingAssetSlideId={uploadingAssetSlideId}
         />
       )}
           

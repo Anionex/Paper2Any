@@ -350,3 +350,22 @@ async def revert_to_version(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"恢复版本失败: {str(e)}")
+
+
+@router.post(
+    "/paper2ppt/assets/upload",
+    response_model=Dict[str, Any],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def upload_slide_asset(
+    request: Request,
+    result_path: str = Form(...),
+    asset_file: UploadFile = File(...),
+    service: Paper2PPTService = Depends(get_service),
+):
+    data = await service.upload_slide_asset(
+        result_path=result_path,
+        asset_file=asset_file,
+        request=request,
+    )
+    return data
