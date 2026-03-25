@@ -111,8 +111,8 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
                     <textarea value={editContent.layout_description} onChange={e => setEditContent(p => ({ ...p, layout_description: e.target.value }))} rows={2} disabled={isRefiningOutline} className={`w-full px-3 py-2 rounded-lg bg-black/40 border border-white/20 text-white text-sm outline-none focus:ring-2 focus:ring-purple-500 resize-none ${disabledClass}`} placeholder="布局描述" />
                     {isImageAsset(editContent.asset_ref) && (
                       <div className="rounded-xl border border-white/10 bg-black/20 p-2">
-                        <div className="relative overflow-hidden rounded-lg border border-white/10">
-                          <img src={editContent.asset_ref || ''} alt="配图素材" className="h-32 w-full object-cover" />
+                        <div className="relative flex h-40 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/30 p-2">
+                          <img src={editContent.asset_ref || ''} alt="配图素材" className="max-h-full w-full object-contain" />
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-3">
                           <span className="text-xs text-gray-400">已附加配图素材</span>
@@ -146,8 +146,8 @@ const OutlineStep: React.FC<OutlineStepProps> = ({
                     <div className="mb-2"><h4 className="text-white font-medium">{slide.title}</h4></div>
                     <p className="text-xs text-purple-400/70 mb-2 italic">📐 {slide.layout_description}</p>
                     {isImageAsset(slide.asset_ref) && (
-                      <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
-                        <img src={slide.asset_ref || ''} alt="页面配图" className="h-32 w-full object-cover" />
+                      <div className="mb-3 flex h-40 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2">
+                        <img src={slide.asset_ref || ''} alt="页面配图" className="max-h-full w-full object-contain" />
                       </div>
                     )}
                     <ul className="space-y-1">
