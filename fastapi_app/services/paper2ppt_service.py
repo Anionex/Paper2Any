@@ -289,6 +289,7 @@ class Paper2PPTService:
         get_down_bool = str(req.get_down).lower() in ("true", "1", "yes")
         all_edited_down_bool = str(req.all_edited_down).lower() in ("true", "1", "yes")
         regenerate_from_outline_bool = str(req.regenerate_from_outline).lower() in ("true", "1", "yes")
+        regenerate_from_current_bool = str(req.regenerate_from_current).lower() in ("true", "1", "yes")
 
         # 校验编辑/生成模式
         if get_down_bool:
@@ -318,6 +319,7 @@ class Paper2PPTService:
             ref_img=str(reference_img_path) if reference_img_path else "",
             email=req.email or "",
             all_edited_down=all_edited_down_bool,
+            regenerate_from_current=regenerate_from_current_bool,
             image_resolution=req.image_resolution or "2K",
         )
 

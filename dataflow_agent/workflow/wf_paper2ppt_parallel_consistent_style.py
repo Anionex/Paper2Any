@@ -803,6 +803,7 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         aspect_ratio = getattr(state, "aspect_ratio", None) or "16:9"
         style = getattr(state.request, "style", None) or "kartoon"
         image_resolution = getattr(state.request, "image_resolution", None) or "2K"
+        preserve_current = bool(getattr(state.request, "regenerate_from_current", True))
 
         # 检查 ref_img
         user_ref_img = getattr(state.request, "ref_img", None)
@@ -822,13 +823,21 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         if user_ref_img:
             # 有参考图 -> 多图融合
             if prompt:
-                full_prompt = (
-                    f"Refine this slide image (second image) based on instruction: '{prompt}'. "
-                    f"CRITICAL: You MUST strictly match the style of the first image (Reference). "
-                    f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
-                    f"to be consistent with the {style} style of the first image."
-                    f"{style_hint}"
-                )
+                if preserve_current:
+                    full_prompt = (
+                        f"Update the second slide image based on this instruction: '{prompt}'. "
+                        "Treat the second image as the canonical current slide. Preserve its layout hierarchy, typography rhythm, "
+                        "existing content blocks, and overall composition unless the instruction explicitly requires a change. "
+                        "Use the first image only as a style anchor for palette, texture, decoration, and deck consistency. "
+                        f"Keep the edited result fully aligned with the current slide template.{style_hint}"
+                    )
+                else:
+                    full_prompt = (
+                        f"Refine this slide image (second image) based on instruction: '{prompt}'. "
+                        f"CRITICAL: You MUST strictly match the style of the first image (Reference). "
+                        f"Maintain the content layout of the second image but unify the color scheme, background, and design elements "
+                        f"to be consistent with the {style} style of the first image.{style_hint}"
+                    )
             else:
                 full_prompt = (
                     f"Refine this slide image (second image) to match the style of the first image (Reference). "
@@ -850,11 +859,19 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
         else:
             # 无参考图 -> 单图编辑
             if prompt:
-                full_prompt = (
-                    f"Beautify this PowerPoint slide based on this instruction: '{prompt}'. "
-                    # f"Transform the existing design into a high-end, professional {style} style presentation. "
-                    f"Enhance the visual aesthetics, layout, and background while preserving the core message."
-                )
+                if preserve_current:
+                    full_prompt = (
+                        f"Edit this PowerPoint slide using this instruction: '{prompt}'. "
+                        "Use the current slide image as the strict baseline. Preserve its deck template, color system, layout structure, "
+                        "content ordering, and typography unless the instruction explicitly asks for a specific change. "
+                        "Do not redesign the page from scratch or drift to a different slide style. "
+                        f"Keep the result consistent with the existing slide family.{style_hint}"
+                    )
+                else:
+                    full_prompt = (
+                        f"Beautify this PowerPoint slide based on this instruction: '{prompt}'. "
+                        f"Enhance the visual aesthetics, layout, and background while preserving the core message."
+                    )
             else:
                 full_prompt = (
                     f"Beautify and re-design this PowerPoint slide. "
