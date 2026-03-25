@@ -11,6 +11,7 @@ import {
 import QRCodeTooltip from '../QRCodeTooltip';
 import ManagedApiNotice from '../ManagedApiNotice';
 import DemoCard from './DemoCard';
+import { STYLE_PRESET_META } from './constants';
 import { PptGenerationMode, UploadMode, StyleMode, StylePreset } from './types';
 
 interface UploadStepProps {
@@ -785,16 +786,41 @@ const UploadStep: React.FC<UploadStepProps> = ({
             {pptMode === 'frontend' || styleMode === 'prompt' ? (
               <>
                 <div className="mb-3">
-                  <label className="block text-xs text-gray-400 mb-1">{stylePresetLabel}</label>
-                  <select 
-                    value={stylePreset} 
-                    onChange={e => setStylePreset(e.target.value as typeof stylePreset)} 
-                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    {presetOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                  <label className="block text-xs text-gray-400 mb-2">{stylePresetLabel}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {presetOptions.map((option) => {
+                      const preset = option.value as StylePreset;
+                      const meta = STYLE_PRESET_META[preset];
+                      const active = stylePreset === preset;
+                      return (
+                        <div key={preset} className="group relative">
+                          <button
+                            type="button"
+                            onClick={() => setStylePreset(preset)}
+                            className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                              active
+                                ? 'border-purple-400 bg-purple-500/15 text-white shadow-[0_8px_20px_rgba(168,85,247,0.18)]'
+                                : 'border-white/12 bg-white/5 text-gray-200 hover:border-white/30 hover:bg-white/10'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                          {meta && (
+                            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-56 -translate-x-1/2 overflow-hidden rounded-2xl border border-white/15 bg-black/90 shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block">
+                              <div className="aspect-[16/9] bg-black/40">
+                                <img
+                                  src={meta.preview}
+                                  alt={option.label}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">{promptLabel}</label>

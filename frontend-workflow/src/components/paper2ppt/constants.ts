@@ -7,3 +7,18 @@ export const STYLE_PRESETS: Record<string, string> = {
   academic: '学术报告风格，清晰的层次结构，适合论文汇报',
   creative: '创意设计风格，活泼生动，色彩丰富',
 };
+
+export const STYLE_PRESET_META = {
+  modern: {
+    preview: '/paper2ppt/ouput_1.png',
+  },
+  business: {
+    preview: '/paper2ppt/ouput_2.png',
+  },
+  academic: {
+    preview: '/paper2ppt/ouput_3.png',
+  },
+  creative: {
+    preview: '/paper2ppt/ouput_4.png',
+  },
+} as const;
