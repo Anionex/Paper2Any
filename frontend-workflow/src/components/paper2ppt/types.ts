@@ -35,6 +35,7 @@ export interface GenerateResult {
   userPrompt?: string;
   versionHistory: ImageVersion[];
   currentVersionIndex: number;
+  currentVersionNumber?: number | null;
   wasReused?: boolean;
 }
 

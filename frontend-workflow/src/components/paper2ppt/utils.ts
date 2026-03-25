@@ -26,7 +26,7 @@ export const buildResultForSlide = (
   previous?: GenerateResult,
 ): GenerateResult => {
   const afterImagePath = stripImageQuery(previous?.afterImagePath || previous?.afterImage);
-  const afterImage = afterImagePath ? withCacheBust(afterImagePath) : '';
+  const afterImage = previous?.afterImage ? withCacheBust(previous.afterImagePath || previous.afterImage) : '';
 
   return {
     slideId: slide.id,
@@ -38,6 +38,7 @@ export const buildResultForSlide = (
     userPrompt: previous?.userPrompt,
     versionHistory: previous?.versionHistory || [],
     currentVersionIndex: previous?.currentVersionIndex ?? -1,
+    currentVersionNumber: previous?.currentVersionNumber ?? null,
     wasReused: Boolean(previous && afterImagePath),
   };
 };
