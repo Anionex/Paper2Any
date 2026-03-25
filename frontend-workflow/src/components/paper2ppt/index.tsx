@@ -800,6 +800,33 @@ const Paper2PptPage = () => {
     }
   };
 
+  const saveCurrentSlideEdits = (layoutDescription: string, keyPoints: string[]) => {
+    setOutlineData(prev =>
+      prev.map((slide, slideIndex) => {
+        if (slideIndex !== currentSlideIndex) return slide;
+        return {
+          ...slide,
+          layout_description: layoutDescription,
+          key_points: keyPoints.length > 0 ? keyPoints : [''],
+        };
+      })
+    );
+  };
+
+  const buildPagecontentForGeneration = () => (
+    outlineData.map((slide, idx) => {
+      const result = generateResults[idx];
+      const generatedPath = result?.afterImage || '';
+      return {
+        title: slide.title,
+        layout_description: slide.layout_description,
+        key_points: slide.key_points,
+        asset_ref: slide.asset_ref,
+        generated_img_path: generatedPath || undefined,
+      };
+    })
+  );
+
   // ============== 版本历史相关函数 ==============
   const convertToHttpUrl = (path: string): string => {
     // 如果已经是HTTP URL，直接返回
@@ -903,6 +930,99 @@ const Paper2PptPage = () => {
   };
 
   // ============== Step 3: 重新生成单页 ==============
+  const handleRegenerateSlideFromOutline = async () => {
+    if (!resultPath) {
+      setError('缺少 result_path，请重新上传文件');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+
+    const updatedResults = [...generateResults];
+    updatedResults[currentSlideIndex] = {
+      ...updatedResults[currentSlideIndex],
+      status: 'processing',
+    };
+    setGenerateResults(updatedResults);
+
+    try {
+      const formData = new FormData();
+      formData.append('img_gen_model_name', genFigModel);
+      formData.append('chat_api_url', llmApiUrl.trim());
+      formData.append('api_key', apiKey.trim());
+      formData.append('model', model);
+      formData.append('language', language);
+      formData.append('style', globalPrompt || getStyleDescription(stylePreset));
+      formData.append('aspect_ratio', '16:9');
+      formData.append('email', user?.id || user?.email || '');
+      formData.append('result_path', resultPath);
+      formData.append('get_down', 'true');
+      formData.append('page_id', String(currentSlideIndex));
+      formData.append('regenerate_from_outline', 'true');
+
+      if (styleMode === 'reference' && referenceImage) {
+        formData.append('reference_img', referenceImage);
+        formData.set('style', globalPrompt || '');
+      }
+
+      formData.append('pagecontent', JSON.stringify(buildPagecontentForGeneration()));
+
+      const res = await fetch('/api/v1/paper2ppt/generate', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        let msg = '服务器繁忙，请稍后再试';
+        if (res.status === 429) {
+          msg = '请求过于频繁，请稍后再试';
+        } else {
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) msg = errBody.error;
+          } catch { /* ignore parse error */ }
+        }
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || '服务器繁忙，请稍后再试');
+      }
+
+      const pageNumStr = String(currentSlideIndex).padStart(3, '0');
+      let afterImage = updatedResults[currentSlideIndex].afterImage;
+      if (data.all_output_files && Array.isArray(data.all_output_files)) {
+        const pageImg = data.all_output_files.find((url: string) =>
+          url.includes(`ppt_pages/page_${pageNumStr}.png`)
+        );
+        if (pageImg) {
+          afterImage = pageImg + '?t=' + Date.now();
+        }
+      }
+
+      updatedResults[currentSlideIndex] = {
+        ...updatedResults[currentSlideIndex],
+        afterImage,
+        status: 'done',
+      };
+      setGenerateResults([...updatedResults]);
+      await fetchVersionHistory(currentSlideIndex);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
+      setError(message);
+      updatedResults[currentSlideIndex] = {
+        ...updatedResults[currentSlideIndex],
+        status: 'done',
+      };
+      setGenerateResults([...updatedResults]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleRegenerateSlide = async () => {
     if (!resultPath) {
       setError('缺少 result_path，请重新上传文件');
@@ -946,21 +1066,7 @@ const Paper2PptPage = () => {
         formData.set('style', globalPrompt || '');
       }
 
-      const pagecontent = outlineData.map((slide, idx) => {
-        const result = generateResults[idx];
-        let generatedPath = '';
-        if (result?.afterImage) {
-          generatedPath = result.afterImage;
-        }
-        console.log(`[handleRegenerateSlide] 页面${idx}: afterImage=${result?.afterImage}, generatedPath=${generatedPath}`);
-        return {
-          title: slide.title,
-          layout_description: slide.layout_description,
-          key_points: slide.key_points,
-          asset_ref: slide.asset_ref,
-          generated_img_path: generatedPath || undefined,
-        };
-      });
+      const pagecontent = buildPagecontentForGeneration();
       console.log(`[handleRegenerateSlide] 当前编辑页面: ${currentSlideIndex}`);
       console.log(`[handleRegenerateSlide] 完整pagecontent:`, JSON.stringify(pagecontent.map((p, i) => ({
         idx: i,
@@ -1290,6 +1396,8 @@ const Paper2PptPage = () => {
               taskMessage={generateTaskMessage}
               slidePrompt={slidePrompt}
               setSlidePrompt={setSlidePrompt}
+              saveCurrentSlideEdits={saveCurrentSlideEdits}
+              handleRegenerateSlideFromOutline={handleRegenerateSlideFromOutline}
               handleRegenerateSlide={handleRegenerateSlide}
               handleConfirmSlide={handleConfirmSlide}
               setCurrentStep={setCurrentStep}
