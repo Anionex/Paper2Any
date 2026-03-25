@@ -1010,6 +1010,7 @@ const Paper2PptPage = () => {
       formData.append('get_down', 'true');
       formData.append('page_id', String(currentSlideIndex));
       formData.append('edit_prompt', slidePrompt);
+      formData.append('regenerate_from_current', 'true');
 
       // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
       if (styleMode === 'reference' && referenceImage) {
