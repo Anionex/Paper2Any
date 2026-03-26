@@ -95,6 +95,8 @@ Paper2Any 当前包含以下几个子能力：
 - **🖼️ Image2PPT - 图片转 PPT**：将图片或截图快速转换为结构化幻灯片。
 - **🎨 PPTPolish 智能美化**：基于 AI 的排版优化与风格迁移。
 - **🎬 Paper2Video**：生成讲解视频脚本与配音素材。
+- **🖼️ Paper2Poster - 论文转海报**：将论文 PDF 自动整理为学术海报，支持版式参数、Logo 注入与导出。
+- **🔎 Paper2Citation - 论文引用追踪**：按作者姓名或 DOI / 论文链接追踪引用作者、机构与代表性引用论文。
 - **📚 知识库（KB）**：文件入库/向量化、语义检索，以及 KB 驱动的 PPT/播客/思维导图生成。
 
 ---
@@ -186,6 +188,42 @@ Paper2Any 当前包含以下几个子能力：
 <br><br>
 <img src="static/new_readme/paper2ppt/version-history.png" width="90%"/>
 <br><sub>✨ 历史版本管理</sub>
+
+</div>
+
+---
+
+### 🎬 Paper2Video：PPT 转视频
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2video/demo.gif" width="90%"/>
+<br><sub>✨ PPT / PDF 一键生成讲解视频，支持脚本确认、阿里语音与最终视频导出</sub>
+
+</div>
+
+---
+
+### 🖼️ Paper2Poster：论文转海报
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2poster/poster-workflow.png" width="90%"/>
+<br><sub>✨ 论文 PDF 自动整理为学术海报，支持版式参数、Logo 上传与一键导出</sub>
+
+</div>
+
+---
+
+### 🔎 Paper2Citation：论文引用追踪
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2citation/citation-explorer.png" width="90%"/>
+<br><sub>✨ 输入作者名或论文 DOI / 链接，查看候选作者、引用线索与机构信息</sub>
 
 </div>
 

@@ -103,6 +103,8 @@ Paper2Any currently includes the following sub-capabilities:
 - **🖼️ Image2PPT - Image to Slides**: Convert images or screenshots into structured slides.
 - **🎨 PPTPolish - Smart Beautification**: AI-based layout optimization and style transfer.
 - **🎬 Paper2Video**: Generate video scripts and narration assets.
+- **🖼️ Paper2Poster - Academic Poster**: Turn paper PDFs into poster-ready layouts with configurable sections, logos, and export assets.
+- **🔎 Paper2Citation - Citation Explorer**: Track citing authors, institutions, and notable downstream works from author names or DOI/paper URLs.
 - **📝 Paper2Technical**: Produce technical reports and method summaries.
 - **📚 Knowledge Base (KB)**: Ingest/embedding, semantic search, and KB-driven PPT/podcast/mindmap generation.
 
@@ -195,6 +197,42 @@ Paper2Any currently includes the following sub-capabilities:
 <br><br>
 <img src="static/new_readme/paper2ppt/version-history.png" width="90%"/>
 <br><sub>✨ Version History Management</sub>
+
+</div>
+
+---
+
+### 🎬 Paper2Video: PPT to Narrated Video
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2video/demo.gif" width="90%"/>
+<br><sub>✨ PPT / PDF to narrated video with script confirmation, Aliyun TTS voices, and downloadable output</sub>
+
+</div>
+
+---
+
+### 🖼️ Paper2Poster: Paper to Poster
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2poster/poster-workflow.png" width="90%"/>
+<br><sub>✨ Paper PDF to academic poster with configurable layout, logo upload, and one-click export</sub>
+
+</div>
+
+---
+
+### 🔎 Paper2Citation: Citation Explorer
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2citation/citation-explorer.png" width="90%"/>
+<br><sub>✨ Search authors or papers to inspect citation candidates, institutions, and downstream citation context</sub>
 
 </div>
 
