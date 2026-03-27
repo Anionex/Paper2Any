@@ -2,10 +2,10 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { ScriptPage, Step } from './types';
-import { VIDEO_GENERATION_COST } from './constants';
 
 interface ScriptStepProps {
   scriptPages: ScriptPage[];
+  generationCost: number;
   setScriptPages: React.Dispatch<React.SetStateAction<ScriptPage[]>>;
   handleConfirmScript: () => void;
   setCurrentStep: (step: Step) => void;
@@ -15,6 +15,7 @@ interface ScriptStepProps {
 
 const ScriptStep: React.FC<ScriptStepProps> = ({
   scriptPages,
+  generationCost,
   setScriptPages,
   handleConfirmScript,
   setCurrentStep,
@@ -78,7 +79,7 @@ const ScriptStep: React.FC<ScriptStepProps> = ({
       </div>
 
       <div className="mt-6 text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
-        {t('script.costHint', { count: VIDEO_GENERATION_COST })}
+        {t('script.costHint', { count: generationCost })}
       </div>
 
       <div className="flex justify-between mt-8">

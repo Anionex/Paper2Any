@@ -53,7 +53,7 @@ async def generate_pdf2ppt(
     # 0. 邀请码校验 (Already commented out in original code, keeping it that way or user might want to uncomment)
     # validate_invite_code(invite_code)
 
-    ppt_path = await service.generate_ppt(
+    ppt_path, actual_page_count = await service.generate_ppt(
         pdf_file=pdf_file,
         chat_api_url=chat_api_url,
         api_key=api_key,
@@ -70,4 +70,8 @@ async def generate_pdf2ppt(
         path=str(ppt_path),
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         filename=ppt_path.name,
+        headers={
+            "X-Paper2Any-Page-Count": str(actual_page_count),
+            "Access-Control-Expose-Headers": "X-Paper2Any-Page-Count",
+        },
     )

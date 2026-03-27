@@ -6,6 +6,7 @@ import { verifyLlmConnection } from '../../services/llmService';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
 import { uploadAndSaveFile } from '../../services/fileService';
+import { useRuntimeBilling } from '../../hooks/useRuntimeBilling';
 
 import { Step, PosterConfig, GenerateResult } from './types';
 import { MAX_FILE_SIZE, STORAGE_KEY, DEFAULT_CONFIG } from './constants';
@@ -18,6 +19,7 @@ import CompleteStep from './CompleteStep';
 
 const Paper2PosterPage = () => {
   const { user, refreshQuota } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
 
   // Step 状态
   const [currentStep, setCurrentStep] = useState<Step>('upload');
@@ -142,7 +144,7 @@ const Paper2PosterPage = () => {
     } catch (e) {
       console.error('Failed to restore paper2poster config', e);
     }
-  }, [user?.id]);
+  }, [user?.id, userApiConfigRequired]);
 
   // 将配置写入 localStorage
   useEffect(() => {
@@ -214,7 +216,7 @@ const Paper2PosterPage = () => {
       setError('请先选择 PDF 文件');
       return;
     }
-    if (!apiKey.trim()) {
+    if (userApiConfigRequired && !apiKey.trim()) {
       setError('请输入 API Key');
       return;
     }
@@ -271,8 +273,11 @@ const Paper2PosterPage = () => {
     try {
       const formData = new FormData();
       formData.append('paper_file', selectedFile);
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      formData.append('email', user?.id || user?.email || '');
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('model', config.text_model);
       formData.append('vision_model', config.vision_model);
       formData.append('poster_width', config.poster_width.toString());
@@ -383,6 +388,7 @@ const Paper2PosterPage = () => {
               progress={progress}
               progressStatus={progressStatus}
               error={error}
+              showApiConfig={userApiConfigRequired}
               llmApiUrl={llmApiUrl}
               setLlmApiUrl={setLlmApiUrl}
               apiKey={apiKey}

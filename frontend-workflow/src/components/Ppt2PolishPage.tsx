@@ -20,7 +20,11 @@ import { verifyLlmConnection } from '../services/llmService';
 import { useAuthStore } from '../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../services/apiSettingsService';
 import QRCodeTooltip from './QRCodeTooltip';
+import ManagedApiNotice from './ManagedApiNotice';
+import { useRuntimeBilling } from '../hooks/useRuntimeBilling';
 import VersionHistory from './paper2ppt/VersionHistory';
+
+const MANAGED_CREDENTIAL_SCOPE = 'ppt2polish';
 
 // ============== 类型定义 ==============
 type Step = 'upload' | 'beautify' | 'complete';
@@ -160,6 +164,7 @@ const STORAGE_KEY = 'pptpolish-storage';
 const Ppt2PolishPage = () => {
   const { t, i18n } = useTranslation(['pptPolish', 'common']);
   const { user, refreshQuota } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
   // 步骤状态
   const [currentStep, setCurrentStep] = useState<Step>('upload');
   
@@ -227,6 +232,58 @@ const Ppt2PolishPage = () => {
 
 转发本文案+截图，联系微信群管理员即可获取免费Key！🎁
 #AI工具 #PPT制作 #科研效率 #开源项目`;
+
+  const getQuotaContext = () => ({
+    userId: user?.id || null,
+    isAnonymous: user?.is_anonymous || false,
+  });
+
+  const buildInsufficientPointsMessage = (required: number, remaining: number, action: string) =>
+    `点数不足：${action}需要 ${required} 点，当前剩余 ${remaining} 点。`;
+
+  const ensureQuotaForAction = async (required: number, action: string) => {
+    const { userId, isAnonymous } = getQuotaContext();
+    const quota = await checkQuota(userId, isAnonymous);
+    if (quota.remaining < required) {
+      setError(buildInsufficientPointsMessage(required, quota.remaining, action));
+      return false;
+    }
+    return true;
+  };
+
+  const consumeQuotaForAction = async (workflowType: string, amount: number, warningMessage: string) => {
+    const { userId, isAnonymous } = getQuotaContext();
+    const ok = await recordUsage(userId, workflowType, { amount, isAnonymous });
+    refreshQuota();
+    if (!ok) {
+      setError((prev) => prev || warningMessage);
+    }
+    return ok;
+  };
+
+  const extractErrorMessage = async (res: Response, fallback: string) => {
+    if (res.status === 403) {
+      return '邀请码不正确或已失效';
+    }
+    if (res.status === 429) {
+      return '请求过于频繁，请稍后再试';
+    }
+    try {
+      const errBody = await res.json();
+      if (typeof errBody?.detail === 'string' && errBody.detail.trim()) {
+        return errBody.detail;
+      }
+      if (typeof errBody?.error === 'string' && errBody.error.trim()) {
+        return errBody.error;
+      }
+      if (typeof errBody?.message === 'string' && errBody.message.trim()) {
+        return errBody.message;
+      }
+    } catch {
+      // ignore parse error
+    }
+    return fallback;
+  };
 
   const modelOptions = withModelOptions(PPT2POLISH_MODELS, model);
   const genFigModelOptions = withModelOptions(PPT2POLISH_GEN_FIG_MODELS, genFigModel);
@@ -372,7 +429,7 @@ const Ppt2PolishPage = () => {
     } catch (e) {
       console.error('Failed to restore pptpolish config', e);
     }
-  }, [user?.id]);
+  }, [user?.id, userApiConfigRequired]);
 
   // 将配置写入 localStorage
   useEffect(() => {
@@ -482,7 +539,7 @@ const Ppt2PolishPage = () => {
       return;
     }
     
-    if (!llmApiUrl.trim() || !apiKey.trim()) {
+    if (userApiConfigRequired && (!llmApiUrl.trim() || !apiKey.trim())) {
       setError(t('errors.config'));
       return;
     }
@@ -545,8 +602,11 @@ const Ppt2PolishPage = () => {
     try {
       // 调用 /paper2ppt/pagecontent_json 接口
       const formData = new FormData();
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('model', model);
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
@@ -580,18 +640,7 @@ const Ppt2PolishPage = () => {
       console.log('Response status:', res.status, res.statusText); // 调试信息
       
       if (!res.ok) {
-        let msg = t('errors.serverBusy');
-        if (res.status === 403) {
-          msg = '邀请码不正确或已失效';
-        } else if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
+        throw new Error(await extractErrorMessage(res, t('errors.serverBusy')));
       }
 
       const data = await res.json();
@@ -652,6 +701,11 @@ const Ppt2PolishPage = () => {
       
       if (convertedSlides.length === 0) {
         throw new Error('转换后的数据为空');
+      }
+      if (!(await ensureQuotaForAction(convertedSlides.length, `批量美化 ${convertedSlides.length} 页 PPT`))) {
+        clearInterval(progressInterval);
+        setProgress(0);
+        return;
       }
       
       setOutlineData(convertedSlides);
@@ -787,6 +841,10 @@ const Ppt2PolishPage = () => {
   };
 
   const handleConfirmOutline = async () => {
+    const requiredPoints = Math.max(1, outlineData.length);
+    if (!(await ensureQuotaForAction(requiredPoints, `批量美化 ${requiredPoints} 页 PPT`))) {
+      return;
+    }
     // 初始化结果状态，使用 Slide 数据中的 asset_ref 作为 beforeImage
     const results: BeautifyResult[] = outlineData.map((slide) => ({
       slideId: slide.id,
@@ -841,8 +899,11 @@ const Ppt2PolishPage = () => {
       
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('model', model);
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
@@ -873,16 +934,7 @@ const Ppt2PolishPage = () => {
       console.log('Response status:', res.status, res.statusText);
       
       if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
+        throw new Error(await extractErrorMessage(res, '服务器繁忙，请稍后再试'));
       }
 
       const data = await res.json();
@@ -928,6 +980,11 @@ const Ppt2PolishPage = () => {
           }
         });
       }
+      await consumeQuotaForAction(
+        'ppt2polish',
+        Math.max(1, slides.length),
+        `PPT 批量美化已完成，但 ${Math.max(1, slides.length)} 点扣费记录失败，请刷新余额确认。`,
+      );
       
       // 返回更新后的结果，供调用方使用
       return updatedResults;
@@ -945,7 +1002,7 @@ const Ppt2PolishPage = () => {
     index: number, 
     resultPathParam?: string,
     outlineDataParam?: SlideOutline[]
-  ) => {
+  ): Promise<boolean> => {
     // 优先使用传入的参数，其次使用 state
     const currentPath = resultPathParam || resultPath;
     const currentOutlineData = outlineDataParam || outlineData;
@@ -958,7 +1015,7 @@ const Ppt2PolishPage = () => {
     if (!currentPath) {
       setError('缺少 result_path，请重新上传文件');
       console.error('currentPath 为空');
-      return;
+      return false;
     }
     
     // 如果 results 为 null，从 state 中读取
@@ -968,13 +1025,13 @@ const Ppt2PolishPage = () => {
     if (currentResults.length === 0) {
       setError('没有可美化的页面');
       console.error('currentResults 为空');
-      return;
+      return false;
     }
     
     if (currentOutlineData.length === 0) {
       setError('没有 outline 数据');
       console.error('currentOutlineData 为空');
-      return;
+      return false;
     }
     
     setIsBeautifying(true);
@@ -986,8 +1043,11 @@ const Ppt2PolishPage = () => {
       // 调用 /paper2ppt/ppt_json 接口进行编辑
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('model', model);
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
@@ -1020,16 +1080,7 @@ const Ppt2PolishPage = () => {
       });
       
       if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
+        throw new Error(await extractErrorMessage(res, '服务器繁忙，请稍后再试'));
       }
 
       const data = await res.json();
@@ -1070,17 +1121,19 @@ const Ppt2PolishPage = () => {
         afterImage: pageImageUrl || updatedResults[index].afterImage,
         userPrompt: slidePrompt || undefined,
       };
-    setBeautifyResults(updatedResults);
+      setBeautifyResults(updatedResults);
 
-    // 获取更新的版本历史
-    await fetchVersionHistory(index);
+      // 获取更新的版本历史
+      await fetchVersionHistory(index);
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
       updatedResults[index] = { ...updatedResults[index], status: 'pending' };
-    setBeautifyResults(updatedResults);
+      setBeautifyResults(updatedResults);
+      return false;
     } finally {
-    setIsBeautifying(false);
+      setIsBeautifying(false);
     }
   };
 
@@ -1097,6 +1150,9 @@ const Ppt2PolishPage = () => {
 
 
   const handleRegenerateSlide = async () => {
+    if (!(await ensureQuotaForAction(1, `重新美化第 ${currentSlideIndex + 1} 页 PPT`))) {
+      return;
+    }
     const updatedResults = [...beautifyResults];
     updatedResults[currentSlideIndex] = {
       ...updatedResults[currentSlideIndex],
@@ -1104,7 +1160,14 @@ const Ppt2PolishPage = () => {
       status: 'pending'
     };
     setBeautifyResults(updatedResults);
-    await startBeautifyCurrentSlide(updatedResults, currentSlideIndex);
+    const success = await startBeautifyCurrentSlide(updatedResults, currentSlideIndex);
+    if (success) {
+      await consumeQuotaForAction(
+        'ppt2polish',
+        1,
+        `PPT 单页美化已完成，但第 ${currentSlideIndex + 1} 页的 1 点扣费记录失败，请刷新余额确认。`,
+      );
+    }
   };
 
   // ============== 版本历史管理 ==============
@@ -1198,8 +1261,11 @@ const Ppt2PolishPage = () => {
       // 调用 /paper2ppt/ppt_json 接口生成最终 PPT
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('model', model);
       formData.append('language', language);
       formData.append('style', globalPrompt || stylePreset);
@@ -1263,10 +1329,6 @@ const Ppt2PolishPage = () => {
       if (!pptxUrl && !pdfUrl) {
         throw new Error('未找到生成的文件');
       }
-
-      // Record usage
-      await recordUsage(user?.id || null, 'ppt2polish', { isAnonymous: user?.is_anonymous || false });
-      refreshQuota();
 
       // Upload generated file to Supabase Storage (either PPTX or PDF)
       // Prefer PPTX, fallback to PDF
@@ -1445,47 +1507,53 @@ const Ppt2PolishPage = () => {
             />
           </div> */}
           
-          <div>
-            <label className="block text-sm text-gray-300 mb-2">{t('upload.config.apiUrl')}</label>
-            <div className="flex items-center gap-2">
-                        <select 
-                          value={llmApiUrl} 
-                          onChange={e => {
-                            const val = e.target.value;
-                            setLlmApiUrl(val);
-                            if (val.includes('123.129.219.111')) {
-                              setGenFigModel('gemini-3-pro-image-preview');
-                            }
-                          }}
-                          className="flex-1 rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
-                        >
-                          {API_URL_OPTIONS.map((url: string) => (
-                            <option key={url} value={url}>{url}</option>
-                          ))}
-                        </select>
-              <QRCodeTooltip>
-                <a
-                  href={getPurchaseUrl(llmApiUrl)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="whitespace-nowrap text-[10px] text-teal-300 hover:text-teal-200 hover:underline px-1"
-                >
-                  {t('upload.config.buyLink')}
-                </a>
-              </QRCodeTooltip>
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm text-gray-300 mb-2">{t('upload.config.apiKey')}</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={t('upload.config.apiKeyPlaceholder')}
-              className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500 placeholder:text-gray-500"
-            />
-          </div>
+          {userApiConfigRequired ? (
+            <>
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">{t('upload.config.apiUrl')}</label>
+                <div className="flex items-center gap-2">
+                            <select 
+                              value={llmApiUrl} 
+                              onChange={e => {
+                                const val = e.target.value;
+                                setLlmApiUrl(val);
+                                if (val.includes('123.129.219.111')) {
+                                  setGenFigModel('gemini-3-pro-image-preview');
+                                }
+                              }}
+                              className="flex-1 rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500"
+                            >
+                              {API_URL_OPTIONS.map((url: string) => (
+                                <option key={url} value={url}>{url}</option>
+                              ))}
+                            </select>
+                  <QRCodeTooltip>
+                    <a
+                      href={getPurchaseUrl(llmApiUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="whitespace-nowrap text-[10px] text-teal-300 hover:text-teal-200 hover:underline px-1"
+                    >
+                      {t('upload.config.buyLink')}
+                    </a>
+                  </QRCodeTooltip>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">{t('upload.config.apiKey')}</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={t('upload.config.apiKeyPlaceholder')}
+                  className="w-full rounded-lg border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-teal-500 placeholder:text-gray-500"
+                />
+              </div>
+            </>
+          ) : (
+            <ManagedApiNotice />
+          )}
           
           <div>
             <label className="block text-sm text-gray-300 mb-2">{t('upload.config.model')}</label>
@@ -1968,8 +2036,8 @@ const Ppt2PolishPage = () => {
           </div>
 
           {/* 分享与交流群区域 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 text-left">
-            {/* 获取免费 Key */}
+          <div className={`grid grid-cols-1 gap-4 mt-8 text-left ${userApiConfigRequired ? 'md:grid-cols-2' : ''}`}>
+            {userApiConfigRequired && (
             <div className="glass rounded-xl border border-white/10 p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors">
               <div className="w-12 h-12 rounded-full bg-yellow-500/20 text-yellow-300 flex items-center justify-center mb-3">
                 <Star size={24} />
@@ -2014,25 +2082,26 @@ const Ppt2PolishPage = () => {
                 </div>
               )}
 
-            <div className="w-full space-y-2">
-               <a href="https://github.com/OpenDCAI/Paper2Any" target="_blank" rel="noopener noreferrer" className="block w-full py-1.5 px-3 rounded bg-white/5 hover:bg-white/10 text-xs text-teal-300 truncate transition-colors border border-white/5 text-center">
-                 ✨如果本项目对你有帮助，可以点个star嘛～
-               </a>
-               <div className="flex gap-2">
-                 <a href="https://github.com/OpenDCAI/Paper2Any" target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-white/95 hover:bg-white text-gray-900 rounded-full text-[10px] font-semibold transition-all hover:scale-105 shadow-lg">
-                   <Github size={10} />
-                   <span>Agent</span>
-                   <span className="bg-gray-200 text-gray-800 px-1 py-0.5 rounded-full text-[9px] flex items-center gap-0.5"><Star size={7} fill="currentColor" /> {stars.agent || 'Star'}</span>
+              <div className="w-full space-y-2">
+                 <a href="https://github.com/OpenDCAI/Paper2Any" target="_blank" rel="noopener noreferrer" className="block w-full py-1.5 px-3 rounded bg-white/5 hover:bg-white/10 text-xs text-teal-300 truncate transition-colors border border-white/5 text-center">
+                   ✨如果本项目对你有帮助，可以点个star嘛～
                  </a>
-                 <a href="https://github.com/OpenDCAI/DataFlow" target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-white/95 hover:bg-white text-gray-900 rounded-full text-[10px] font-semibold transition-all hover:scale-105 shadow-lg">
-                   <Github size={10} />
-                   <span>Core</span>
-                   <span className="bg-gray-200 text-gray-800 px-1 py-0.5 rounded-full text-[9px] flex items-center gap-0.5"><Star size={7} fill="currentColor" /> {stars.dataflow || 'Star'}</span>
-                 </a>
-               </div>
-            </div>
+                 <div className="flex gap-2">
+                   <a href="https://github.com/OpenDCAI/Paper2Any" target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-white/95 hover:bg-white text-gray-900 rounded-full text-[10px] font-semibold transition-all hover:scale-105 shadow-lg">
+                     <Github size={10} />
+                     <span>Agent</span>
+                     <span className="bg-gray-200 text-gray-800 px-1 py-0.5 rounded-full text-[9px] flex items-center gap-0.5"><Star size={7} fill="currentColor" /> {stars.agent || 'Star'}</span>
+                   </a>
+                   <a href="https://github.com/OpenDCAI/DataFlow" target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-white/95 hover:bg-white text-gray-900 rounded-full text-[10px] font-semibold transition-all hover:scale-105 shadow-lg">
+                     <Github size={10} />
+                     <span>Core</span>
+                     <span className="bg-gray-200 text-gray-800 px-1 py-0.5 rounded-full text-[9px] flex items-center gap-0.5"><Star size={7} fill="currentColor" /> {stars.dataflow || 'Star'}</span>
+                   </a>
+                 </div>
+              </div>
               <p className="text-[10px] text-gray-500">点亮 Star ⭐ 支持开源开发</p>
             </div>
+            )}
 
             {/* 交流群 */}
             <div className="glass rounded-xl border border-white/10 p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors">

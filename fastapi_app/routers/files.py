@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, Request, HTTPExc
 from fastapi.responses import FileResponse, StreamingResponse, Response
 import mimetypes
 
-from fastapi_app.dependencies import get_current_user, get_optional_user, AuthUser
+from fastapi_app.dependencies import get_optional_user, AuthUser
 from dataflow_agent.utils import get_project_root
 from fastapi_app.utils import _from_outputs_url
 
@@ -19,6 +19,13 @@ from fastapi_app.utils import _from_outputs_url
 router = APIRouter(prefix="/files", tags=["files"])
 PROJECT_ROOT = get_project_root()
 OUTPUTS_ROOT = (PROJECT_ROOT / "outputs").resolve()
+FINAL_PAPER2VIDEO_DIRS = {"talking_video", "merge"}
+FIGURE_WORKFLOW_TYPES = {"paper2figure", "paper2fig", "paper2tec", "paper2exp"}
+PDF_WORKFLOW_TYPES = {"paper2ppt", "pdf2ppt", "image2ppt", "ppt2polish", "paper2beamer"}
+DRAWIO_WORKFLOW_TYPES = {"paper2drawio", "paper2drawio_export", "image2drawio"}
+POSTER_WORKFLOW_TYPES = {"paper2poster"}
+REBUTTAL_SUFFIXES = {".md", ".txt", ".json", ".zip"}
+FIGURE_PREFIXES = ("fig_", "technical_route", "exp_")
 
 
 def _to_outputs_url(abs_path: str, request: Request) -> str:
@@ -40,6 +47,102 @@ def _iter_file_range(path: Path, start: int, end: int, chunk_size: int = 1024 * 
                 break
             remaining -= len(data)
             yield data
+
+
+def _normalize_user_identifier(value: Optional[str]) -> str:
+    return (value or "").strip()
+
+
+def _resolve_user_dir_candidates(user: Optional[AuthUser], email: Optional[str]) -> List[str]:
+    """
+    Build candidate output directories for one user.
+
+    Historical data in this project is inconsistent:
+    - some workflows write to outputs/{user.id}/...
+    - some uploads/history logic used outputs/{user.email}/...
+    To avoid losing files in history, scan both when available.
+    """
+    seen: set[str] = set()
+    ordered: List[str] = []
+    raw_candidates = [
+        user.id if user else None,
+        user.email if user else None,
+        user.phone if user else None,
+        email,
+    ]
+    for raw in raw_candidates:
+        candidate = _normalize_user_identifier(raw)
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        ordered.append(candidate)
+    if not ordered:
+        ordered.append("default")
+    return ordered
+
+
+def _resolve_primary_user_dir(user: Optional[AuthUser], email: Optional[str]) -> str:
+    candidates = _resolve_user_dir_candidates(user, email)
+    return candidates[0] if candidates else "default"
+
+
+def _infer_workflow_type(base_dir: Path, path: Path) -> tuple[str, tuple[str, ...]]:
+    try:
+        rel = path.relative_to(base_dir)
+        parts = rel.parts
+        return (parts[0] if parts else "unknown"), parts
+    except Exception:
+        return "unknown", ()
+
+
+def _should_include_history_file(path: Path, workflow_type: str, rel_parts: tuple[str, ...]) -> bool:
+    suffix = path.suffix.lower()
+    filename = path.name
+
+    if ".worker" in rel_parts or "__pycache__" in rel_parts:
+        return False
+
+    if workflow_type == "paper2video":
+        # paper2video final outputs are currently written under .../input/input/video.mp4,
+        # so we cannot blanket-filter anything under "input".
+        if suffix != ".mp4" or any(part in FINAL_PAPER2VIDEO_DIRS for part in rel_parts):
+            return False
+        preferred = path.with_name("video.mp4")
+        fallback = path.with_name("2_merge.mp4")
+        legacy = path.with_name("1_merge.mp4")
+        if preferred.exists():
+            return filename == "video.mp4"
+        if fallback.exists():
+            return filename == "2_merge.mp4"
+        if legacy.exists():
+            return filename == "1_merge.mp4"
+        return True
+
+    if workflow_type == "paper2rebuttal":
+        return suffix in REBUTTAL_SUFFIXES and "input" not in rel_parts
+
+    if "input" in rel_parts:
+        return False
+
+    if suffix == ".pptx":
+        return True
+
+    if workflow_type in POSTER_WORKFLOW_TYPES:
+        # Only keep the root-level poster outputs, not mined page PNGs or intermediate JSON.
+        return suffix in {".pptx", ".png"} and len(rel_parts) == 3
+
+    if workflow_type in DRAWIO_WORKFLOW_TYPES:
+        return suffix == ".drawio" or (suffix in {".png", ".svg"} and len(rel_parts) == 3)
+
+    if suffix == ".pdf":
+        return filename.startswith("paper2ppt") or workflow_type in PDF_WORKFLOW_TYPES
+
+    if suffix in {".png", ".svg"}:
+        if workflow_type in FIGURE_WORKFLOW_TYPES:
+            return filename.startswith(FIGURE_PREFIXES)
+        return False
+
+    return False
 
 
 @router.get("/stream")
@@ -122,13 +225,9 @@ async def upload_file(
         File metadata including download URL
     """
     try:
-        # Determine user directory: JWT user > email parameter > "default"
-        if user:
-            user_dir = user.email or user.id
-        elif email:
-            user_dir = email
-        else:
-            user_dir = "default"
+        # Prefer user.id as the canonical output directory.
+        # Older runs may still exist under email, and history scans both.
+        user_dir = _resolve_primary_user_dir(user, email)
         
         timestamp = int(datetime.now().timestamp() * 1000)
         
@@ -175,17 +274,13 @@ async def get_file_history(
         List of file records
     """
     try:
-        # Determine user directory: JWT user > email parameter > "default"
-        if user:
-            user_dir = user.email or user.id
-        elif email:
-            user_dir = email
-        else:
-            user_dir = "default"
-        
-        base_dir = PROJECT_ROOT / "outputs" / user_dir
-        
-        if not base_dir.exists():
+        base_dirs = [
+            PROJECT_ROOT / "outputs" / user_dir
+            for user_dir in _resolve_user_dir_candidates(user, email)
+        ]
+        existing_base_dirs = [p for p in base_dirs if p.exists()]
+
+        if not existing_base_dirs:
             return {
                 "success": True,
                 "files": [],
@@ -193,54 +288,29 @@ async def get_file_history(
         
         files_data: List[Dict[str, Any]] = []
         
-        # Recursively scan all files
-        for p in base_dir.rglob("*"):
-            if not p.is_file():
-                continue
-            
-            # Exclude input directory files
-            if "input" in p.parts:
-                continue
-            
-            # Only include specific file types
-            suffix = p.suffix.lower()
-            filename = p.name
+        # Recursively scan all files from all candidate user roots.
+        for base_dir in existing_base_dirs:
+            user_root = base_dir.name
+            for p in base_dir.rglob("*"):
+                if not p.is_file():
+                    continue
 
-            # Infer workflow_type from path: outputs/{user_dir}/{workflow_type}/...
-            try:
-                rel = p.relative_to(base_dir)
-                wf_type = rel.parts[0] if len(rel.parts) > 0 else "unknown"
-                file_id = str(rel)  # Use relative path as unique ID
-            except Exception:
-                wf_type = "unknown"
-                file_id = str(p.name) + "_" + str(p.stat().st_mtime)
+                wf_type, rel_parts = _infer_workflow_type(base_dir, p)
+                if not _should_include_history_file(p, wf_type, rel_parts):
+                    continue
 
-            allowed_suffixes = {".pptx", ".pdf", ".png", ".svg"}
-            if wf_type == "paper2rebuttal":
-                allowed_suffixes = allowed_suffixes | {".md", ".txt", ".json", ".zip"}
-
-            if suffix in allowed_suffixes:
-                should_show = False
-                if wf_type == "paper2rebuttal":
-                    should_show = True
-                elif suffix == ".pptx":
-                    should_show = True
-                elif filename.startswith("paper2ppt"):
-                    should_show = True
-                elif filename.startswith("fig_") and suffix in {".png", ".svg"}:
-                    should_show = True
-
-                if should_show:
-                    stat = p.stat()
-                    url = _to_outputs_url(str(p), request)
-                    files_data.append({
-                        "id": file_id,
-                        "file_name": p.name,
-                        "file_size": stat.st_size,
-                        "workflow_type": wf_type,
-                        "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                        "download_url": url
-                    })
+                stat = p.stat()
+                url = _to_outputs_url(str(p), request)
+                rel = Path(*rel_parts) if rel_parts else Path(p.name)
+                file_id = f"{user_root}/{rel.as_posix()}"
+                files_data.append({
+                    "id": file_id,
+                    "file_name": p.name,
+                    "file_size": stat.st_size,
+                    "workflow_type": wf_type,
+                    "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "download_url": url
+                })
         
         # Sort by modification time descending
         files_data.sort(key=lambda x: x["created_at"], reverse=True)
