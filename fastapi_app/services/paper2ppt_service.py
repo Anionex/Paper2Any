@@ -107,6 +107,7 @@ from fastapi_app.schemas import (
     PageContentRequest,
     PPTGenerationRequest,
 )
+from fastapi_app.services.managed_api_service import resolve_llm_credentials
 from fastapi_app.utils import _from_outputs_url, _to_outputs_url
 from fastapi_app.workflow_adapters.wa_paper2ppt import (
     run_paper2page_content_wf_api,
@@ -136,6 +137,11 @@ class Paper2PPTService:
     - 不直接调用 dataflow_agent.workflow.run_workflow；
     - 不处理 FastAPI 路由/依赖注入（由 routers/paper2ppt.py 完成）。
     """
+
+    @staticmethod
+    def _resolve_credential_scope(raw_scope: Optional[str], default_scope: str = "paper2ppt") -> str:
+        scope = (raw_scope or "").strip().lower()
+        return scope or default_scope
 
     # ---------------- 公共接口 ---------------- #
 
@@ -174,12 +180,19 @@ class Paper2PPTService:
 
         # 转换字符串布尔值
         use_long_paper_bool = str(req.use_long_paper).lower() in ("true", "1", "yes")
+        credential_scope = self._resolve_credential_scope(req.credential_scope)
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            req.chat_api_url,
+            req.api_key,
+            scope=credential_scope,
+        )
 
         p2ppt_req = Paper2PPTRequest(
             language=req.language,
-            chat_api_url=req.chat_api_url,
-            chat_api_key=req.api_key,
-            api_key=req.api_key,
+            chat_api_url=resolved_chat_api_url,
+            credential_scope=credential_scope,
+            chat_api_key=resolved_api_key,
+            api_key=resolved_api_key,
             model=req.model,
             gen_fig_model="",
             input_type=wf_input_type,
@@ -220,12 +233,19 @@ class Paper2PPTService:
             raise HTTPException(status_code=400, detail="pagecontent is required")
 
         from fastapi_app.schemas import Paper2PPTRequest
+        credential_scope = self._resolve_credential_scope(req.credential_scope)
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            req.chat_api_url,
+            req.api_key,
+            scope=credential_scope,
+        )
 
         p2ppt_req = Paper2PPTRequest(
             language=req.language,
-            chat_api_url=req.chat_api_url,
-            chat_api_key=req.api_key,
-            api_key=req.api_key,
+            chat_api_url=resolved_chat_api_url,
+            credential_scope=credential_scope,
+            chat_api_key=resolved_api_key,
+            api_key=resolved_api_key,
             model=req.model,
             gen_fig_model="",
             input_type="TEXT",
@@ -288,6 +308,12 @@ class Paper2PPTService:
         # 转换字符串布尔值
         get_down_bool = str(req.get_down).lower() in ("true", "1", "yes")
         all_edited_down_bool = str(req.all_edited_down).lower() in ("true", "1", "yes")
+        credential_scope = self._resolve_credential_scope(req.credential_scope)
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            req.chat_api_url,
+            req.api_key,
+            scope=credential_scope,
+        )
 
         # 校验编辑/生成模式
         if get_down_bool:
@@ -303,9 +329,10 @@ class Paper2PPTService:
 
         p2ppt_req = Paper2PPTRequest(
             language=req.language,
-            chat_api_url=req.chat_api_url,
-            chat_api_key=req.api_key,
-            api_key=req.api_key,
+            chat_api_url=resolved_chat_api_url,
+            credential_scope=credential_scope,
+            chat_api_key=resolved_api_key,
+            api_key=resolved_api_key,
             model=req.model,
             gen_fig_model=req.img_gen_model_name,
             input_type="PDF",
@@ -347,14 +374,21 @@ class Paper2PPTService:
             file=file,
             text=req.text,
         )
+        credential_scope = self._resolve_credential_scope(req.credential_scope)
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            req.chat_api_url,
+            req.api_key,
+            scope=credential_scope,
+        )
 
         from fastapi_app.schemas import Paper2PPTRequest  # 局部导入避免循环
 
         p2ppt_req = Paper2PPTRequest(
             language=req.language,
-            chat_api_url=req.chat_api_url,
-            chat_api_key=req.api_key,
-            api_key=req.api_key,
+            chat_api_url=resolved_chat_api_url,
+            credential_scope=credential_scope,
+            chat_api_key=resolved_api_key,
+            api_key=resolved_api_key,
             model=req.model,
             gen_fig_model=req.img_gen_model_name,
             input_type=wf_input_type,

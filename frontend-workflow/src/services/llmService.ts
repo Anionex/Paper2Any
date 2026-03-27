@@ -1,4 +1,5 @@
 import { API_KEY } from '../config/api';
+import { fetchRuntimeConfig, getRuntimeConfigSync } from './runtimeConfigService';
 
 const DEFAULT_VERIFY_TIMEOUT_MS = 30000;
 
@@ -23,6 +24,14 @@ export async function verifyLlmConnection(
   apiKey: string,
   model: string = 'deepseek-v3.2'
 ): Promise<boolean> {
+  const runtimeConfig = getRuntimeConfigSync();
+  if (!runtimeConfig.user_api_config_required) {
+    await fetchRuntimeConfig().catch(() => undefined);
+    if (!getRuntimeConfigSync().user_api_config_required) {
+      return true;
+    }
+  }
+
   // Normalize URL
   let baseUrl = apiUrl.trim();
   if (baseUrl.endsWith('/')) {

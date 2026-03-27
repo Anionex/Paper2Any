@@ -43,8 +43,8 @@ async def list_paper2figure_history_files(
 @router.post("/paper2figure/generate")
 async def generate_paper2figure(
     img_gen_model_name: str = Form(...),
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
     input_type: str = Form(...),
     email: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
@@ -85,8 +85,8 @@ async def generate_paper2figure(
 async def generate_paper2figure_json(
     request: Request,
     img_gen_model_name: str = Form(...),
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
     input_type: str = Form(...),  # 'file' | 'text' | 'image'
     email: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),

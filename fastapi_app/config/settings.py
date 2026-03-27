@@ -41,8 +41,40 @@ class AppSettings(BaseSettings):
 
     # API Configuration
     DEFAULT_LLM_API_URL: str = "http://123.129.219.111:3000/v1/"
+    DF_API_URL: str = "http://123.129.219.111:3000/v1"
+    DF_API_KEY: str = ""
+    PAPER2ANY_MANAGED_API_URL: str = ""
+    PAPER2ANY_MANAGED_API_KEY: str = ""
+    PAPER2PPT_MANAGED_API_URL: str = ""
+    PAPER2PPT_MANAGED_API_KEY: str = ""
+    PPT2POLISH_MANAGED_API_URL: str = ""
+    PPT2POLISH_MANAGED_API_KEY: str = ""
+    PDF2PPT_MANAGED_API_URL: str = ""
+    PDF2PPT_MANAGED_API_KEY: str = ""
+    IMAGE2PPT_MANAGED_API_URL: str = ""
+    IMAGE2PPT_MANAGED_API_KEY: str = ""
+    PAPER2DRAWIO_MANAGED_API_URL: str = ""
+    PAPER2DRAWIO_MANAGED_API_KEY: str = ""
+    PAPER2POSTER_MANAGED_API_URL: str = ""
+    PAPER2POSTER_MANAGED_API_KEY: str = ""
+    PAPER2VIDEO_MANAGED_API_URL: str = ""
+    PAPER2VIDEO_MANAGED_API_KEY: str = ""
+    KB_MANAGED_API_URL: str = ""
+    KB_MANAGED_API_KEY: str = ""
+    KB_DEEPRESEARCH_MANAGED_API_URL: str = ""
+    KB_DEEPRESEARCH_MANAGED_API_KEY: str = ""
+    PAPER2REBUTTAL_MANAGED_API_URL: str = ""
+    PAPER2REBUTTAL_MANAGED_API_KEY: str = ""
     LLM_VERIFY_TIMEOUT_SECONDS: int = 25
     LLM_VERIFY_MAX_TOKENS: int = 32
+    APP_BILLING_MODE: str = "paid"
+    BILLING_PRICING_CONFIG_PATH: str = str(_project_root() / "fastapi_app" / "config" / "pricing.yaml")
+    GUEST_USAGE_DB_PATH: str = str(_project_root() / "outputs" / "system" / "guest_quota.sqlite3")
+    DEFAULT_SEARCH_API_KEY: str = ""
+    DEFAULT_GOOGLE_CSE_ID: str = ""
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
 
     # RMBG-2.0 background removal model path
     RMBG_MODEL_PATH: str = str(_project_root() / "models" / "RMBG-2.0")

@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from pathlib import Path
+from typing import Any, Dict
+
+import yaml
+
+from fastapi_app.config.settings import settings
+
+
+DEFAULT_PRICING: Dict[str, Any] = {
+    "billing": {
+        "signup_bonus_points": 20,
+        "daily_grant_points": 10,
+        "daily_grant_balance_cap": 30,
+        "referral_inviter_points": 5,
+        "referral_invitee_points": 0,
+        "guest_daily_limit": 15,
+    },
+    "workflows": {
+        "paper2figure": 1,
+        "paper2ppt": 1,
+        "pdf2ppt": 1,
+        "image2ppt": 1,
+        "image2drawio": 1,
+        "paper2drawio": 1,
+        "paper2poster": 1,
+        "paper2video": 10,
+        "paper2citation": 1,
+        "paper2rebuttal": 1,
+        "ppt2polish": 1,
+        "kb_report": 1,
+        "kb_deepresearch": 2,
+        "kb_podcast": 2,
+        "kb_mindmap": 1,
+        "kb_ppt": 1,
+        "kb_chat": 1,
+        "kb_search": 1,
+    },
+}
+
+_pricing_cache: Dict[str, Any] | None = None
+
+
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged = deepcopy(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_pricing_config() -> Dict[str, Any]:
+    global _pricing_cache
+
+    if _pricing_cache is not None:
+        return deepcopy(_pricing_cache)
+
+    config_path = Path(settings.BILLING_PRICING_CONFIG_PATH).expanduser().resolve()
+    merged = deepcopy(DEFAULT_PRICING)
+
+    if config_path.is_file():
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        if isinstance(raw, dict):
+            merged = _deep_merge(merged, raw)
+
+    _pricing_cache = merged
+    return deepcopy(_pricing_cache)
+
+
+def get_workflow_cost(workflow_type: str, default: int = 1) -> int:
+    pricing = get_pricing_config()
+    workflows = pricing.get("workflows", {})
+    raw_cost = workflows.get(workflow_type, default)
+    try:
+        return max(0, int(raw_cost))
+    except (TypeError, ValueError):
+        return default

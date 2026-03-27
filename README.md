@@ -59,6 +59,11 @@ English | [中文](README_CN.md)
 ## 🔥 News
 
 > [!TIP]
+> 🆕 <strong>2026-03-26 · Workflow Showcase Update</strong><br>
+> Added showcase coverage for <strong>Paper2Video</strong>, <strong>Paper2Poster</strong>, and <strong>Paper2Citation</strong>.<br>
+> The README now includes a compressed video demo plus refreshed English/Chinese workflow previews.
+
+> [!TIP]
 > 🆕 <strong>2026-02-02 · Paper2Rebuttal</strong><br>
 > Added rebuttal drafting support with structured response guidance and image-aware revision prompts.
 

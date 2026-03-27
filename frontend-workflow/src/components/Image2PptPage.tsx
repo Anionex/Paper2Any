@@ -12,6 +12,8 @@ import { verifyLlmConnection } from '../services/llmService';
 import { useAuthStore } from '../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../services/apiSettingsService';
 import QRCodeTooltip from './QRCodeTooltip';
+import ManagedApiNotice from './ManagedApiNotice';
+import { useRuntimeBilling } from '../hooks/useRuntimeBilling';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for images
 const STORAGE_KEY = 'paper2any:image2ppt:config';
@@ -22,6 +24,7 @@ const DEFAULT_USE_AI_EDIT =
 const Image2PptPage = () => {
   const { t } = useTranslation(['image2ppt', 'common']);
   const { user, refreshQuota } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -130,7 +133,7 @@ const Image2PptPage = () => {
     const userApiSettings = getApiSettings(user?.id || null);
     if (userApiSettings?.apiUrl) setLlmApiUrl(userApiSettings.apiUrl);
     if (userApiSettings?.apiKey) setApiKey(userApiSettings.apiKey);
-  }, [user?.id]);
+  }, [user?.id, userApiConfigRequired]);
 
   // Persist frontend config
   useEffect(() => {
@@ -204,11 +207,11 @@ const Image2PptPage = () => {
     }
 
     if (useAiEdit) {
-      if (!apiKey.trim()) {
+      if (userApiConfigRequired && !apiKey.trim()) {
         setError(t('errors.enterKey'));
         return;
       }
-      if (!llmApiUrl.trim()) {
+      if (userApiConfigRequired && !llmApiUrl.trim()) {
         setError(t('errors.enterUrl'));
         return;
       }
@@ -261,8 +264,10 @@ const Image2PptPage = () => {
       
       if (useAiEdit) {
         formData.append('use_ai_edit', 'true');
-        formData.append('chat_api_url', llmApiUrl.trim());
-        formData.append('api_key', apiKey.trim());
+        if (userApiConfigRequired) {
+          formData.append('chat_api_url', llmApiUrl.trim());
+          formData.append('api_key', apiKey.trim());
+        }
         formData.append('gen_fig_model', genFigModel);
       } else {
         formData.append('use_ai_edit', 'false');
@@ -498,7 +503,7 @@ const Image2PptPage = () => {
                   </button>
                 </div>
 
-                {useAiEdit && (
+                {useAiEdit && userApiConfigRequired && (
                   <div className="space-y-4 mb-6 p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 animate-in fade-in slide-in-from-top-2">
                     <div>
                       <label className="block text-xs text-gray-400 mb-1.5 flex items-center gap-1">
@@ -567,6 +572,10 @@ const Image2PptPage = () => {
                   </div>
                 )}
 
+                {useAiEdit && !userApiConfigRequired && (
+                  <ManagedApiNotice className="mb-6" />
+                )}
+
                 {/* 验证状态 */}
                 {isValidating && (
                   <div className="mb-6 flex items-center gap-2 text-sm text-cyan-300 bg-cyan-500/10 border border-cyan-500/40 rounded-lg px-4 py-3 animate-pulse">
@@ -630,8 +639,8 @@ const Image2PptPage = () => {
                 </div>
 
                 {/* 分享与交流群区域 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 text-left">
-                  {/* 获取免费 Key */}
+                <div className={`grid grid-cols-1 gap-4 mt-8 text-left ${userApiConfigRequired ? 'md:grid-cols-2' : ''}`}>
+                  {userApiConfigRequired && (
                   <div className="glass rounded-xl border border-white/10 p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors">
                     <div className="w-12 h-12 rounded-full bg-yellow-500/20 text-yellow-300 flex items-center justify-center mb-3">
                       <Star size={24} />
@@ -694,6 +703,7 @@ const Image2PptPage = () => {
                </div>
             </div>
                   </div>
+                  )}
 
                   {/* 交流群 */}
                   <div className="glass rounded-xl border border-white/10 p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors">

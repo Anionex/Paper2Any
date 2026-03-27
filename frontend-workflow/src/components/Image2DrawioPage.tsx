@@ -16,6 +16,7 @@ import {
 import { API_KEY, API_URL_OPTIONS, DEFAULT_LLM_API_URL, getPurchaseUrl } from '../config/api';
 import QRCodeTooltip from './QRCodeTooltip';
 import CasesSection from './CasesSection';
+import ManagedApiNotice from './ManagedApiNotice';
 import {
   DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL,
   DEFAULT_IMAGE2DRAWIO_VLM_MODEL,
@@ -25,6 +26,7 @@ import {
 import { useAuthStore } from '../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../services/apiSettingsService';
 import { checkQuota, recordUsage } from '../services/quotaService';
+import { useRuntimeBilling } from '../hooks/useRuntimeBilling';
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 const STORAGE_KEY = 'image2drawio_settings';
@@ -44,6 +46,7 @@ const inputClass =
 const Image2DrawioPage = () => {
   const { t } = useTranslation(['image2drawio', 'common']);
   const { user, refreshQuota } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -80,7 +83,7 @@ const Image2DrawioPage = () => {
       if (userApiSettings.apiUrl) setApiUrl(userApiSettings.apiUrl);
       if (userApiSettings.apiKey) setApiKey(userApiSettings.apiKey);
     }
-  }, [user?.id]);
+  }, [user?.id, userApiConfigRequired]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -197,8 +200,10 @@ const Image2DrawioPage = () => {
     try {
       const formData = new FormData();
       formData.append('image_file', selectedFile);
-      formData.append('chat_api_url', apiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', apiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('gen_fig_model', genFigModel);
       formData.append('vlm_model', vlmModel);
       formData.append('email', user?.id || user?.email || '');
@@ -562,39 +567,45 @@ const Image2DrawioPage = () => {
                 {t('config.title')}
               </h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs text-slate-400">{t('config.apiUrl')}</label>
-                    <QRCodeTooltip>
-                      <a
-                        href={getPurchaseUrl(apiUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="whitespace-nowrap text-[10px] text-amber-300 hover:text-amber-200 hover:underline px-1"
+                  {userApiConfigRequired ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs text-slate-400">{t('config.apiUrl')}</label>
+                        <QRCodeTooltip>
+                          <a
+                            href={getPurchaseUrl(apiUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="whitespace-nowrap text-[10px] text-amber-300 hover:text-amber-200 hover:underline px-1"
+                          >
+                            {t('config.buyLink')}
+                          </a>
+                        </QRCodeTooltip>
+                      </div>
+                      <select
+                        value={apiUrl}
+                        onChange={(e) => setApiUrl(e.target.value)}
+                        className={inputClass}
                       >
-                        {t('config.buyLink')}
-                      </a>
-                    </QRCodeTooltip>
-                  </div>
-                  <select
-                    value={apiUrl}
-                    onChange={(e) => setApiUrl(e.target.value)}
-                    className={inputClass}
-                  >
-                    {API_URL_OPTIONS.map((url: string) => (
-                      <option key={url} value={url}>{url}</option>
-                    ))}
-                  </select>
+                        {API_URL_OPTIONS.map((url: string) => (
+                          <option key={url} value={url}>{url}</option>
+                        ))}
+                      </select>
 
-                  <label className="block text-xs text-slate-400 flex items-center gap-1">
-                    <Key size={12} /> {t('config.apiKey')}
-                  </label>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className={inputClass}
-                  />
+                      <label className="block text-xs text-slate-400 flex items-center gap-1">
+                        <Key size={12} /> {t('config.apiKey')}
+                      </label>
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="sk-..."
+                        className={inputClass}
+                      />
+                    </>
+                  ) : (
+                    <ManagedApiNotice />
+                  )}
 
                 <label className="block text-xs text-slate-400 flex items-center gap-1 mb-1">
                   <ImageIcon size={12} /> {t('config.genModel')}

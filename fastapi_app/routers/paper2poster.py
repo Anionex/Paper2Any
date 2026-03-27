@@ -16,8 +16,8 @@ def get_service() -> Paper2PosterService:
 @router.post("/paper2poster/generate")
 async def generate_paper2poster(
     paper_file: UploadFile = File(...),
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
     model: str = Form("gpt-4o-2024-08-06"),
     vision_model: str = Form("gpt-4o-2024-08-06"),
     poster_width: float = Form(54.0),

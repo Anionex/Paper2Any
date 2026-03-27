@@ -7,11 +7,13 @@
 import { create } from "zustand";
 import { User, Session, Provider } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { backendFetch } from "../services/backendClient";
 
 interface Quota {
   used: number;
   limit: number;
   remaining: number;
+  billingMode?: string;
 }
 
 interface AuthState {
@@ -52,29 +54,18 @@ function normalizePhoneE164China(input: string): string {
 }
 
 async function tryClaimInviteCode(inviteCode: string): Promise<void> {
-  // Database side will enforce idempotency.
-  // This RPC name will be added by migration.
-  const { data, error } = await supabase.rpc("apply_invite_code", { p_code: inviteCode });
-  
-  if (error) {
-    throw new Error("邀请码兑换失败，请稍后重试");
-  }
-  
-  // Check response from RPC function
-  if (data && !data.success) {
-    const errorCode = data.error;
-    switch (errorCode) {
-      case 'not_authenticated':
-        throw new Error("请先登录后再填写邀请码");
-      case 'already_claimed':
-        throw new Error("您已经使用过邀请码了");
-      case 'invalid_code':
-        throw new Error("邀请码无效，请检查后重试");
-      case 'self_invite':
-        throw new Error("不能使用自己的邀请码");
-      default:
-        throw new Error("邀请码兑换失败");
-    }
+  const response = await backendFetch("/api/v1/account/invite/claim", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ invite_code: inviteCode }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail = data?.detail || "邀请码兑换失败，请稍后重试";
+    throw new Error(detail);
   }
 }
 
@@ -481,6 +472,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           used: quotaInfo.used,
           limit: quotaInfo.limit,
           remaining: quotaInfo.remaining,
+          billingMode: quotaInfo.billingMode,
         }
       });
     } catch (err) {

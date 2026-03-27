@@ -6,6 +6,7 @@ Router package for FastAPI backend.
 """
 
 from . import (
+    account,
     paper2citation,
     paper2video,
     paper2any,
@@ -21,6 +22,7 @@ from . import (
 )
 
 __all__ = [
+    "account",
     "paper2citation",
     "paper2video",
     "paper2any",

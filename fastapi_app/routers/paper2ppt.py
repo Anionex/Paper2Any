@@ -39,8 +39,9 @@ def get_task_service() -> Paper2PPTTaskService:
 )
 async def paper2ppt_pagecontent_json(
     request: Request,
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    credential_scope: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
     # 输入相关：支持 text/pdf/pptx/topic
     input_type: str = Form(...),  # 'text' | 'pdf' | 'pptx' | 'topic'
@@ -67,6 +68,7 @@ async def paper2ppt_pagecontent_json(
     req = PageContentRequest(
         chat_api_url=chat_api_url,
         api_key=api_key,
+        credential_scope=credential_scope,
         email=email,
         input_type=input_type,
         text=text,
@@ -97,8 +99,9 @@ async def paper2ppt_pagecontent_json(
 async def paper2ppt_ppt_json(
     request: Request,
     img_gen_model_name: str = Form(...),
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    credential_scope: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
     # 控制参数
     style: str = Form(""),
@@ -131,6 +134,7 @@ async def paper2ppt_ppt_json(
         img_gen_model_name=img_gen_model_name,
         chat_api_url=chat_api_url,
         api_key=api_key,
+        credential_scope=credential_scope,
         email=email,
         style=style,
         aspect_ratio=aspect_ratio,
@@ -160,8 +164,9 @@ async def paper2ppt_ppt_json(
 )
 async def paper2ppt_generate_task(
     img_gen_model_name: str = Form(...),
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    credential_scope: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
     style: str = Form(""),
     reference_img: Optional[UploadFile] = File(None),
@@ -181,6 +186,7 @@ async def paper2ppt_generate_task(
         img_gen_model_name=img_gen_model_name,
         chat_api_url=chat_api_url,
         api_key=api_key,
+        credential_scope=credential_scope,
         email=email,
         style=style,
         aspect_ratio=aspect_ratio,
@@ -219,8 +225,9 @@ async def paper2ppt_outline_refine(
     request: Request,
     outline_feedback: str = Form(...),
     pagecontent: str = Form(...),
-    chat_api_url: str = Form(...),
-    api_key: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    credential_scope: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
     model: str = Form("gpt-5.1"),
     language: str = Form("zh"),
@@ -231,6 +238,7 @@ async def paper2ppt_outline_refine(
     req = OutlineRefineRequest(
         chat_api_url=chat_api_url,
         api_key=api_key,
+        credential_scope=credential_scope,
         email=email,
         model=model,
         language=language,

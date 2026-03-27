@@ -47,8 +47,8 @@ def get_service() -> Paper2VideoService:
 async def paper2video_generate_subtitle(
     request: Request,
     email: Optional[str] = Form(None),
-    api_key: str = Form(...),
-    chat_api_url: str = Form(...),
+    api_key: Optional[str] = Form(None),
+    chat_api_url: Optional[str] = Form(None),
     model: str = Form("gpt-4o"),
     tts_model: str = Form("cosyvoice-v3-flash"),
     tts_voice_name: Optional[str] = Form(None),

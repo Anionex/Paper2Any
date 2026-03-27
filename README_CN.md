@@ -59,6 +59,11 @@
 ## 🔥 News
 
 > [!TIP]
+> 🆕 <strong>2026-03-26 · 工作流展示更新</strong><br>
+> 新增 <strong>Paper2Video</strong>、<strong>Paper2Poster</strong>、<strong>Paper2Citation</strong> 的展示内容。<br>
+> README 已补充压缩视频演示，以及中英文两套工作流预览图。
+
+> [!TIP]
 > 🆕 <strong>2026-02-02 · Paper2Rebuttal 更新</strong><br>
 > 新增反驳意见草拟与修改建议，支持结构化回复与图文要点对齐。
 

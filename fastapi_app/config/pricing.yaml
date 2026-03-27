@@ -1,0 +1,27 @@
+billing:
+  signup_bonus_points: 20
+  daily_grant_points: 10
+  daily_grant_balance_cap: 30
+  referral_inviter_points: 5
+  referral_invitee_points: 0
+  guest_daily_limit: 15
+
+workflows:
+  paper2figure: 1
+  paper2ppt: 1
+  pdf2ppt: 1
+  image2ppt: 1
+  image2drawio: 1
+  paper2drawio: 1
+  paper2poster: 1
+  paper2video: 10
+  paper2citation: 1
+  paper2rebuttal: 1
+  ppt2polish: 1
+  kb_report: 1
+  kb_deepresearch: 2
+  kb_podcast: 2
+  kb_mindmap: 1
+  kb_ppt: 1
+  kb_chat: 1
+  kb_search: 1

@@ -17,6 +17,7 @@ from dataflow_agent.utils import get_project_root
 from dataflow_agent.workflow import run_workflow
 from dataflow_agent.logger import get_logger
 from fastapi_app.config import settings
+from fastapi_app.services.managed_api_service import is_free_billing_mode, resolve_llm_credentials
 from fastapi_app.schemas import Paper2PPTRequest, DeepResearchRequest, DeepResearchResponse, KBReportRequest, KBReportResponse
 from fastapi_app.utils import _from_outputs_url, _to_outputs_url
 
@@ -581,6 +582,7 @@ async def chat_with_kb(
     Intelligent QA Chat
     """
     try:
+        resolved_api_url, resolved_api_key = resolve_llm_credentials(api_url, api_key, scope="kb")
         # Normalize file paths (web path -> local absolute path)
         project_root = get_project_root()
         local_files = []
@@ -606,8 +608,8 @@ async def chat_with_kb(
             files=local_files,
             query=query,
             history=history,
-            chat_api_url=api_url or os.getenv("DF_API_URL"),
-            api_key=api_key or os.getenv("DF_API_KEY"),
+            chat_api_url=resolved_api_url or os.getenv("DF_API_URL"),
+            api_key=resolved_api_key or os.getenv("DF_API_KEY"),
             model=model
         )
         
@@ -666,6 +668,7 @@ async def generate_ppt_from_kb(
     Generate PPT from knowledge base file (non-interactive)
     """
     try:
+        api_url, api_key = resolve_llm_credentials(api_url, api_key, scope="kb")
         # Normalize and validate input files (PDF/PPT/DOC/IMG)
         input_paths = file_paths or ([file_path] if file_path else [])
         if not input_paths:
@@ -862,6 +865,7 @@ async def generate_podcast_from_kb(
     Generate podcast from knowledge base files
     """
     try:
+        api_url, api_key = resolve_llm_credentials(api_url, api_key, scope="kb")
         project_root = get_project_root()
         if notebook_id:
             output_dir = _generated_dir(email, notebook_id, "podcast", user_id)
@@ -985,6 +989,7 @@ async def generate_mindmap_from_kb(
     Generate mindmap from knowledge base files
     """
     try:
+        api_url, api_key = resolve_llm_credentials(api_url, api_key, scope="kb")
         # Normalize file paths
         project_root = get_project_root()
         local_file_paths = []
@@ -1066,9 +1071,9 @@ async def deep_research_from_kb(
     """
     Deep research workflow入口（router -> service -> wa -> wf）
     """
-    if req.mode == "web" and not req.search_api_key:
+    if req.mode == "web" and not (req.search_api_key or (is_free_billing_mode() and settings.DEFAULT_SEARCH_API_KEY)):
         raise HTTPException(status_code=400, detail="Search API key required")
-    if req.mode == "web" and req.search_provider == "google_cse" and not req.google_cse_id:
+    if req.mode == "web" and req.search_provider == "google_cse" and not (req.google_cse_id or (is_free_billing_mode() and settings.DEFAULT_GOOGLE_CSE_ID)):
         raise HTTPException(status_code=400, detail="google_cse_id required")
     if not req.topic and not req.file_paths:
         raise HTTPException(status_code=400, detail="Topic or files required")

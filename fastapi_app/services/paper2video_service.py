@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, Request, UploadFile
 
 from fastapi_app.schemas import GenerateSubtitleResponse, GenerateVideoResponse
+from fastapi_app.services.managed_api_service import resolve_llm_credentials
 from fastapi_app.utils import _to_outputs_url
 from fastapi_app.workflow_adapters.wa_paper2video import (
     run_paper2video_generate_subtitle_wf_api,
@@ -135,6 +136,11 @@ class Paper2VideoService:
         if not file:
             log.warning("[Paper2VideoService] run_generate_subtitle: missing file")
             raise HTTPException(status_code=400, detail="file is required (PDF or PPTX)")
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            chat_api_url,
+            api_key,
+            scope="paper2video",
+        )
 
         run_dir = self._create_timestamp_run_dir(email)
         input_dir = run_dir / "input"
@@ -238,8 +244,8 @@ class Paper2VideoService:
             ref_img_path=str(avatar_path) if avatar_path else "",
             ref_audio_path=str(voice_path) if voice_path else "",
             ref_text="",
-            chat_api_url=chat_api_url,
-            api_key=api_key,
+            chat_api_url=resolved_chat_api_url,
+            api_key=resolved_api_key,
             model=model,
             tts_model=tts_model,
             tts_voice_name=tts_voice_name or "",

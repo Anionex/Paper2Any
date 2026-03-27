@@ -78,8 +78,8 @@ class GenerateVideoResponse(BaseModel):
 
 
 class VerifyLlmRequest(BaseModel):
-    api_url: str
-    api_key: str
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
     model: str = settings.MODEL_GPT_4O
 
 
@@ -204,8 +204,9 @@ class Paper2FigureResponse(BaseModel):
 
 class PageContentRequest(BaseModel):
     """专用于pagecontent生成的请求模型"""
-    chat_api_url: str
-    api_key: str
+    chat_api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    credential_scope: Optional[str] = None
     email: Optional[str] = None
     input_type: Literal["text", "pdf", "pptx", "topic"]
     file: Optional[Any] = None  # UploadFile 在路由层处理，这里用Any占位
@@ -225,8 +226,9 @@ class PageContentRequest(BaseModel):
 
 class OutlineRefineRequest(BaseModel):
     """Refine outline based on user feedback without re-parsing input."""
-    chat_api_url: str
-    api_key: str
+    chat_api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    credential_scope: Optional[str] = None
     email: Optional[str] = None
     model: str = settings.PAPER2PPT_OUTLINE_MODEL
     language: str = "zh"
@@ -241,8 +243,8 @@ class DeepResearchRequest(BaseModel):
     mode: Literal["llm", "web"] = "llm"
     topic: str = ""
     file_paths: List[str] = []
-    api_url: str
-    api_key: str
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
     model: str = settings.MODEL_GPT_4O
     language: str = "zh"
     email: Optional[str] = None
@@ -434,8 +436,8 @@ class Paper2CitationPaperContextResponse(BaseModel):
 
 class KBReportRequest(BaseModel):
     file_paths: List[str] = []
-    api_url: str
-    api_key: str
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
     model: str = "gpt-5.1"
     language: str = "zh"
     report_style: Literal["insight", "analysis"] = "insight"
@@ -455,8 +457,9 @@ class KBReportResponse(BaseModel):
 class PPTGenerationRequest(BaseModel):
     """专用于PPT生成/编辑的请求模型"""
     img_gen_model_name: str
-    chat_api_url: str
-    api_key: str
+    chat_api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    credential_scope: Optional[str] = None
     email: Optional[str] = None
     style: str = ""
     reference_img: Optional[Any] = None
@@ -476,8 +479,9 @@ class PPTGenerationRequest(BaseModel):
 class FullPipelineRequest(BaseModel):
     """专用于完整流水线的请求模型"""
     img_gen_model_name: str
-    chat_api_url: str
-    api_key: str
+    chat_api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    credential_scope: Optional[str] = None
     email: Optional[str] = None
     input_type: Literal["text", "pdf", "pptx"]
     file: Optional[Any] = None
@@ -500,6 +504,7 @@ class Paper2PPTRequest(BaseModel):
     # ---------------------- 基础 LLM 设置 ----------------------
     language: str = "en"
     chat_api_url: str = settings.DEFAULT_LLM_API_URL
+    credential_scope: Optional[str] = None
 
     # ---------------------- 图类型 & 难度设置 ----------------------
     chat_api_key: str = "fill the key"

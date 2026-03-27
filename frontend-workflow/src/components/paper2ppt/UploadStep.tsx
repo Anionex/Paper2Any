@@ -8,6 +8,7 @@ import {
   Info, X
 } from 'lucide-react';
 import QRCodeTooltip from '../QRCodeTooltip';
+import ManagedApiNotice from '../ManagedApiNotice';
 import DemoCard from './DemoCard';
 import { UploadMode, StyleMode, StylePreset } from './types';
 
@@ -37,6 +38,7 @@ interface UploadStepProps {
   progress: number;
   progressStatus: string;
   error: string | null;
+  showApiConfig: boolean;
   
   llmApiUrl: string;
   setLlmApiUrl: (url: string) => void;
@@ -71,6 +73,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
   useLongPaper, setUseLongPaper,
   progress, progressStatus,
   error,
+  showApiConfig,
   
   llmApiUrl, setLlmApiUrl,
   apiKey, setApiKey,
@@ -252,84 +255,119 @@ const UploadStep: React.FC<UploadStepProps> = ({
             <Settings2 size={18} className="text-purple-400" /> {t('upload.config.title')}
           </h3>
           
-          {/* API 配置 */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
-                <Key size={12} /> {t('upload.config.apiKey')}
-              </label>
-              <input 
-                type="password" 
-                value={apiKey} 
-                onChange={e => setApiKey(e.target.value)}
-                placeholder={t('upload.config.apiKeyPlaceholder')}
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-gray-400 flex items-center gap-1">
-                  <Globe size={12} /> {t('upload.config.apiUrl')}
-                </label>
-                <QRCodeTooltip>
-                  <a
-                    href={getPurchaseUrl(llmApiUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"
-                  >
-                    {t('upload.config.buyLink')}
-                  </a>
-                </QRCodeTooltip>
-              </div>
-              <select 
-                value={llmApiUrl} 
-                onChange={e => {
-                  const val = e.target.value;
-                  setLlmApiUrl(val);
-                  if (val.includes('123.129.219.111')) {
-                    setGenFigModel('gemini-3-pro-image-preview');
-                  }
-                }}
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                {API_URL_OPTIONS.map((url: string) => (
-                  <option key={url} value={url}>{url}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
-                <Cpu size={12} /> {t('upload.config.model')}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <select 
-                  value={model} 
-                  onChange={e => setModel(e.target.value)}
-                  className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  {modelOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-                <div className="relative group">
-                  <input
-                    type="text"
-                    value={model} 
-                    onChange={e => setModel(e.target.value)}
-                    placeholder="自定义模型"
+          {showApiConfig ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                    <Key size={12} /> {t('upload.config.apiKey')}
+                  </label>
+                  <input 
+                    type="password" 
+                    value={apiKey} 
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder={t('upload.config.apiKeyPlaceholder')}
                     className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
                   />
-                  <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 w-56 -translate-y-1/2 rounded-md border border-white/10 bg-black/80 px-2 py-1.5 text-[10px] text-gray-100 opacity-0 shadow-lg transition group-hover:opacity-100">
-                    {t('upload.config.customModelTip')}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs text-gray-400 flex items-center gap-1">
+                      <Globe size={12} /> {t('upload.config.apiUrl')}
+                    </label>
+                    <QRCodeTooltip>
+                      <a
+                        href={getPurchaseUrl(llmApiUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"
+                      >
+                        {t('upload.config.buyLink')}
+                      </a>
+                    </QRCodeTooltip>
+                  </div>
+                  <select 
+                    value={llmApiUrl} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      setLlmApiUrl(val);
+                      if (val.includes('123.129.219.111')) {
+                        setGenFigModel('gemini-3-pro-image-preview');
+                      }
+                    }}
+                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {API_URL_OPTIONS.map((url: string) => (
+                      <option key={url} value={url}>{url}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                    <Cpu size={12} /> {t('upload.config.model')}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select 
+                      value={model} 
+                      onChange={e => setModel(e.target.value)}
+                      className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      {modelOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <div className="relative group">
+                      <input
+                        type="text"
+                        value={model} 
+                        onChange={e => setModel(e.target.value)}
+                        placeholder="自定义模型"
+                        className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 w-56 -translate-y-1/2 rounded-md border border-white/10 bg-black/80 px-2 py-1.5 text-[10px] text-gray-100 opacity-0 shadow-lg transition group-hover:opacity-100">
+                        {t('upload.config.customModelTip')}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </>
+          ) : (
+            <>
+              <ManagedApiNotice />
+              <div>
+                <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                  <Cpu size={12} /> {t('upload.config.model')}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select 
+                    value={model} 
+                    onChange={e => setModel(e.target.value)}
+                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {modelOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                  <div className="relative group">
+                    <input
+                      type="text"
+                      value={model} 
+                      onChange={e => setModel(e.target.value)}
+                      placeholder="自定义模型"
+                      className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 w-56 -translate-y-1/2 rounded-md border border-white/10 bg-black/80 px-2 py-1.5 text-[10px] text-gray-100 opacity-0 shadow-lg transition group-hover:opacity-100">
+                      {t('upload.config.customModelTip')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
           
           <div className="grid grid-cols-2 gap-3">
             <div>

@@ -7,6 +7,7 @@ import { checkQuota, recordUsage } from '../../services/quotaService';
 import { verifyLlmConnection } from '../../services/llmService';
 import { useAuthStore } from '../../stores/authStore';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
+import { useRuntimeBilling } from '../../hooks/useRuntimeBilling';
 
 import {
   Step,
@@ -26,8 +27,11 @@ import OutlineStep from './OutlineStep';
 import GenerateStep from './GenerateStep';
 import CompleteStep from './CompleteStep';
 
+const MANAGED_CREDENTIAL_SCOPE = 'paper2ppt';
+
 const Paper2PptPage = () => {
   const { user, refreshQuota } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
   
   // Step 状态
   const [currentStep, setCurrentStep] = useState<Step>('upload');
@@ -102,6 +106,58 @@ const Paper2PptPage = () => {
 
 转发本文案+截图，联系微信群管理员即可获取免费Key！🎁
 #AI工具 #PPT制作 #科研效率 #开源项目`;
+
+  const getQuotaContext = () => ({
+    userId: user?.id || null,
+    isAnonymous: user?.is_anonymous || false,
+  });
+
+  const buildInsufficientPointsMessage = (required: number, remaining: number, action: string) =>
+    `点数不足：${action}需要 ${required} 点，当前剩余 ${remaining} 点。`;
+
+  const ensureQuotaForAction = async (required: number, action: string) => {
+    const { userId, isAnonymous } = getQuotaContext();
+    const quota = await checkQuota(userId, isAnonymous);
+    if (quota.remaining < required) {
+      setError(buildInsufficientPointsMessage(required, quota.remaining, action));
+      return false;
+    }
+    return true;
+  };
+
+  const consumeQuotaForAction = async (workflowType: string, amount: number, warningMessage: string) => {
+    const { userId, isAnonymous } = getQuotaContext();
+    const ok = await recordUsage(userId, workflowType, { amount, isAnonymous });
+    refreshQuota();
+    if (!ok) {
+      setError((prev) => prev || warningMessage);
+    }
+    return ok;
+  };
+
+  const extractErrorMessage = async (res: Response, fallback: string) => {
+    if (res.status === 403) {
+      return '邀请码不正确或已失效';
+    }
+    if (res.status === 429) {
+      return '请求过于频繁，请稍后再试';
+    }
+    try {
+      const errBody = await res.json();
+      if (typeof errBody?.detail === 'string' && errBody.detail.trim()) {
+        return errBody.detail;
+      }
+      if (typeof errBody?.error === 'string' && errBody.error.trim()) {
+        return errBody.error;
+      }
+      if (typeof errBody?.message === 'string' && errBody.message.trim()) {
+        return errBody.message;
+      }
+    } catch {
+      // ignore parse error
+    }
+    return fallback;
+  };
 
   const handleCopyShareText = async () => {
     try {
@@ -188,7 +244,7 @@ const Paper2PptPage = () => {
     } catch (e) {
       console.error('Failed to restore paper2ppt config', e);
     }
-  }, [user?.id]);
+  }, [user?.id, userApiConfigRequired]);
 
   // 将配置写入 localStorage
   useEffect(() => {
@@ -394,7 +450,7 @@ const Paper2PptPage = () => {
       return;
     }
     
-    if (!apiKey.trim()) {
+    if (userApiConfigRequired && !apiKey.trim()) {
       setError('请输入 API Key');
       return;
     }
@@ -402,9 +458,7 @@ const Paper2PptPage = () => {
     // Check quota before proceeding
     const quota = await checkQuota(user?.id || null, user?.is_anonymous || false);
     if (quota.remaining <= 0) {
-      setError(quota.isAuthenticated
-        ? '今日配额已用完（10次/天），请明天再试'
-        : '今日配额已用完（5次/天），登录后可获得更多配额');
+      setError('当前点数不足，请先获取更多点数后再试。');
       return;
     }
 
@@ -427,18 +481,30 @@ const Paper2PptPage = () => {
     setProgressStatus('正在初始化...');
     
     // 模拟进度
+    const requestStartedAt = Date.now();
     const progressInterval = setInterval(() => {
       setProgress(prev => {
-        if (prev >= 90) return 90;
+        const elapsedSec = Math.floor((Date.now() - requestStartedAt) / 1000);
+        if (prev >= 90) {
+          if (elapsedSec >= 90) {
+            setProgressStatus(`AI 正在生成大纲，已等待 ${Math.floor(elapsedSec / 60)} 分 ${elapsedSec % 60} 秒，请稍候`);
+          } else {
+            setProgressStatus('AI 正在生成大纲，请稍候');
+          }
+          return 90;
+        }
         const messages = [
-           '正在内容准备...',
-           '正在解析内容...',
-           '正在分析结构...',
-           '正在提取关键点...',
-           '正在生成大纲...'
+          '正在准备输入内容...',
+          '正在解析论文内容...',
+          '正在提取关键信息...',
+          '正在请求大模型生成大纲...',
         ];
-        const msgIndex = Math.floor(prev / 20);
-        if (msgIndex < messages.length) {
+        const msgIndex = Math.min(messages.length - 1, Math.floor(prev / 25));
+        if (elapsedSec >= 90) {
+          setProgressStatus(`AI 正在生成大纲，已等待 ${Math.floor(elapsedSec / 60)} 分 ${elapsedSec % 60} 秒，请稍候`);
+        } else if (elapsedSec >= 45) {
+          setProgressStatus('AI 正在生成大纲，模型响应较慢，请稍候');
+        } else {
           setProgressStatus(messages[msgIndex]);
         }
         // 调整进度速度，使其在 3 分钟左右达到 90%
@@ -457,8 +523,11 @@ const Paper2PptPage = () => {
       }
       
       formData.append('email', user?.id || user?.email || '');
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('model', model);
       formData.append('language', language);
       formData.append('style', globalPrompt || getStyleDescription(stylePreset));
@@ -481,18 +550,7 @@ const Paper2PptPage = () => {
       });
       
       if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 403) {
-          msg = '邀请码不正确或已失效';
-        } else if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
+        throw new Error(await extractErrorMessage(res, '服务器繁忙，请稍后再试'));
       }
 
       const data = await res.json();
@@ -656,6 +714,7 @@ const Paper2PptPage = () => {
       const formData = new FormData();
       formData.append('outline_feedback', outlineFeedback.trim());
       formData.append('pagecontent', JSON.stringify(pagecontent));
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
       formData.append('chat_api_url', llmApiUrl.trim());
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
@@ -712,6 +771,10 @@ const Paper2PptPage = () => {
 
   const handleConfirmOutline = async () => {
     if (isRefiningOutline) return;
+    const requiredPoints = Math.max(1, outlineData.length);
+    if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${requiredPoints} 页 PPT`))) {
+      return;
+    }
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
@@ -731,6 +794,7 @@ const Paper2PptPage = () => {
     try {
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
       formData.append('chat_api_url', llmApiUrl.trim());
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
@@ -789,6 +853,11 @@ const Paper2PptPage = () => {
       preloadGeneratedImages(data.all_output_files);
       
       setGenerateResults(updatedResults);
+      await consumeQuotaForAction(
+        'paper2ppt',
+        requiredPoints,
+        `PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
+      );
       
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
@@ -913,6 +982,9 @@ const Paper2PptPage = () => {
       setError('请输入重新生成的提示词');
       return;
     }
+    if (!(await ensureQuotaForAction(1, '重新生成当前页面'))) {
+      return;
+    }
     
     setIsGenerating(true);
     setError(null);
@@ -928,6 +1000,7 @@ const Paper2PptPage = () => {
     try {
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
       formData.append('chat_api_url', llmApiUrl.trim());
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
@@ -976,16 +1049,7 @@ const Paper2PptPage = () => {
       });
       
       if (!res.ok) {
-        let msg = '服务器繁忙，请稍后再试';
-        if (res.status === 429) {
-          msg = '请求过于频繁，请稍后再试';
-        } else {
-          try {
-            const errBody = await res.json();
-            if (errBody?.error) msg = errBody.error;
-          } catch { /* ignore parse error */ }
-        }
-        throw new Error(msg);
+        throw new Error(await extractErrorMessage(res, '服务器繁忙，请稍后再试'));
       }
 
       const data = await res.json();
@@ -1016,6 +1080,11 @@ const Paper2PptPage = () => {
 
       // 获取更新的版本历史
       await fetchVersionHistory(currentSlideIndex);
+      await consumeQuotaForAction(
+        'paper2ppt',
+        1,
+        '页面已重新生成，但 1 点扣费记录失败，请刷新余额确认。',
+      );
 
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
@@ -1055,6 +1124,7 @@ const Paper2PptPage = () => {
     try {
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
       formData.append('chat_api_url', llmApiUrl.trim());
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
@@ -1123,10 +1193,6 @@ const Paper2PptPage = () => {
       if (!hasOutput) {
         throw new Error('生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
       }
-
-      // 校验通过后才扣积分
-      await recordUsage(user?.id || null, 'paper2ppt', { isAnonymous: user?.is_anonymous || false });
-      refreshQuota();
 
       // Upload generated file to Supabase Storage (either PPTX or PDF)
       let filePath = data.ppt_pptx_path || (data.all_output_files?.find((url: string) =>
@@ -1242,6 +1308,7 @@ const Paper2PptPage = () => {
               useLongPaper={useLongPaper} setUseLongPaper={setUseLongPaper}
               progress={progress} progressStatus={progressStatus}
               error={error}
+              showApiConfig={userApiConfigRequired}
               llmApiUrl={llmApiUrl} setLlmApiUrl={setLlmApiUrl}
               apiKey={apiKey} setApiKey={setApiKey}
               model={model} setModel={setModel}
@@ -1314,6 +1381,7 @@ const Paper2PptPage = () => {
               handleCopyShareText={handleCopyShareText}
               copySuccess={copySuccess}
               stars={stars}
+              showFreeApiPromo={userApiConfigRequired}
             />
           )}
         </div>
