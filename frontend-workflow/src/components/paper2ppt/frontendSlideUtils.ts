@@ -1,6 +1,7 @@
-import { FrontendEditableField, FrontendSlide } from './types';
+import { FrontendEditableField, FrontendSlide, FrontendVisualAsset } from './types';
 
-const PLACEHOLDER_RE = /\{\{(?:field|list):([a-zA-Z0-9_]+)\}\}/g;
+const FIELD_PLACEHOLDER_RE = /\{\{(?:field|list):([a-zA-Z0-9_]+)\}\}/g;
+const IMAGE_PLACEHOLDER_RE = /\{\{image:([a-zA-Z0-9_]+)\}\}/g;
 const FORBIDDEN_HTML_RE = /<\s*(script|iframe|img|video|audio|canvas|svg)\b|on[a-z]+\s*=/i;
 const FORBIDDEN_CSS_RE = /@import|url\s*\(|(?:^|[,{])\s*(?:body|html|:root|#root)\b|position\s*:\s*fixed/i;
 
@@ -54,6 +55,45 @@ const renderFieldValue = (field: FrontendEditableField) => {
   return wrapEditableText(field, formatTextValue(field.value || ''));
 };
 
+const getVisualSourceLabel = (asset: FrontendVisualAsset) => {
+  switch (asset.sourceType) {
+    case 'paper_asset':
+      return '论文图表';
+    case 'upload':
+      return '用户上传';
+    default:
+      return 'AI 配图';
+  }
+};
+
+const renderVisualAsset = (asset: FrontendVisualAsset) => {
+  const assetKey = escapeHtml(asset.key || 'main_visual');
+  const assetLabel = escapeHtml(asset.label || asset.key || 'Image');
+  const assetAlt = escapeHtml(asset.alt || asset.label || asset.key || 'Slide image');
+  const sourceLabel = escapeHtml(getVisualSourceLabel(asset));
+  const assetSrc = (asset.src || '').trim();
+
+  if (!assetSrc) {
+    return `
+<div class="ppt-managed-image" data-image-key="${assetKey}" data-image-label="${assetLabel}">
+  <div class="ppt-managed-image-frame ppt-managed-image-frame-empty">
+    <div class="ppt-managed-image-empty-text">点击上传图片</div>
+  </div>
+  <div class="ppt-managed-image-badge">${sourceLabel}</div>
+</div>
+`.trim();
+  }
+
+  return `
+<div class="ppt-managed-image" data-image-key="${assetKey}" data-image-label="${assetLabel}">
+  <div class="ppt-managed-image-frame">
+    <img src="${escapeHtml(assetSrc)}" alt="${assetAlt}" class="ppt-managed-image-el" />
+  </div>
+  <div class="ppt-managed-image-badge">${sourceLabel}</div>
+</div>
+`.trim();
+};
+
 export const buildFrontendSlideMarkup = (slide: FrontendSlide) => {
   let html = ensureSlideRoot(sanitizeTemplate(slide.htmlTemplate || ''));
   slide.editableFields.forEach((field) => {
@@ -73,7 +113,11 @@ export const buildFrontendSlideMarkup = (slide: FrontendSlide) => {
       html = html.split(listToken).join(`<li>${renderedValue}</li>`);
     }
   });
-  html = html.replace(/\{\{(?:field|list):[^}]+\}\}/g, '');
+  slide.visualAssets.forEach((asset) => {
+    const imageToken = `{{image:${asset.key}}}`;
+    html = html.split(imageToken).join(renderVisualAsset(asset));
+  });
+  html = html.replace(/\{\{(?:field|list|image):[^}]+\}\}/g, '');
   const css = sanitizeCss(slide.cssCode || '');
   const editableHintCss = `
 .slide-root .ppt-inline-editable {
@@ -84,6 +128,69 @@ export const buildFrontendSlideMarkup = (slide: FrontendSlide) => {
   background: rgba(125, 211, 252, 0.08);
   box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.16);
   border-radius: 0.2em;
+}
+.slide-root .ppt-managed-image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 140px;
+  min-height: 140px;
+  cursor: pointer;
+}
+.slide-root .ppt-managed-image-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(125, 211, 252, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.2));
+}
+.slide-root .ppt-managed-image-frame-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+}
+.slide-root .ppt-managed-image-empty-text {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(15, 23, 42, 0.76);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.slide-root .ppt-managed-image-el {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.slide-root .ppt-managed-image-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(6, 16, 29, 0.68);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.slide-root .ppt-managed-image:hover .ppt-managed-image-frame {
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.2), 0 18px 36px rgba(15, 23, 42, 0.18);
+}
+.slide-root .ppt-managed-image:hover .ppt-managed-image-badge {
+  opacity: 1;
+  transform: translateY(0);
 }
 `.trim();
   return `<style>${css}\n${editableHintCss}</style>${html}`;
@@ -127,22 +234,36 @@ export const validateFrontendSlideCode = (
   const sanitizedHtml = ensureSlideRoot(sanitizeTemplate(htmlTemplate));
   const sanitizedCss = sanitizeCss(cssCode);
   const availableKeys = new Set(slide.editableFields.map((field) => field.key));
-  const placeholderKeys = Array.from(sanitizedHtml.matchAll(PLACEHOLDER_RE)).map((match) => match[1]);
+  const availableImageKeys = new Set(slide.visualAssets.map((asset) => asset.key));
+  const fieldPlaceholderKeys = Array.from(sanitizedHtml.matchAll(FIELD_PLACEHOLDER_RE)).map((match) => match[1]);
+  const imagePlaceholderKeys = Array.from(sanitizedHtml.matchAll(IMAGE_PLACEHOLDER_RE)).map((match) => match[1]);
 
-  if (placeholderKeys.length === 0) {
-    issues.push('HTML 中至少需要保留一个 `{{field:...}}` 或 `{{list:...}}` 占位符。');
+  if (fieldPlaceholderKeys.length === 0 && imagePlaceholderKeys.length === 0) {
+    issues.push('HTML 中至少需要保留一个 `{{field:...}}`、`{{list:...}}` 或 `{{image:...}}` 占位符。');
   }
 
-  const unknownKeys = Array.from(new Set(placeholderKeys.filter((key) => !availableKeys.has(key))));
-  if (unknownKeys.length > 0) {
-    issues.push(`发现未知占位符字段：${unknownKeys.join('、')}。`);
+  const unknownFieldKeys = Array.from(new Set(fieldPlaceholderKeys.filter((key) => !availableKeys.has(key))));
+  if (unknownFieldKeys.length > 0) {
+    issues.push(`发现未知文本占位符字段：${unknownFieldKeys.join('、')}。`);
+  }
+
+  const unknownImageKeys = Array.from(new Set(imagePlaceholderKeys.filter((key) => !availableImageKeys.has(key))));
+  if (unknownImageKeys.length > 0) {
+    issues.push(`发现未知图片占位符字段：${unknownImageKeys.join('、')}。`);
   }
 
   const unusedKeys = slide.editableFields
     .map((field) => field.key)
-    .filter((key) => !placeholderKeys.includes(key));
+    .filter((key) => !fieldPlaceholderKeys.includes(key));
   if (unusedKeys.length > 0) {
     warnings.push(`以下字段当前未被模板使用：${unusedKeys.slice(0, 6).join('、')}。`);
+  }
+
+  const unusedImageKeys = slide.visualAssets
+    .map((asset) => asset.key)
+    .filter((key) => !imagePlaceholderKeys.includes(key));
+  if (unusedImageKeys.length > 0) {
+    warnings.push(`以下图片槽位当前未被模板使用：${unusedImageKeys.slice(0, 4).join('、')}。`);
   }
 
   if (!sanitizedHtml.includes('class="slide-root"') && !sanitizedHtml.includes("class='slide-root'")) {
@@ -252,6 +373,32 @@ export const captureSlideToPngBlob = async (
   clone.style.width = `${width}px`;
   clone.style.height = `${height}px`;
   clone.style.margin = '0';
+
+  const images = Array.from(clone.querySelectorAll<HTMLImageElement>('img'));
+  await Promise.all(
+    images.map(async (image) => {
+      const src = image.getAttribute('src') || '';
+      if (!src || src.startsWith('data:')) {
+        return;
+      }
+      try {
+        const res = await fetch(src);
+        if (!res.ok) {
+          return;
+        }
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(blob);
+        });
+        image.setAttribute('src', dataUrl);
+      } catch {
+        // Best effort: leave the original src if inlining fails.
+      }
+    }),
+  );
 
   const serialized = new XMLSerializer().serializeToString(clone);
   const svg = `

@@ -45,6 +45,19 @@ export interface FrontendEditableField {
   items: string[];
 }
 
+export type FrontendVisualAssetSource = 'generated' | 'paper_asset' | 'upload';
+
+export interface FrontendVisualAsset {
+  key: string;
+  label: string;
+  src: string;
+  alt: string;
+  sourceType: FrontendVisualAssetSource;
+  storagePath?: string;
+  prompt?: string;
+  style?: string;
+}
+
 export interface FrontendSlide {
   slideId: string;
   pageNum: number;
@@ -52,6 +65,7 @@ export interface FrontendSlide {
   htmlTemplate: string;
   cssCode: string;
   editableFields: FrontendEditableField[];
+  visualAssets: FrontendVisualAsset[];
   generationNote?: string;
   status: 'pending' | 'processing' | 'done';
   review?: FrontendSlideReview;

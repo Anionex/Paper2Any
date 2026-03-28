@@ -12,6 +12,7 @@ interface FrontendSlidePreviewProps {
   onInlineFieldChange?: (fieldKey: string, value: string) => void;
   onInlineListItemChange?: (fieldKey: string, itemIndex: number, value: string) => void;
   onInlineListReplace?: (fieldKey: string, items: string[]) => void;
+  onReplaceImage?: (imageKey: string, file: File) => void | Promise<void>;
 }
 
 interface InlineEditorState {
@@ -35,12 +36,15 @@ const FrontendSlidePreview: React.FC<FrontendSlidePreviewProps> = ({
   onInlineFieldChange,
   onInlineListItemChange,
   onInlineListReplace,
+  onReplaceImage,
 }) => {
   const DESIGN_WIDTH = 1600;
   const DESIGN_HEIGHT = 900;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [scale, setScale] = useState(1);
   const [inlineEditor, setInlineEditor] = useState<InlineEditorState | null>(null);
+  const [pendingImageKey, setPendingImageKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (mode !== 'responsive' || !containerRef.current) {
@@ -109,6 +113,25 @@ const FrontendSlidePreview: React.FC<FrontendSlidePreviewProps> = ({
     setInlineEditor(null);
   };
 
+  const openImagePicker = (imageKey: string) => {
+    if (!imageKey || !inlineEditEnabled || mode !== 'responsive') {
+      return;
+    }
+    setPendingImageKey(imageKey);
+    imageInputRef.current?.click();
+  };
+
+  const handleImageInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const imageKey = pendingImageKey;
+    event.target.value = '';
+    setPendingImageKey(null);
+    if (!file || !imageKey) {
+      return;
+    }
+    await onReplaceImage?.(imageKey, file);
+  };
+
   const handleEditableClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!inlineEditEnabled || mode !== 'responsive' || !containerRef.current) {
       return;
@@ -116,6 +139,18 @@ const FrontendSlidePreview: React.FC<FrontendSlidePreviewProps> = ({
 
     const target = event.target as HTMLElement;
     if (target.closest('[data-inline-editor="true"]')) {
+      return;
+    }
+
+    const imageNode = target.closest('[data-image-key]') as HTMLElement | null;
+    if (imageNode) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (inlineEditor) {
+        persistInlineEdit(inlineEditor);
+      }
+      setInlineEditor(null);
+      openImagePicker(imageNode.dataset.imageKey || '');
       return;
     }
 
@@ -222,7 +257,7 @@ const FrontendSlidePreview: React.FC<FrontendSlidePreviewProps> = ({
         <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20">
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-[#06101d]/85 px-3 py-1.5 text-[11px] text-cyan-100/85 shadow-[0_12px_28px_rgba(0,0,0,0.28)] backdrop-blur-xl">
             <Pencil size={12} />
-            点击画布中的文字可直接编辑
+            点击文字可直接编辑，点击图片可替换
           </div>
         </div>
       )}
@@ -299,6 +334,16 @@ const FrontendSlidePreview: React.FC<FrontendSlidePreviewProps> = ({
             />
           )}
         </div>
+      )}
+
+      {inlineEditEnabled && (
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageInputChange}
+        />
       )}
     </div>
   );

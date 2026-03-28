@@ -39,6 +39,10 @@ interface UploadStepProps {
   setPageCount: (count: number) => void;
   useLongPaper: boolean;
   setUseLongPaper: (use: boolean) => void;
+  frontendIncludeImages: boolean;
+  setFrontendIncludeImages: (enabled: boolean) => void;
+  frontendImageStyle: string;
+  setFrontendImageStyle: (style: string) => void;
   progress: number;
   progressStatus: string;
   error: string | null;
@@ -77,6 +81,10 @@ const UploadStep: React.FC<UploadStepProps> = ({
   isUploading, isValidating,
   pageCount, setPageCount,
   useLongPaper, setUseLongPaper,
+  frontendIncludeImages,
+  setFrontendIncludeImages,
+  frontendImageStyle,
+  setFrontendImageStyle,
   progress, progressStatus,
   error,
   showApiConfig,
@@ -226,7 +234,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
         imageDesc: '沿用现有图像工作流，逐页生成视觉稿并导出。',
         frontendTitle: '纯前端版 PPT',
         frontendDesc: '生成 16:9 HTML/CSS 模板，文字可编辑，最终截图导出。',
-        frontendTip: '纯前端版不会引用论文原图，而是生成文本优先的前端布局代码。',
+        frontendTip: '前端版默认文本优先；若开启图像增强，会优先复用论文图表，否则按页面内容自动补示意图。',
       }
     : {
         title: 'PPT Mode',
@@ -234,7 +242,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
         imageDesc: 'Use the current image workflow and export generated visual slides.',
         frontendTitle: 'Frontend PPT',
         frontendDesc: 'Generate editable 16:9 HTML/CSS slides and export by screenshots.',
-        frontendTip: 'Frontend mode skips paper figures and focuses on editable text-first layouts.',
+        frontendTip: 'Frontend mode stays text-editable and can optionally reuse paper figures/tables or generate supporting images.',
       };
   const pageCopy = uiLang === 'zh'
     ? {
@@ -306,6 +314,19 @@ const UploadStep: React.FC<UploadStepProps> = ({
   const promptCardsTip = pptMode === 'frontend'
     ? (uiLang === 'zh' ? '前端版建议直接写颜色、材质和组件气质' : 'For frontend decks, specify palette, material, and component language directly')
     : t('upload.config.promptCardsTip');
+  const frontendImageStyleOptions = uiLang === 'zh'
+    ? [
+        { value: 'academic_illustration', label: '学术示意图' },
+        { value: 'realistic', label: '写实' },
+        { value: 'sci_fi', label: '科幻' },
+        { value: 'flat_infographic', label: '扁平信息图' },
+      ]
+    : [
+        { value: 'academic_illustration', label: 'Academic Illustration' },
+        { value: 'realistic', label: 'Realistic' },
+        { value: 'sci_fi', label: 'Sci-Fi' },
+        { value: 'flat_infographic', label: 'Flat Infographic' },
+      ];
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -586,9 +607,11 @@ const UploadStep: React.FC<UploadStepProps> = ({
           )}
           
           <div className={`grid gap-3 ${pptMode === 'image' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {pptMode === 'image' && (
+            {(pptMode === 'image' || frontendIncludeImages) && (
             <div>
-              <label className="block text-xs text-gray-400 mb-1">{t('upload.config.genModel')}</label>
+              <label className="block text-xs text-gray-400 mb-1">
+                {pptMode === 'frontend' ? '前端版生图模型' : t('upload.config.genModel')}
+              </label>
               <select
                 value={genFigModel}
                 onChange={e => setGenFigModel(e.target.value)}
@@ -634,6 +657,51 @@ const UploadStep: React.FC<UploadStepProps> = ({
               {t('upload.config.longPaper')}
             </span>
           </div>
+
+          {pptMode === 'frontend' && (
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-white">图像增强</div>
+                  <div className="mt-1 text-xs leading-5 text-amber-100/80">
+                    开启后优先使用论文解析出的图/表；当前页没有可复用素材时，再按大纲自动生成示意图。
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFrontendIncludeImages(!frontendIncludeImages)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    frontendIncludeImages ? 'bg-amber-500' : 'bg-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      frontendIncludeImages ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              {frontendIncludeImages && (
+                <div className="mt-4 grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-300 mb-1">图像风格</label>
+                    <select
+                      value={frontendImageStyle}
+                      onChange={(e) => setFrontendImageStyle(e.target.value)}
+                      className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {frontendImageStyleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="rounded-xl border border-amber-400/15 bg-black/20 px-3 py-2 text-[11px] leading-5 text-amber-100/85">
+                    开启图像增强后，批量生成阶段按 2 点 / 页计费；文字可继续直接编辑，图片可在画布里点击替换。
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="border-t border-white/10 pt-4 mt-2">
             <h4 className="text-xs text-gray-400 mb-2">{t('upload.config.styleTitle')}</h4>
@@ -786,7 +854,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
 
           <div className="flex items-start gap-2 text-xs text-gray-500 mt-3 px-1">
             <Info size={14} className="mt-0.5 text-gray-400 flex-shrink-0" />
-            <p>{pptMode === 'frontend' ? '纯前端版会在下一步生成可编辑字段和 HTML/CSS 代码，最终导出为逐页截图版 PPTX。' : t('upload.config.tip')}</p>
+            <p>{pptMode === 'frontend' ? '前端版会在下一步生成可编辑字段和 HTML/CSS 代码；若开启图像增强，会同时预留受控图片槽位，最终导出为逐页截图版 PPTX。' : t('upload.config.tip')}</p>
           </div>
 
           {isUploading && (

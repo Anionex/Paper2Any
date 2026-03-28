@@ -40,6 +40,7 @@ interface FrontendGenerateStepProps {
   replaceListItems: (slideIndex: number, fieldKey: string, items: string[]) => void;
   addListItem: (slideIndex: number, fieldKey: string) => void;
   removeListItem: (slideIndex: number, fieldKey: string, itemIndex: number) => void;
+  replaceVisualAsset: (slideIndex: number, imageKey: string, file: File) => Promise<void>;
 }
 
 const FrontendGenerateStep: React.FC<FrontendGenerateStepProps> = ({
@@ -65,6 +66,7 @@ const FrontendGenerateStep: React.FC<FrontendGenerateStepProps> = ({
   replaceListItems,
   addListItem,
   removeListItem,
+  replaceVisualAsset,
 }) => {
   const [panelMode, setPanelMode] = useState<'preview' | 'code'>('preview');
   const [draftHtml, setDraftHtml] = useState('');
@@ -168,6 +170,9 @@ const FrontendGenerateStep: React.FC<FrontendGenerateStepProps> = ({
                     }
                     onInlineListReplace={(fieldKey, items) =>
                       replaceListItems(currentSlideIndex, fieldKey, items)
+                    }
+                    onReplaceImage={(imageKey, file) =>
+                      replaceVisualAsset(currentSlideIndex, imageKey, file)
                     }
                   />
                 ) : (
@@ -338,6 +343,11 @@ const FrontendGenerateStep: React.FC<FrontendGenerateStepProps> = ({
           )}
 
           <h3 className="text-white font-semibold mb-4">可编辑文本字段</h3>
+          {currentSlide?.visualAssets && currentSlide.visualAssets.length > 0 && (
+            <div className="mb-4 rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 text-xs text-amber-100/90">
+              当前页已启用图片槽位。直接点击画布内图片即可替换为你自己的文件。
+            </div>
+          )}
           <div className="space-y-4 max-h-[760px] overflow-auto pr-1">
             {currentSlide?.editableFields?.map((field) => (
               <div key={field.key} className="rounded-xl border border-white/10 bg-white/5 p-3">

@@ -68,6 +68,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   const [isValidating, setIsValidating] = useState(false);
   const [pageCount, setPageCount] = useState(6);
   const [useLongPaper, setUseLongPaper] = useState(false);
+  const [frontendIncludeImages, setFrontendIncludeImages] = useState(false);
+  const [frontendImageStyle, setFrontendImageStyle] = useState('academic_illustration');
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
   
@@ -250,6 +252,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
         if (saved.globalPrompt) setGlobalPrompt(saved.globalPrompt);
         if (saved.pageCount) setPageCount(saved.pageCount);
         if (saved.useLongPaper !== undefined) setUseLongPaper(saved.useLongPaper);
+        if (saved.frontendIncludeImages !== undefined) setFrontendIncludeImages(Boolean(saved.frontendIncludeImages));
+        if (saved.frontendImageStyle) setFrontendImageStyle(saved.frontendImageStyle);
         if (saved.model) setModel(saved.model);
         if (saved.genFigModel) setGenFigModel(saved.genFigModel);
         if (saved.language) setLanguage(saved.language);
@@ -287,6 +291,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       globalPrompt,
       pageCount,
       useLongPaper,
+      frontendIncludeImages,
+      frontendImageStyle,
       llmApiUrl,
       apiKey,
       model,
@@ -303,7 +309,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     }
   }, [
     pptMode, uploadMode, textContent, styleMode, stylePreset, globalPrompt,
-    pageCount, useLongPaper, llmApiUrl, apiKey,
+    pageCount, useLongPaper, frontendIncludeImages, frontendImageStyle, llmApiUrl, apiKey,
     model, genFigModel, language, user?.id
   ]);
 
@@ -421,6 +427,22 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
             items: Array.isArray(field.items) ? field.items.map((item: any) => String(item || '')) : [],
           }))
         : [],
+      visualAssets: Array.isArray(slide.visual_assets || slide.visualAssets)
+        ? (slide.visual_assets || slide.visualAssets).map((asset: any, assetIndex: number) => ({
+            key: String(asset.key || `main_visual_${assetIndex + 1}`),
+            label: String(asset.label || asset.key || `Image ${assetIndex + 1}`),
+            src: String(asset.src || ''),
+            alt: String(asset.alt || asset.label || asset.key || ''),
+            sourceType: asset.source_type === 'paper_asset' || asset.sourceType === 'paper_asset'
+              ? 'paper_asset'
+              : asset.source_type === 'upload' || asset.sourceType === 'upload'
+                ? 'upload'
+                : 'generated',
+            storagePath: asset.storage_path || asset.storagePath || undefined,
+            prompt: asset.prompt || undefined,
+            style: asset.style || undefined,
+          }))
+        : [],
       generationNote: slide.generation_note || slide.generationNote || '',
       status: slide.status === 'processing' || slide.status === 'pending' ? slide.status : 'done',
       review: {
@@ -468,6 +490,16 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       value: field.value,
       items: field.items,
     })),
+    visual_assets: slide.visualAssets.map((asset) => ({
+      key: asset.key,
+      label: asset.label,
+      src: asset.src,
+      alt: asset.alt,
+      source_type: asset.sourceType,
+      storage_path: asset.storagePath || '',
+      prompt: asset.prompt || '',
+      style: asset.style || '',
+    })),
     generation_note: slide.generationNote || '',
     status: slide.status,
   });
@@ -484,6 +516,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
 
   const getEffectiveStylePrompt = (mode: PptGenerationMode = pptMode) =>
     globalPrompt || getStyleDescription(stylePreset, mode);
+
+  const getFrontendGenerationCostPerPage = () => (frontendIncludeImages ? 2 : 1);
 
   const waitForFrontendCaptureNodes = async (count: number, timeoutMs: number = 6000) => {
     const startedAt = Date.now();
@@ -517,6 +551,9 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     formData.append('style', getEffectiveStylePrompt('frontend'));
     formData.append('email', user?.id || user?.email || '');
     formData.append('result_path', resultPathValue);
+    formData.append('include_images', String(frontendIncludeImages));
+    formData.append('image_style', frontendImageStyle);
+    formData.append('image_model', genFigModel);
     formData.append('page_id', String(slideIndex));
     formData.append('edit_prompt', prompt.trim());
     formData.append('current_slide', JSON.stringify(serializeFrontendSlide(slideSnapshot)));
@@ -1267,6 +1304,76 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     );
   };
 
+  const replaceFrontendVisualAsset = async (slideIndex: number, imageKey: string, file: File) => {
+    if (!resultPath) {
+      setError('缺少 result_path，请重新上传文件');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError('仅支持上传图片文件');
+      return;
+    }
+
+    const currentSlide = frontendSlides[slideIndex];
+    if (!currentSlide) {
+      setError('当前前端页面不存在');
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('result_path', resultPath);
+      formData.append('asset_key', imageKey);
+      formData.append('file', file);
+
+      const res = await fetch('/api/v1/paper2ppt/frontend/upload-asset', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(await extractErrorMessage(res, '图片上传失败'));
+      }
+
+      const data = await res.json();
+      if (!data.success || !data.asset) {
+        throw new Error(data.error || '图片上传失败');
+      }
+
+      setFrontendSlides((prev) =>
+        prev.map((slide, idx) => {
+          if (idx !== slideIndex) return slide;
+          return {
+            ...slide,
+            generationNote: '当前页图片已替换为用户上传版本。',
+            review: {
+              status: 'idle',
+              summary: '',
+              issues: [],
+            },
+            visualAssets: slide.visualAssets.map((asset) =>
+              asset.key === imageKey
+                ? {
+                    ...asset,
+                    src: String(data.asset.src || asset.src || ''),
+                    alt: String(data.asset.alt || file.name || asset.alt || ''),
+                    sourceType: 'upload',
+                    storagePath: String(data.asset.storage_path || data.asset.storagePath || asset.storagePath || ''),
+                  }
+                : asset,
+            ),
+          };
+        }),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '图片上传失败';
+      setError(message);
+    }
+  };
+
   const applyFrontendCodeEdit = (slideIndex: number, htmlTemplate: string, cssCode: string) => {
     const currentSlide = frontendSlides[slideIndex];
     if (!currentSlide) {
@@ -1308,15 +1415,15 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   };
 
   const handleConfirmFrontendOutline = async () => {
-    const requiredPoints = Math.max(1, outlineData.length);
-    if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${requiredPoints} 页前端 PPT`))) {
+    const requiredPoints = Math.max(1, outlineData.length * getFrontendGenerationCostPerPage());
+    if (!(await ensureQuotaForAction(requiredPoints, `批量生成前端 PPT（${outlineData.length} 页，预计 ${requiredPoints} 点）`))) {
       return;
     }
 
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
-    setGenerateTaskMessage('正在生成纯前端页面代码...');
+    setGenerateTaskMessage(frontendIncludeImages ? '正在生成纯前端页面代码与配图...' : '正在生成纯前端页面代码...');
     setError(null);
 
     const pendingSlides: FrontendSlide[] = outlineData.map((slide, index) => ({
@@ -1326,6 +1433,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       htmlTemplate: '',
       cssCode: '',
       editableFields: [],
+      visualAssets: [],
       status: 'processing',
       generationNote: '',
       review: {
@@ -1347,6 +1455,9 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       formData.append('style', getEffectiveStylePrompt('frontend'));
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', resultPath || '');
+      formData.append('include_images', String(frontendIncludeImages));
+      formData.append('image_style', frontendImageStyle);
+      formData.append('image_model', genFigModel);
       formData.append('pagecontent', buildFrontendPagecontentPayload());
 
       const res = await fetch('/api/v1/paper2ppt/frontend/generate', {
@@ -2302,6 +2413,10 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
               isUploading={isUploading} isValidating={isValidating}
               pageCount={pageCount} setPageCount={setPageCount}
               useLongPaper={useLongPaper} setUseLongPaper={setUseLongPaper}
+              frontendIncludeImages={frontendIncludeImages}
+              setFrontendIncludeImages={setFrontendIncludeImages}
+              frontendImageStyle={frontendImageStyle}
+              setFrontendImageStyle={setFrontendImageStyle}
               progress={progress} progressStatus={progressStatus}
               error={error}
               showApiConfig={userApiConfigRequired}
@@ -2370,6 +2485,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
                 replaceListItems={replaceFrontendListItems}
                 addListItem={addFrontendListItem}
                 removeListItem={removeFrontendListItem}
+                replaceVisualAsset={replaceFrontendVisualAsset}
               />
             ) : (
               <GenerateStep

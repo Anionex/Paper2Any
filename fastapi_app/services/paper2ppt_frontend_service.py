@@ -6,11 +6,15 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
+from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException, Request, UploadFile
 
+from dataflow_agent.agentroles import create_react_agent
 from dataflow_agent.logger import get_logger
+from dataflow_agent.state import Paper2FigureRequest, Paper2FigureState
+from dataflow_agent.toolkits.multimodaltool.req_img import generate_or_edit_and_save_image_async
 from dataflow_agent.toolkits.multimodaltool.ppt_tool import (
     convert_images_dir_to_pdf_and_full_slide_ppt,
 )
@@ -21,12 +25,13 @@ from fastapi_app.schemas import (
     FrontendPPTReviewRequest,
 )
 from fastapi_app.services.managed_api_service import resolve_llm_credentials
-from fastapi_app.utils import _to_outputs_url
+from fastapi_app.utils import _from_outputs_url, _to_outputs_url
 
 log = get_logger(__name__)
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
-_PLACEHOLDER_RE = re.compile(r"\{\{(?:field|list):([a-zA-Z0-9_]+)\}\}")
+_FIELD_PLACEHOLDER_RE = re.compile(r"\{\{(?:field|list):([a-zA-Z0-9_]+)\}\}")
+_IMAGE_PLACEHOLDER_RE = re.compile(r"\{\{image:([a-zA-Z0-9_]+)\}\}")
 _FORBIDDEN_HTML_RE = re.compile(
     r"<\s*(script|iframe|img|video|audio|canvas|svg)\b|on[a-z]+\s*=",
     re.IGNORECASE,
@@ -36,8 +41,12 @@ _FORBIDDEN_CSS_RE = re.compile(
     re.IGNORECASE,
 )
 _SLIDE_GEN_SEMAPHORE = asyncio.Semaphore(4)
+_IMAGE_GEN_SEMAPHORE = asyncio.Semaphore(2)
 _THEME_FILENAME = "deck_theme.json"
 _REFERENCE_SLIDE_LIMIT = 3
+_DEFAULT_VISUAL_KEY = "main_visual"
+_DEFAULT_VISUAL_KEYS = ("main_visual", "secondary_visual")
+_MAX_INLINE_VISUAL_ASSETS = 2
 
 
 class Paper2PPTFrontendService:
@@ -84,6 +93,7 @@ class Paper2PPTFrontendService:
             if req.page_id < 0 or req.page_id >= len(pagecontent):
                 raise HTTPException(status_code=400, detail="page_id out of range")
             generated_slide = await self._generate_single_slide(
+                base_dir=base_dir,
                 slides_dir=slides_dir,
                 pagecontent=pagecontent,
                 slide_index=req.page_id,
@@ -92,15 +102,19 @@ class Paper2PPTFrontendService:
                 model=req.model,
                 language=req.language,
                 style=req.style,
+                include_images=req.include_images,
+                image_style=req.image_style,
+                image_model=req.image_model,
                 edit_prompt=req.edit_prompt,
                 current_slide=current_slide,
                 theme=deck_theme,
             )
             self._write_slide_spec(slides_dir, generated_slide)
             self._sync_deck_manifest(slides_dir)
+            response_slide = self._externalize_slide_assets(generated_slide, request)
             return {
                 "success": True,
-                "slides": [generated_slide],
+                "slides": [response_slide],
                 "result_path": str(base_dir),
                 "theme": deck_theme,
                 "parallel_generation": True,
@@ -108,6 +122,7 @@ class Paper2PPTFrontendService:
 
         tasks = [
             self._generate_single_slide(
+                base_dir=base_dir,
                 slides_dir=slides_dir,
                 pagecontent=pagecontent,
                 slide_index=index,
@@ -116,6 +131,9 @@ class Paper2PPTFrontendService:
                 model=req.model,
                 language=req.language,
                 style=req.style,
+                include_images=req.include_images,
+                image_style=req.image_style,
+                image_model=req.image_model,
                 edit_prompt=None,
                 current_slide=None,
                 theme=deck_theme,
@@ -128,10 +146,11 @@ class Paper2PPTFrontendService:
         for slide in ordered_slides:
             self._write_slide_spec(slides_dir, slide)
         self._sync_deck_manifest(slides_dir)
+        response_slides = [self._externalize_slide_assets(slide, request) for slide in ordered_slides]
 
         return {
             "success": True,
-            "slides": ordered_slides,
+            "slides": response_slides,
             "result_path": str(base_dir),
             "theme": deck_theme,
             "parallel_generation": True,
@@ -262,9 +281,50 @@ class Paper2PPTFrontendService:
         normalized["success"] = True
         return normalized
 
+    async def upload_asset(
+        self,
+        *,
+        result_path: str,
+        asset_key: str,
+        upload: UploadFile,
+        request: Request | None,
+    ) -> Dict[str, Any]:
+        base_dir = self._paper2ppt_service.resolve_result_path(result_path)
+        if not base_dir.exists():
+            raise HTTPException(status_code=400, detail=f"result_path not exists: {base_dir}")
+
+        key = self._slugify(asset_key or _DEFAULT_VISUAL_KEY) or _DEFAULT_VISUAL_KEY
+        suffix = Path(upload.filename or "").suffix.lower() or ".png"
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            raise HTTPException(status_code=400, detail="unsupported image format")
+
+        payload = await upload.read()
+        if not payload:
+            raise HTTPException(status_code=400, detail="uploaded image is empty")
+
+        target_dir = base_dir / "frontend_assets" / "uploads"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = (target_dir / f"{key}_{uuid4().hex}{suffix}").resolve()
+        target_path.write_bytes(payload)
+
+        asset = {
+            "key": key,
+            "label": key.replace("_", " ").title(),
+            "src": str(target_path),
+            "alt": Path(upload.filename or target_path.name).stem,
+            "source_type": "upload",
+            "storage_path": str(target_path),
+        }
+        return {
+            "success": True,
+            "asset": self._externalize_asset(asset, request),
+            "result_path": str(base_dir),
+        }
+
     async def _generate_single_slide(
         self,
         *,
+        base_dir: Path,
         slides_dir: Path,
         pagecontent: List[Dict[str, Any]],
         slide_index: int,
@@ -273,16 +333,33 @@ class Paper2PPTFrontendService:
         model: str,
         language: str,
         style: str,
+        include_images: bool,
+        image_style: str,
+        image_model: Optional[str],
         edit_prompt: Optional[str],
         current_slide: Optional[Dict[str, Any]],
         theme: Dict[str, Any],
     ) -> Dict[str, Any]:
         outline_item = pagecontent[slide_index]
+        visual_assets = await self._prepare_visual_assets(
+            base_dir=base_dir,
+            outline_item=outline_item,
+            slide_index=slide_index,
+            include_images=include_images,
+            image_style=image_style,
+            image_model=image_model,
+            chat_api_url=chat_api_url,
+            api_key=api_key,
+            model=model,
+            theme=theme,
+            current_slide=current_slide,
+        )
         fallback_slide = self._build_fallback_slide(
             outline_item=outline_item,
             slide_index=slide_index,
             slide_count=len(pagecontent),
             theme=theme,
+            visual_assets=visual_assets,
         )
         reference_slides = (
             self._load_reference_slides(
@@ -304,6 +381,7 @@ class Paper2PPTFrontendService:
             theme=theme,
             deck_identity=deck_identity,
             reference_slides=reference_slides,
+            visual_assets=visual_assets,
         )
 
         try:
@@ -322,6 +400,7 @@ class Paper2PPTFrontendService:
                 slide_index=slide_index,
                 slide_count=len(pagecontent),
                 theme=theme,
+                visual_assets=visual_assets,
             )
             return normalized
         except Exception as exc:  # noqa: BLE001
@@ -484,6 +563,463 @@ class Paper2PPTFrontendService:
         )
         return self._normalize_theme_payload(payload, language=language, style=style)
 
+    async def _prepare_visual_assets(
+        self,
+        *,
+        base_dir: Path,
+        outline_item: Dict[str, Any],
+        slide_index: int,
+        include_images: bool,
+        image_style: str,
+        image_model: Optional[str],
+        chat_api_url: str,
+        api_key: str,
+        model: str,
+        theme: Dict[str, Any],
+        current_slide: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        current_assets = self._normalize_visual_assets(
+            current_slide.get("visual_assets") or current_slide.get("visualAssets") or []
+            if isinstance(current_slide, dict)
+            else [],
+            base_dir=base_dir,
+        )
+        if current_assets:
+            return current_assets
+
+        if not include_images:
+            return []
+
+        asset_refs = self._collect_outline_asset_refs(outline_item)
+        if asset_refs:
+            paper_assets = await self._resolve_outline_assets(
+                base_dir=base_dir,
+                asset_refs=asset_refs,
+                outline_item=outline_item,
+                slide_index=slide_index,
+                image_style=image_style,
+                chat_api_url=chat_api_url,
+                api_key=api_key,
+                model=model,
+            )
+            if paper_assets:
+                return paper_assets
+
+        image_prompt = self._build_visual_asset_prompt(
+            outline_item=outline_item,
+            slide_index=slide_index,
+            image_style=image_style,
+            theme=theme,
+        )
+        generated_asset = await self._generate_visual_asset(
+            base_dir=base_dir,
+            slide_index=slide_index,
+            prompt=image_prompt,
+            image_style=image_style,
+            image_model=image_model,
+            chat_api_url=chat_api_url,
+            api_key=api_key,
+            outline_item=outline_item,
+        )
+        if generated_asset is not None:
+            return [generated_asset]
+
+        return [
+            {
+                "key": _DEFAULT_VISUAL_KEY,
+                "label": "Main Visual",
+                "src": "",
+                "alt": str(outline_item.get("title") or f"Slide {slide_index + 1} visual").strip(),
+                "source_type": "generated",
+                "storage_path": "",
+                "prompt": image_prompt,
+                "style": image_style,
+            }
+        ]
+
+    async def _resolve_outline_assets(
+        self,
+        *,
+        base_dir: Path,
+        asset_refs: List[str],
+        outline_item: Dict[str, Any],
+        slide_index: int,
+        image_style: str,
+        chat_api_url: str,
+        api_key: str,
+        model: str,
+    ) -> List[Dict[str, Any]]:
+        resolved_assets: List[Dict[str, Any]] = []
+        for asset_index, asset_ref in enumerate(asset_refs[:_MAX_INLINE_VISUAL_ASSETS]):
+            normalized_ref = str(asset_ref or "").strip()
+            if not normalized_ref:
+                continue
+
+            if self._is_table_asset_ref(normalized_ref):
+                resolved_asset_path = await self._resolve_table_asset_path(
+                    base_dir=base_dir,
+                    asset_ref=normalized_ref,
+                    chat_api_url=chat_api_url,
+                    api_key=api_key,
+                    model=model,
+                )
+            else:
+                resolved_asset_path = self._resolve_asset_path(base_dir=base_dir, asset_ref=normalized_ref)
+
+            if not resolved_asset_path or not Path(resolved_asset_path).exists():
+                continue
+
+            resolved_assets.append(
+                {
+                    "key": self._build_visual_asset_key(asset_index),
+                    "label": self._build_visual_asset_label(normalized_ref, asset_index),
+                    "src": resolved_asset_path,
+                    "alt": str(outline_item.get("title") or f"Slide {slide_index + 1} visual").strip(),
+                    "source_type": "paper_asset",
+                    "storage_path": resolved_asset_path,
+                    "prompt": "",
+                    "style": image_style,
+                }
+            )
+        return resolved_assets
+
+    async def _generate_visual_asset(
+        self,
+        *,
+        base_dir: Path,
+        slide_index: int,
+        prompt: str,
+        image_style: str,
+        image_model: Optional[str],
+        chat_api_url: str,
+        api_key: str,
+        outline_item: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if not chat_api_url or not api_key:
+            return None
+
+        target_dir = base_dir / "frontend_assets" / "generated"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = (target_dir / f"page_{slide_index:03d}_{_DEFAULT_VISUAL_KEY}.png").resolve()
+        model_name = image_model or settings.PAPER2PPT_IMAGE_GEN_MODEL or settings.PAPER2PPT_DEFAULT_IMAGE_MODEL
+        api_base = re.sub(r"/chat/completions/?$", "", chat_api_url.rstrip("/"), flags=re.IGNORECASE)
+
+        try:
+            async with _IMAGE_GEN_SEMAPHORE:
+                await generate_or_edit_and_save_image_async(
+                    prompt=prompt,
+                    save_path=str(target_path),
+                    api_url=api_base,
+                    api_key=api_key,
+                    model=model_name,
+                    use_edit=False,
+                    aspect_ratio="16:9",
+                    resolution="2K",
+                    timeout=300,
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "[Paper2PPTFrontendService] Failed to generate frontend visual asset for page %s: %s",
+                slide_index,
+                exc,
+            )
+            return None
+
+        return {
+            "key": _DEFAULT_VISUAL_KEY,
+            "label": "Main Visual",
+            "src": str(target_path),
+            "alt": str(outline_item.get("title") or f"Slide {slide_index + 1} visual").strip(),
+            "source_type": "generated",
+            "storage_path": str(target_path),
+            "prompt": prompt,
+            "style": image_style,
+        }
+
+    def _build_visual_asset_prompt(
+        self,
+        *,
+        outline_item: Dict[str, Any],
+        slide_index: int,
+        image_style: str,
+        theme: Dict[str, Any],
+    ) -> str:
+        style_map = {
+            "academic_illustration": "clean academic illustration with publication-grade composition",
+            "realistic": "realistic but presentation-friendly illustration",
+            "sci_fi": "restrained sci-fi research visual with clean lighting",
+            "flat_infographic": "flat infographic-style illustration with simple shapes",
+        }
+        key_points = [
+            str(item).strip()
+            for item in (outline_item.get("key_points") or [])
+            if str(item).strip()
+        ][:4]
+        palette = theme.get("palette") or {}
+        return (
+            "Create one supporting image for an academic presentation slide. "
+            f"Page topic: {str(outline_item.get('title') or f'Slide {slide_index + 1}').strip()}. "
+            f"Layout intent: {str(outline_item.get('layout_description') or '').strip()}. "
+            f"Key points: {'; '.join(key_points) if key_points else 'keep it concise and presentation-friendly'}. "
+            f"Visual style: {style_map.get(image_style, image_style or 'academic illustration')}. "
+            f"Preferred palette anchors: background {palette.get('bg', '#0b1020')}, accent {palette.get('accent', '#f59e0b')}, text contrast {palette.get('text', '#e2e8f0')}. "
+            "The image must fit inside a 16:9 slide-side visual panel. "
+            "Do not put any text, letters, labels, logos, equations, UI chrome, watermark, or slide-like layout in the image. "
+            "Focus on one clear subject or scene that supports the slide narrative."
+        )
+
+    def _collect_outline_asset_refs(self, outline_item: Dict[str, Any]) -> List[str]:
+        collected: List[str] = []
+
+        def _push(value: Any) -> None:
+            if value is None:
+                return
+            if isinstance(value, dict):
+                for key in (
+                    "asset_ref",
+                    "assetRef",
+                    "path",
+                    "src",
+                    "storage_path",
+                    "storagePath",
+                    "ref",
+                    "name",
+                ):
+                    if key in value:
+                        _push(value.get(key))
+                        return
+                return
+            if isinstance(value, list):
+                for item in value:
+                    _push(item)
+                return
+
+            raw = _from_outputs_url(str(value or "").strip())
+            if not raw:
+                return
+            parts = [part.strip() for part in re.split(r"[,\n]+", raw) if part.strip()]
+            for part in parts:
+                normalized = part.strip().strip('"').strip("'")
+                if not normalized or normalized.lower() in {"null", "none", "n/a"}:
+                    continue
+                if normalized not in collected:
+                    collected.append(normalized)
+
+        for key in (
+            "asset_ref",
+            "assetRef",
+            "asset",
+            "asset_refs",
+            "assetRefs",
+            "assets",
+            "visual_assets",
+            "visualAssets",
+        ):
+            _push(outline_item.get(key))
+
+        return collected[:_MAX_INLINE_VISUAL_ASSETS]
+
+    def _build_visual_asset_key(self, asset_index: int) -> str:
+        if 0 <= asset_index < len(_DEFAULT_VISUAL_KEYS):
+            return _DEFAULT_VISUAL_KEYS[asset_index]
+        return f"visual_{asset_index + 1}"
+
+    def _build_visual_asset_label(self, asset_ref: str, asset_index: int) -> str:
+        if self._is_table_asset_ref(asset_ref):
+            return "Paper Table" if asset_index == 0 else f"Paper Table {asset_index + 1}"
+        return "Main Visual" if asset_index == 0 else f"Supporting Visual {asset_index + 1}"
+
+    def _is_table_asset_ref(self, asset_ref: Any) -> bool:
+        text = str(asset_ref or "").strip().lower()
+        return bool(text and re.search(r"\btable(?:[_\s-]*\d+)?\b", text))
+
+    def _normalize_table_asset_key(self, asset_ref: Any) -> str:
+        text = str(asset_ref or "").strip()
+        if not text:
+            return ""
+        match = re.search(r"(\d+)", text)
+        if match:
+            return f"table_{match.group(1)}"
+        return self._slugify(text) or text.lower().replace(" ", "_")
+
+    async def _resolve_table_asset_path(
+        self,
+        *,
+        base_dir: Path,
+        asset_ref: str,
+        chat_api_url: str,
+        api_key: str,
+        model: str,
+    ) -> str:
+        table_key = self._normalize_table_asset_key(asset_ref)
+        if not table_key:
+            return ""
+
+        for root in (
+            base_dir / "tables",
+            base_dir / "table_images",
+            base_dir / "input" / "auto" / "images",
+        ):
+            for ext in (".png", ".jpg", ".jpeg", ".webp"):
+                candidate = root / f"{table_key}{ext}"
+                if candidate.exists():
+                    return str(candidate.resolve())
+
+        for root in (base_dir / "tables", base_dir / "table_images", base_dir / "input" / "auto" / "images"):
+            if not root.exists():
+                continue
+            matches = sorted(root.glob(f"{table_key}.*"))
+            if matches:
+                return str(matches[0].resolve())
+
+        return await self._extract_table_asset(
+            base_dir=base_dir,
+            asset_ref=asset_ref,
+            chat_api_url=chat_api_url,
+            api_key=api_key,
+            model=model,
+        )
+
+    async def _extract_table_asset(
+        self,
+        *,
+        base_dir: Path,
+        asset_ref: str,
+        chat_api_url: str,
+        api_key: str,
+        model: str,
+    ) -> str:
+        mineru_output, mineru_root = self._load_mineru_context(base_dir)
+        if not mineru_output:
+            return ""
+
+        try:
+            state = Paper2FigureState(
+                request=Paper2FigureRequest(
+                    language="zh",
+                    chat_api_url=chat_api_url or "",
+                    chat_api_key=api_key or "",
+                    api_key=api_key or "",
+                    model=model or "gpt-5.1",
+                )
+            )
+            state.result_path = str(base_dir)
+            state.mineru_root = mineru_root
+            state.minueru_output = mineru_output
+            state.asset_ref = asset_ref
+
+            agent = create_react_agent(
+                name="table_extractor",
+                model_name=model or None,
+                temperature=0.1,
+                max_retries=6,
+                parser_type="json",
+            )
+            final_state = await agent.execute(state=state)
+            table_img_path = str(getattr(final_state, "table_img_path", "") or "").strip()
+            if table_img_path and Path(table_img_path).exists():
+                return str(Path(table_img_path).resolve())
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "[Paper2PPTFrontendService] Failed to extract table asset %s for frontend slide: %s",
+                asset_ref,
+                exc,
+            )
+        return ""
+
+    def _load_mineru_context(self, base_dir: Path) -> tuple[str, str]:
+        primary_root = base_dir / "input" / "auto"
+        search_roots = [primary_root]
+        if base_dir.exists():
+            for child in sorted(base_dir.glob("*/auto")):
+                if child not in search_roots:
+                    search_roots.append(child)
+
+        for root in search_roots:
+            if not root.exists():
+                continue
+            md_files = sorted(root.glob("*.md"))
+            if not md_files:
+                continue
+            try:
+                return md_files[0].read_text(encoding="utf-8"), str(root.resolve())
+            except Exception:  # noqa: BLE001
+                continue
+
+        return "", str(primary_root.resolve())
+
+    def _resolve_asset_path(self, *, base_dir: Path, asset_ref: str) -> str:
+        raw = _from_outputs_url(str(asset_ref or "").strip())
+        if not raw:
+            return ""
+
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            return str(candidate.resolve())
+
+        search_paths = [
+            base_dir / candidate,
+            base_dir / "input" / candidate,
+            base_dir / "input" / "auto" / candidate,
+            base_dir / "input" / "auto" / "images" / candidate.name,
+        ]
+        for path in search_paths:
+            if path.exists():
+                return str(path.resolve())
+
+        filename = candidate.name
+        if filename:
+            for root in [base_dir / "input" / "auto" / "images", base_dir / "input" / "auto", base_dir]:
+                if not root.exists():
+                    continue
+                matches = list(root.rglob(filename))
+                if matches:
+                    return str(matches[0].resolve())
+
+        return ""
+
+    def _normalize_visual_assets(
+        self,
+        raw_assets: Any,
+        *,
+        base_dir: Path,
+    ) -> List[Dict[str, Any]]:
+        if not isinstance(raw_assets, list):
+            return []
+
+        normalized: List[Dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for index, raw_asset in enumerate(raw_assets):
+            if not isinstance(raw_asset, dict):
+                continue
+            key = self._slugify(raw_asset.get("key") or f"{_DEFAULT_VISUAL_KEY}_{index + 1}") or f"{_DEFAULT_VISUAL_KEY}_{index + 1}"
+            if key in seen_keys:
+                continue
+            src = str(
+                raw_asset.get("storage_path")
+                or raw_asset.get("storagePath")
+                or raw_asset.get("src")
+                or ""
+            ).strip()
+            resolved_src = self._resolve_asset_path(base_dir=base_dir, asset_ref=src) if src else ""
+            source_type = str(raw_asset.get("source_type") or raw_asset.get("sourceType") or "generated").strip()
+            if source_type not in {"generated", "paper_asset", "upload"}:
+                source_type = "generated"
+            normalized.append(
+                {
+                    "key": key,
+                    "label": str(raw_asset.get("label") or key.replace("_", " ").title()).strip(),
+                    "src": resolved_src or _from_outputs_url(src),
+                    "alt": str(raw_asset.get("alt") or raw_asset.get("label") or key).strip(),
+                    "source_type": source_type,
+                    "storage_path": resolved_src or "",
+                    "prompt": str(raw_asset.get("prompt") or "").strip(),
+                    "style": str(raw_asset.get("style") or "").strip(),
+                }
+            )
+            seen_keys.add(key)
+        return normalized
+
     def _build_theme_messages(
         self,
         *,
@@ -569,6 +1105,7 @@ Requirements:
         theme: Dict[str, Any],
         deck_identity: Dict[str, Any],
         reference_slides: List[Dict[str, Any]],
+        visual_assets: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         system_prompt = """
 You are an expert academic slide frontend engineer.
@@ -591,16 +1128,18 @@ Hard requirements:
 3. Every visible text in html_template must come from placeholders only:
    - text/textarea fields: {{field:key}}
    - list fields: {{list:key}}
+   - controlled images, when required: {{image:key}}
 4. css_code must only target .slide-root and its descendants.
-5. Do not use external assets, remote fonts, image URLs, svg, canvas, script, iframe, video or img tags.
+5. Do not use external assets, remote fonts, raw image URLs, svg, canvas, script, iframe, video or img tags.
 6. The slide must fit inside a 1600x900 canvas with safe margins and no overflow.
 7. Use the supplied deck theme so every page looks like the same presentation family.
 8. Treat theme_lock as non-negotiable. Do not invent a new palette family, component language, or typography system.
 9. Keep titles within 2 lines, with title font 42-60px and body text 18-28px.
 10. Prefer grid/flex layouts over brittle absolute positioning.
-11. No paper figures. Use only editable text blocks and CSS decoration.
-12. The HTML must contain a single .slide-root root element.
-13. If reference deck slides are provided, preserve their shared component grammar, spacing rhythm, and card treatment.
+11. If visual_assets are supplied, reserve layout space and place them using {{image:key}} placeholders. Never write a raw <img> tag yourself.
+12. If visual_assets are empty, build a text-first slide using editable text blocks and CSS decoration only.
+13. The HTML must contain a single .slide-root root element.
+14. If reference deck slides are provided, preserve their shared component grammar, spacing rhythm, and card treatment.
 """.strip()
 
         outline_payload = {
@@ -611,6 +1150,15 @@ Hard requirements:
             "outline_title": outline_item.get("title", ""),
             "layout_description": outline_item.get("layout_description", ""),
             "key_points": outline_item.get("key_points", []),
+            "visual_assets": [
+                {
+                    "key": asset.get("key"),
+                    "label": asset.get("label"),
+                    "source_type": asset.get("source_type"),
+                    "alt": asset.get("alt"),
+                }
+                for asset in visual_assets
+            ],
             "deck_theme": theme,
             "theme_lock": theme.get("theme_lock") or self._build_theme_lock(theme),
         }
@@ -621,7 +1169,8 @@ Hard requirements:
             "Deck identity summary that must stay stable across the whole deck:",
             json.dumps(deck_identity, ensure_ascii=False, indent=2),
             (
-                "Keep the slide text-editable, image-free, and visually consistent with the shared deck theme. "
+                "Keep the slide text-editable and visually consistent with the shared deck theme. "
+                "If visual_assets exist, include them as controlled image slots. "
                 "If space is tight, simplify layout and tighten spacing instead of enlarging the canvas."
             ),
         ]
@@ -722,12 +1271,14 @@ If there are any meaningful problems, set passed=false and provide a concrete re
         slide_index: int,
         slide_count: int,
         theme: Dict[str, Any],
+        visual_assets: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         fallback_slide = self._build_fallback_slide(
             outline_item=outline_item,
             slide_index=slide_index,
             slide_count=slide_count,
             theme=theme,
+            visual_assets=visual_assets,
         )
         html_template = payload.get("html_template") or payload.get("html") or ""
         css_code = payload.get("css_code") or payload.get("css") or ""
@@ -749,8 +1300,16 @@ If there are any meaningful problems, set passed=false and provide a concrete re
             return fallback_slide
 
         field_keys = {field["key"] for field in editable_fields}
-        placeholders = set(_PLACEHOLDER_RE.findall(normalized_html))
-        if not placeholders or not placeholders.issubset(field_keys):
+        placeholders = set(_FIELD_PLACEHOLDER_RE.findall(normalized_html))
+        image_placeholders = set(_IMAGE_PLACEHOLDER_RE.findall(normalized_html))
+        asset_keys = {str(asset.get("key") or "").strip() for asset in visual_assets if str(asset.get("key") or "").strip()}
+        if not placeholders:
+            return fallback_slide
+        if not placeholders.issubset(field_keys):
+            return fallback_slide
+        if image_placeholders and not image_placeholders.issubset(asset_keys):
+            return fallback_slide
+        if visual_assets and not image_placeholders:
             return fallback_slide
 
         title_value = (
@@ -765,6 +1324,7 @@ If there are any meaningful problems, set passed=false and provide a concrete re
             "html_template": normalized_html,
             "css_code": normalized_css,
             "editable_fields": editable_fields,
+            "visual_assets": visual_assets,
             "generation_note": str(payload.get("generation_note") or ""),
             "status": "done",
         }
@@ -1220,6 +1780,41 @@ If there are any meaningful problems, set passed=false and provide a concrete re
             "avoid": theme_lock.get("avoid") or [],
         }
 
+    def _externalize_asset(
+        self,
+        asset: Dict[str, Any],
+        request: Request | None,
+    ) -> Dict[str, Any]:
+        normalized = dict(asset)
+        storage_path = str(
+            normalized.get("storage_path")
+            or normalized.get("storagePath")
+            or normalized.get("src")
+            or ""
+        ).strip()
+        if storage_path:
+            normalized["storage_path"] = storage_path
+            normalized["src"] = _to_outputs_url(storage_path, request) if request is not None else storage_path
+        else:
+            normalized["src"] = str(normalized.get("src") or "").strip()
+            normalized["storage_path"] = ""
+        return normalized
+
+    def _externalize_slide_assets(
+        self,
+        slide: Dict[str, Any],
+        request: Request | None,
+    ) -> Dict[str, Any]:
+        normalized = dict(slide)
+        raw_assets = normalized.get("visual_assets") or []
+        if isinstance(raw_assets, list):
+            normalized["visual_assets"] = [
+                self._externalize_asset(asset, request)
+                for asset in raw_assets
+                if isinstance(asset, dict)
+            ]
+        return normalized
+
     def _load_reference_slides(
         self,
         *,
@@ -1323,9 +1918,13 @@ If there are any meaningful problems, set passed=false and provide a concrete re
         slide_index: int,
         slide_count: int,
         theme: Dict[str, Any],
+        visual_assets: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         palette = theme.get("palette") or self._build_fallback_theme(language="zh", style="")["palette"]
         typography = theme.get("typography") or {}
+        visual_assets = (visual_assets or [])[:_MAX_INLINE_VISUAL_ASSETS]
+        has_visual = bool(visual_assets)
+        has_multi_visual = len(visual_assets) > 1
         key_points = [
             str(item).strip()
             for item in (outline_item.get("key_points") or [])
@@ -1339,6 +1938,13 @@ If there are any meaningful problems, set passed=false and provide a concrete re
         except Exception:  # noqa: BLE001
             eyebrow = f"Slide {slide_index + 1:02d}/{slide_count:02d}"
 
+        visual_markup = ""
+        if has_visual:
+            visual_markup = "\n".join(
+                f'        <div class="visual-shell visual-shell-{asset_index + 1}">{{{{image:{asset.get("key") or self._build_visual_asset_key(asset_index)}}}}}</div>'
+                for asset_index, asset in enumerate(visual_assets)
+            )
+
         html_template = """
 <div class="slide-root">
   <div class="slide-shell">
@@ -1348,11 +1954,28 @@ If there are any meaningful problems, set passed=false and provide a concrete re
         <div class="eyebrow">{{field:eyebrow}}</div>
         <h1 class="title">{{field:title}}</h1>
         <p class="summary">{{field:summary}}</p>
+        """ + (
+            """
+        <ul class="bullet-list compact">{{list:key_points}}</ul>
+"""
+            if has_visual
+            else ""
+        ) + """
       </div>
+      """ + (
+            """
+      <div class="visual-card """ + ("visual-card-grid" if has_multi_visual else "") + """">
+""" + visual_markup + """
+      </div>
+"""
+            if has_visual
+            else """
       <div class="stat-card">
         <div class="card-label">{{field:points_label}}</div>
         <ul class="bullet-list">{{list:key_points}}</ul>
       </div>
+"""
+        ) + """
     </div>
     <div class="footer-row">
       <div class="takeaway-card">
@@ -1398,7 +2021,7 @@ If there are any meaningful problems, set passed=false and provide a concrete re
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 1.5fr 0.95fr;
+  grid-template-columns: {'1.08fr 0.92fr' if has_visual else '1.5fr 0.95fr'};
   gap: 28px;
   height: calc(100% - 120px);
 }}
@@ -1438,7 +2061,7 @@ If there are any meaningful problems, set passed=false and provide a concrete re
   white-space: pre-wrap;
   font-family: {typography.get("body_font_stack") or '"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'};
 }}
-.stat-card, .takeaway-card {{
+.stat-card, .takeaway-card, .visual-card {{
   border-radius: 28px;
   border: 1px solid {palette["primary"]}30;
   background: {palette["panel"]};
@@ -1448,6 +2071,30 @@ If there are any meaningful problems, set passed=false and provide a concrete re
 .stat-card {{
   align-self: center;
   padding: 28px;
+}}
+.visual-card {{
+  padding: 18px;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}}
+.visual-card.visual-card-grid {{
+  justify-content: stretch;
+}}
+.visual-shell {{
+  width: 100%;
+  height: 100%;
+  min-height: 384px;
+  border-radius: 22px;
+  overflow: hidden;
+}}
+.visual-card.visual-card-grid .visual-shell {{
+  flex: 1 1 0;
+  min-height: 160px;
+}}
+.visual-card.visual-card-grid .visual-shell-1 {{
+  min-height: 236px;
 }}
 .card-label, .takeaway-label {{
   font-size: {int(typography.get("eyebrow_size") or 18)}px;
@@ -1468,6 +2115,11 @@ If there are any meaningful problems, set passed=false and provide a concrete re
 }}
 .bullet-list li {{
   color: {palette["text"]};
+}}
+.bullet-list.compact {{
+  max-width: 720px;
+  gap: 10px;
+  font-size: {max(18, int(typography.get("body_size") or 24) - 2)}px;
 }}
 .footer-row {{
   position: relative;
@@ -1503,34 +2155,60 @@ If there are any meaningful problems, set passed=false and provide a concrete re
 }}
 """.strip()
 
-        return {
-            "slide_id": str(slide_index + 1),
-            "page_num": slide_index + 1,
-            "title": str(outline_item.get("title") or f"Slide {slide_index + 1}"),
-            "html_template": html_template,
-            "css_code": css_code,
-            "editable_fields": [
-                {
-                    "key": "eyebrow",
-                    "label": "Eyebrow",
-                    "type": "text",
-                    "value": eyebrow,
-                    "items": [],
-                },
-                {
-                    "key": "title",
-                    "label": "Title",
-                    "type": "text",
-                    "value": str(outline_item.get("title") or f"Slide {slide_index + 1}"),
-                    "items": [],
-                },
-                {
-                    "key": "summary",
-                    "label": "Summary",
-                    "type": "textarea",
-                    "value": summary,
-                    "items": [],
-                },
+        editable_fields = [
+            {
+                "key": "eyebrow",
+                "label": "Eyebrow",
+                "type": "text",
+                "value": eyebrow,
+                "items": [],
+            },
+            {
+                "key": "title",
+                "label": "Title",
+                "type": "text",
+                "value": str(outline_item.get("title") or f"Slide {slide_index + 1}"),
+                "items": [],
+            },
+            {
+                "key": "summary",
+                "label": "Summary",
+                "type": "textarea",
+                "value": summary,
+                "items": [],
+            },
+            {
+                "key": "key_points",
+                "label": "Key Points",
+                "type": "list",
+                "value": "",
+                "items": key_points or ["Summarize the page content here"],
+            },
+            {
+                "key": "takeaway_label",
+                "label": "Takeaway Label",
+                "type": "text",
+                "value": "Takeaway",
+                "items": [],
+            },
+            {
+                "key": "takeaway",
+                "label": "Takeaway",
+                "type": "textarea",
+                "value": takeaway,
+                "items": [],
+            },
+            {
+                "key": "footer",
+                "label": "Footer",
+                "type": "text",
+                "value": str(theme.get("footer_text") or "Paper2Any Frontend PPT"),
+                "items": [],
+            },
+        ]
+        if not has_visual:
+            editable_fields.insert(
+                3,
                 {
                     "key": "points_label",
                     "label": "Points Label",
@@ -1538,35 +2216,16 @@ If there are any meaningful problems, set passed=false and provide a concrete re
                     "value": "Key Points",
                     "items": [],
                 },
-                {
-                    "key": "key_points",
-                    "label": "Key Points",
-                    "type": "list",
-                    "value": "",
-                    "items": key_points or ["Summarize the page content here"],
-                },
-                {
-                    "key": "takeaway_label",
-                    "label": "Takeaway Label",
-                    "type": "text",
-                    "value": "Takeaway",
-                    "items": [],
-                },
-                {
-                    "key": "takeaway",
-                    "label": "Takeaway",
-                    "type": "textarea",
-                    "value": takeaway,
-                    "items": [],
-                },
-                {
-                    "key": "footer",
-                    "label": "Footer",
-                    "type": "text",
-                    "value": str(theme.get("footer_text") or "Paper2Any Frontend PPT"),
-                    "items": [],
-                },
-            ],
+            )
+
+        return {
+            "slide_id": str(slide_index + 1),
+            "page_num": slide_index + 1,
+            "title": str(outline_item.get("title") or f"Slide {slide_index + 1}"),
+            "html_template": html_template,
+            "css_code": css_code,
+            "editable_fields": editable_fields,
+            "visual_assets": visual_assets,
             "generation_note": "Built-in fallback template",
             "status": "done",
         }

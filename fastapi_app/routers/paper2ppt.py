@@ -275,6 +275,9 @@ async def paper2ppt_frontend_generate(
     model: str = Form("gpt-5.1"),
     language: str = Form("zh"),
     style: str = Form(""),
+    include_images: bool = Form(False),
+    image_style: str = Form("academic_illustration"),
+    image_model: Optional[str] = Form(None),
     page_id: Optional[int] = Form(None),
     edit_prompt: Optional[str] = Form(None),
     current_slide: Optional[str] = Form(None),
@@ -290,6 +293,9 @@ async def paper2ppt_frontend_generate(
         model=model,
         language=language,
         style=style,
+        include_images=include_images,
+        image_style=image_style,
+        image_model=image_model,
         page_id=page_id,
         edit_prompt=edit_prompt,
         current_slide=current_slide,
@@ -339,6 +345,26 @@ async def paper2ppt_frontend_review(
         layout_issues=layout_issues,
     )
     return await service.review_slide(req=req, screenshot=screenshot)
+
+
+@router.post(
+    "/paper2ppt/frontend/upload-asset",
+    response_model=Dict[str, Any],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def paper2ppt_frontend_upload_asset(
+    request: Request,
+    result_path: str = Form(...),
+    asset_key: str = Form(...),
+    file: UploadFile = File(...),
+    service: Paper2PPTFrontendService = Depends(get_frontend_service),
+):
+    return await service.upload_asset(
+        result_path=result_path,
+        asset_key=asset_key,
+        upload=file,
+        request=request,
+    )
 
 
 @router.get(
