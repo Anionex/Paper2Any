@@ -87,6 +87,10 @@ export const featuredHomeCards: HomeFeatureCard[] = [
     badgeKey: 'app.home.cards.paper2pptFrontend.badge',
     icon: 'presentation',
     accent: 'from-amber-500/80 via-orange-400/70 to-yellow-300/70',
+    preview: {
+      kind: 'image',
+      src: '/home-previews/paper2ppt-frontend.png',
+    },
   },
   {
     page: 'paper2video',
@@ -163,6 +167,10 @@ export const homeFeatureSections: HomeFeatureSection[] = [
         badgeKey: 'app.home.cards.paper2pptFrontend.badge',
         icon: 'presentation',
         accent: 'from-amber-500/75 via-orange-400/65 to-yellow-300/60',
+        preview: {
+          kind: 'image',
+          src: '/home-previews/paper2ppt-frontend.png',
+        },
       },
     ],
   },

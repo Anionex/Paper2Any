@@ -85,7 +85,7 @@ const FrontendGenerateStep: React.FC<FrontendGenerateStepProps> = ({
   return (
     <div className="max-w-7xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-white mb-2">逐页生成纯前端 PPT</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">逐页生成可编辑版 PPT</h2>
         <p className="text-gray-400">
           第 {currentSlideIndex + 1} / {outlineData.length} 页：{outlineSlide?.title}
         </p>

@@ -259,25 +259,49 @@ class Paper2PPTFrontendService:
         mime_type = screenshot.content_type or "image/png"
         data_url = f"data:{mime_type};base64,{base64.b64encode(screenshot_bytes).decode('utf-8')}"
 
-        review_payload = await self._call_llm_json(
-            chat_api_url=resolved_chat_api_url,
-            api_key=resolved_api_key,
-            model=settings.PAPER2PPT_VLM_MODEL or settings.PAPER2PPT_CONTENT_MODEL,
-            messages=self._build_review_messages(
+        try:
+            review_payload = await self._call_llm_json(
+                chat_api_url=resolved_chat_api_url,
+                api_key=resolved_api_key,
+                model=settings.PAPER2PPT_VLM_MODEL or settings.PAPER2PPT_CONTENT_MODEL,
+                messages=self._build_review_messages(
+                    slide=slide,
+                    theme=theme,
+                    language=req.language,
+                    data_url=data_url,
+                    local_layout_issues=local_layout_issues,
+                ),
+                temperature=0.1,
+                max_tokens=900,
+                timeout_seconds=float(max(30, int(settings.PAPER2PPT_VLM_TIMEOUT_SECONDS or 90))),
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "[Paper2PPTFrontendService] Visual review degraded to local layout checks for %s: %s",
+                str(slide.get("title") or slide.get("page_num") or "slide"),
+                exc,
+            )
+            fallback_summary = (
+                "视觉检查模型暂时不可用，已改用本地布局检测结果。"
+                if str(req.language or "").lower().startswith("zh")
+                else "Visual review model unavailable; fell back to local layout checks."
+            )
+            normalized = self._normalize_review_payload(
+                payload={
+                    "passed": not local_layout_issues,
+                    "summary": fallback_summary,
+                    "issues": [],
+                    "repair_prompt": "",
+                },
                 slide=slide,
-                theme=theme,
-                language=req.language,
-                data_url=data_url,
                 local_layout_issues=local_layout_issues,
-            ),
-            temperature=0.1,
-            max_tokens=1200,
-        )
-        normalized = self._normalize_review_payload(
-            payload=review_payload,
-            slide=slide,
-            local_layout_issues=local_layout_issues,
-        )
+            )
+            normalized["degraded"] = True
+            normalized["warning"] = str(type(exc).__name__)
+            normalized["success"] = True
+            return normalized
+
+        normalized = self._normalize_review_payload(payload=review_payload, slide=slide, local_layout_issues=local_layout_issues)
         normalized["success"] = True
         return normalized
 
@@ -423,6 +447,7 @@ class Paper2PPTFrontendService:
         messages: List[Dict[str, Any]],
         temperature: float = 0.55,
         max_tokens: int = 3200,
+        timeout_seconds: float = 180.0,
     ) -> Dict[str, Any]:
         api_url = chat_api_url.rstrip("/")
         target_url = api_url if api_url.endswith("/chat/completions") else f"{api_url}/chat/completions"
@@ -438,7 +463,7 @@ class Paper2PPTFrontendService:
             "max_tokens": max_tokens,
         }
 
-        timeout = httpx.Timeout(timeout=180.0, connect=20.0)
+        timeout = httpx.Timeout(timeout=timeout_seconds, connect=min(20.0, timeout_seconds))
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             response = await client.post(target_url, json=payload, headers=headers)
         if response.status_code != 200:
@@ -1239,8 +1264,8 @@ If there are any meaningful problems, set passed=false and provide a concrete re
         review_context = {
             "language": language,
             "deck_theme": theme,
-            "slide": slide,
-            "local_layout_issues": local_layout_issues,
+            "slide_overview": self._summarize_slide_for_review(slide),
+            "local_layout_issues": local_layout_issues[:6],
         }
 
         return [
@@ -1262,6 +1287,49 @@ If there are any meaningful problems, set passed=false and provide a concrete re
                 ],
             },
         ]
+
+    def _summarize_slide_for_review(self, slide: Dict[str, Any]) -> Dict[str, Any]:
+        editable_fields = slide.get("editable_fields") or slide.get("editableFields") or []
+        summarized_fields: List[Dict[str, Any]] = []
+        if isinstance(editable_fields, list):
+            for field in editable_fields[:10]:
+                if not isinstance(field, dict):
+                    continue
+                field_type = str(field.get("type") or "text").strip()
+                entry: Dict[str, Any] = {
+                    "key": str(field.get("key") or "").strip(),
+                    "type": field_type,
+                }
+                if field_type == "list":
+                    entry["items"] = [
+                        str(item).strip()
+                        for item in (field.get("items") or [])
+                        if str(item).strip()
+                    ][:5]
+                else:
+                    entry["value"] = str(field.get("value") or "").strip()[:280]
+                summarized_fields.append(entry)
+
+        visual_assets = slide.get("visual_assets") or slide.get("visualAssets") or []
+        summarized_assets: List[Dict[str, str]] = []
+        if isinstance(visual_assets, list):
+            for asset in visual_assets[:4]:
+                if not isinstance(asset, dict):
+                    continue
+                summarized_assets.append(
+                    {
+                        "key": str(asset.get("key") or "").strip(),
+                        "label": str(asset.get("label") or "").strip(),
+                        "source_type": str(asset.get("source_type") or asset.get("sourceType") or "").strip(),
+                    }
+                )
+
+        return {
+            "page_num": slide.get("page_num") or slide.get("pageNum"),
+            "title": str(slide.get("title") or "").strip(),
+            "editable_fields": summarized_fields,
+            "visual_assets": summarized_assets,
+        }
 
     def _normalize_slide_payload(
         self,

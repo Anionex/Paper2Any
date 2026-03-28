@@ -367,7 +367,13 @@ export const captureSlideToPngBlob = async (
   node: HTMLElement,
   width: number = 1600,
   height: number = 900,
+  options?: {
+    mimeType?: string;
+    quality?: number;
+  },
 ) => {
+  const mimeType = options?.mimeType || 'image/png';
+  const quality = options?.quality;
   const clone = node.cloneNode(true) as HTMLElement;
   clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
   clone.style.width = `${width}px`;
@@ -427,7 +433,7 @@ export const captureSlideToPngBlob = async (
   ctx.drawImage(img, 0, 0, width, height);
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((value) => resolve(value), 'image/png');
+    canvas.toBlob((value) => resolve(value), mimeType, quality);
   });
   if (!blob) {
     throw new Error('截图导出失败');

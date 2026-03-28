@@ -28,7 +28,7 @@
       "paper2drawioAi": "Flow / Architecture Diagrams",
       "paper2figureModelDrawio": "Model Diagram Generation",
       "paper2pptImage": "Image-style PPT",
-      "paper2pptFrontend": "Frontend-code PPT"
+      "paper2pptFrontend": "Editable PPT"
     },
     "navTooltip": {
       "home": "See all workflows, preview examples, and jump straight into the right tool from a single landing page",
@@ -51,7 +51,7 @@
       "paper2drawioAi": "Text-to-DrawIO flow/architecture diagrams, edit online and export PNG/SVG/DrawIO",
       "paper2figureModelDrawio": "Generate a model diagram, refine prompts, then edit in DrawIO or export PPT/PNG/SVG",
       "paper2pptImage": "Generate a visual academic deck with image-based slides from a paper PDF or topic",
-      "paper2pptFrontend": "Generate editable 16:9 frontend slides with per-page review, repair, and screenshot export"
+      "paper2pptFrontend": "Generate editable 16:9 HTML/CSS slides with per-page review, repair, and screenshot export"
     },
     "sidebar": {
       "toggle": "Toggle Menu",
@@ -63,7 +63,7 @@
       "description": "Use the landing page to understand what each tool does before you jump into the corresponding workflow. Tools with reference images show live previews; the rest use premium placeholders for now.",
       "primaryCta": "Start with Figures",
       "secondaryCta": "Image PPT",
-      "frontendCta": "Frontend PPT",
+      "frontendCta": "Editable PPT",
       "sections": {
         "creation": {
           "title": "Generate directly from paper content",
@@ -95,9 +95,9 @@
           "badge": "Image Deck"
         },
         "paper2pptFrontend": {
-          "title": "Frontend-code PPT Generation",
+          "title": "Editable PPT Generation",
           "description": "Generate editable 16:9 HTML/CSS slides with inline text editing, per-page visual QA, and screenshot export to PPTX / PDF.",
-          "badge": "Frontend Deck"
+          "badge": "Editable Deck"
         },
         "paper2video": {
           "title": "Paper / PPT to Narrated Video",

@@ -59,6 +59,11 @@ English | [中文](README_CN.md)
 ## 🔥 News
 
 > [!TIP]
+> 🆕 <strong>2026-03-28 · Editable PPT Showcase Refresh</strong><br>
+> Added two new <strong>editable PPT</strong> showcase screenshots for the frontend-deck workflow:<br>
+> a generated multi-slide gallery view and the canvas editing workspace with deck theme lock.
+
+> [!TIP]
 > 🆕 <strong>2026-03-26 · Workflow Showcase Update</strong><br>
 > Added showcase coverage for <strong>Paper2Video</strong>, <strong>Paper2Poster</strong>, and <strong>Paper2Citation</strong>.<br>
 > The README now includes a compressed video demo plus refreshed English/Chinese workflow previews.
@@ -162,10 +167,18 @@ Paper2Any currently includes the following sub-capabilities:
 <br><sub>✨ Model Architecture Diagram Generation</sub>
 
 <br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
-<br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-3.png" width="80%"/>
-<br><sub>✨ Technical Roadmap Generation</sub>
+<table>
+  <tr>
+    <td width="56%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-workbench.png" width="100%"/>
+      <br><sub>✨ Technical roadmap workbench: choose route type, input source, model config, and visual template</sub>
+    </td>
+    <td width="44%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-output.png" width="100%"/>
+      <br><sub>✨ Generated technical roadmap figure with structured dual-column layout</sub>
+    </td>
+  </tr>
+</table>
 
 <br><br>
 <img src="static/new_readme/paper2figure/experimental-plot.png" width="90%"/>
@@ -186,6 +199,14 @@ Paper2Any currently includes the following sub-capabilities:
 <br>
 <img src="static/new_readme/paper2ppt/case-1.png" width="90%"/>
 <br><sub>✨ Paper / Text / Topic → PPT</sub>
+
+<br><br>
+<img src="static/new_readme/paper2ppt/frontend-gallery.png" width="90%"/>
+<br><sub>✨ Editable frontend deck overview with generated multi-page gallery and screenshot-ready export flow</sub>
+
+<br><br>
+<img src="static/new_readme/paper2ppt/frontend-editor.png" width="90%"/>
+<br><sub>✨ Canvas editing workspace with deck theme lock, inline text editing, and manual visual QA / repair</sub>
 
 <br><br>
 <img src="static/new_readme/paper2ppt/long-doc.png" width="85%"/>
@@ -224,8 +245,19 @@ Paper2Any currently includes the following sub-capabilities:
 <div align="center">
 
 <br>
-<img src="static/new_readme/paper2poster/poster-workflow.png" width="90%"/>
-<br><sub>✨ Paper PDF to academic poster with configurable layout, logo upload, and one-click export</sub>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-ppt-result.png" width="100%"/>
+      <br><sub>PNG poster result</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-png-result.png" width="100%"/>
+      <br><sub>PPT poster result</sub>
+    </td>
+  </tr>
+</table>
+<br><sub>✨ Paper PDF to academic poster with configurable layout, editable poster output, and one-click export</sub>
 
 </div>
 

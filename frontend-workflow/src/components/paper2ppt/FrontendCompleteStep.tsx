@@ -43,7 +43,7 @@ const FrontendCompleteStep: React.FC<FrontendCompleteStepProps> = ({
         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500 to-sky-500 flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 size={40} className="text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">前端版 PPT 已生成</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">可编辑版 PPT 已生成</h2>
         <p className="text-gray-400">共处理 {slides.length} 页，当前可编辑页面 {doneCount} 页</p>
       </div>
 

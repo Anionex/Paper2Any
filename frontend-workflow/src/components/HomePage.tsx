@@ -90,12 +90,16 @@ function HeroSignalField() {
   );
 }
 
-function FeaturePreview({ card }: { card: HomeFeatureCard }) {
+function FeaturePreview({ card, compact = false }: { card: HomeFeatureCard; compact?: boolean }) {
   const Icon = iconMap[card.icon];
+  const previewHeight = compact ? 'h-32' : 'h-44';
+  const previewRadius = compact ? 'rounded-[20px]' : 'rounded-[24px]';
+  const iconRadius = compact ? 'rounded-[18px]' : 'rounded-2xl';
+  const iconSize = compact ? 24 : 28;
 
   if (card.preview?.kind === 'video') {
     return (
-      <div className="relative h-44 overflow-hidden rounded-[24px] border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+      <div className={`relative ${previewHeight} overflow-hidden ${previewRadius} border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.35)]`}>
         <video
           src={card.preview.src}
           poster={card.preview.poster}
@@ -114,7 +118,7 @@ function FeaturePreview({ card }: { card: HomeFeatureCard }) {
 
   if (card.preview) {
     return (
-      <div className="relative h-44 overflow-hidden rounded-[24px] border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+      <div className={`relative ${previewHeight} overflow-hidden ${previewRadius} border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.35)]`}>
         <img
           src={card.preview.src}
           alt=""
@@ -127,19 +131,27 @@ function FeaturePreview({ card }: { card: HomeFeatureCard }) {
   }
 
   return (
-    <div className={`relative flex h-44 items-end overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br ${card.accent} p-5 shadow-[0_24px_60px_rgba(0,0,0,0.35)]`}>
+    <div className={`relative flex ${previewHeight} items-end overflow-hidden ${previewRadius} border border-white/10 bg-gradient-to-br ${card.accent} ${compact ? 'p-4' : 'p-5'} shadow-[0_24px_60px_rgba(0,0,0,0.35)]`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(0,0,0,0.28),transparent_58%)]" />
       <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
       <div className="relative flex items-center gap-3 text-white">
-        <div className="rounded-2xl border border-white/20 bg-black/20 p-3 backdrop-blur-xl">
-          <Icon size={28} />
+        <div className={`${iconRadius} border border-white/20 bg-black/20 p-3 backdrop-blur-xl`}>
+          <Icon size={iconSize} />
         </div>
       </div>
     </div>
   );
 }
 
-function FeatureCardBlock({ card, onNavigate }: { card: HomeFeatureCard; onNavigate: (page: ActivePage) => void }) {
+function FeatureCardBlock({
+  card,
+  onNavigate,
+  compact = false,
+}: {
+  card: HomeFeatureCard;
+  onNavigate: (page: ActivePage) => void;
+  compact?: boolean;
+}) {
   const { t } = useTranslation('common');
   const Icon = iconMap[card.icon];
 
@@ -147,22 +159,28 @@ function FeatureCardBlock({ card, onNavigate }: { card: HomeFeatureCard; onNavig
     <button
       type="button"
       onClick={() => onNavigate(card.page)}
-      className="group relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.05))] p-4 text-left shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))]"
+      className={`group relative overflow-hidden border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.05))] text-left shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] ${
+        compact ? 'rounded-[24px] p-3.5' : 'rounded-[30px] p-4'
+      }`}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.08),transparent_32%)] opacity-70" />
-      <div className="relative space-y-4">
-        <FeaturePreview card={card} />
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/75">
+      <div className={`relative ${compact ? 'space-y-3' : 'space-y-4'}`}>
+        <FeaturePreview card={card} compact={compact} />
+        <div className="flex items-start justify-between gap-3">
+          <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
+            <div className={`inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 font-semibold uppercase tracking-[0.22em] text-white/75 ${
+              compact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1 text-[11px]'
+            }`}>
               <Icon size={14} />
               <span>{t(card.badgeKey)}</span>
             </div>
-            <h3 className="text-lg font-semibold text-white md:text-xl">{t(card.titleKey)}</h3>
-            <p className="max-w-xl text-sm leading-6 text-white/65">{t(card.descriptionKey)}</p>
+            <h3 className={`font-semibold text-white ${compact ? 'text-base leading-6' : 'text-lg md:text-xl'}`}>{t(card.titleKey)}</h3>
+            <p className={`max-w-xl text-white/65 ${compact ? 'text-[13px] leading-5' : 'text-sm leading-6'}`}>{t(card.descriptionKey)}</p>
           </div>
-          <div className="mt-1 rounded-2xl border border-white/12 bg-black/25 p-3 text-white/75 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-white">
-            <ArrowRight size={18} />
+          <div className={`mt-1 rounded-2xl border border-white/12 bg-black/25 text-white/75 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-white ${
+            compact ? 'p-2.5' : 'p-3'
+          }`}>
+            <ArrowRight size={compact ? 16 : 18} />
           </div>
         </div>
       </div>
@@ -177,14 +195,14 @@ export function HomePage({ onNavigate }: HomePageProps) {
     <div className="h-full overflow-y-auto overflow-x-hidden">
       <div className="relative min-h-full px-5 pb-14 pt-6 md:px-8 lg:px-10">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top_left,rgba(73,120,255,0.22),transparent_40%),radial-gradient(circle_at_top_right,rgba(0,214,201,0.18),transparent_38%),radial-gradient(circle_at_50%_30%,rgba(255,255,255,0.08),transparent_30%)]" />
-        <section className="relative mx-auto max-w-7xl rounded-[36px] border border-white/10 bg-[linear-gradient(135deg,rgba(10,14,26,0.88),rgba(18,24,38,0.62))] p-6 shadow-[0_40px_120px_rgba(0,0,0,0.45)] backdrop-blur-2xl md:p-8 lg:p-10">
+        <section className="relative mx-auto max-w-7xl rounded-[36px] border border-white/10 bg-[linear-gradient(135deg,rgba(10,14,26,0.88),rgba(18,24,38,0.62))] p-6 shadow-[0_40px_120px_rgba(0,0,0,0.45)] backdrop-blur-2xl md:p-8 lg:p-9">
           <div className="absolute inset-0 rounded-[36px] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(93,178,255,0.12),transparent_30%)]" />
-          <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="relative overflow-hidden rounded-[30px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-6 md:p-8">
-              <div className="relative h-[250px] md:h-[300px]">
+          <div className="relative grid gap-6 lg:grid-cols-[1.28fr_0.92fr]">
+            <div className="relative overflow-hidden rounded-[30px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-6 md:p-7">
+              <div className="relative h-[220px] md:h-[270px]">
                 <HeroSignalField />
               </div>
-              <div className="relative mt-6 space-y-6">
+              <div className="relative mt-6 space-y-5">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
                   <Sparkles size={14} />
                   <span>{t('app.home.kicker')}</span>
@@ -226,9 +244,9 @@ export function HomePage({ onNavigate }: HomePageProps) {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-1">
+            <div className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-2">
               {featuredHomeCards.map((card) => (
-                <FeatureCardBlock key={card.page} card={card} onNavigate={onNavigate} />
+                <FeatureCardBlock key={card.page} card={card} onNavigate={onNavigate} compact />
               ))}
             </div>
           </div>

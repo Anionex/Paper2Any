@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 # 启动时加载 fastapi_app/.env 到环境变量，使 os.getenv("COSYVOICE_KEY") 等能读到
@@ -10,6 +12,20 @@ try:
         load_dotenv(_env_file)
 except ImportError:
     pass
+
+
+def _configure_runtime_tempdir() -> None:
+    project_root = Path(__file__).resolve().parent.parent
+    runtime_tmp = Path(
+        os.getenv("PAPER2ANY_RUNTIME_TMPDIR", str(project_root / "outputs" / "system" / "tmp"))
+    ).expanduser().resolve()
+    runtime_tmp.mkdir(parents=True, exist_ok=True)
+    for key in ("TMPDIR", "TEMP", "TMP"):
+        os.environ[key] = str(runtime_tmp)
+    tempfile.tempdir = str(runtime_tmp)
+
+
+_configure_runtime_tempdir()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

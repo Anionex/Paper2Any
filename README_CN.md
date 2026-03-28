@@ -59,6 +59,11 @@
 ## 🔥 News
 
 > [!TIP]
+> 🆕 <strong>2026-03-28 · 可编辑版 PPT 展示更新</strong><br>
+> 新增两张 <strong>可编辑版 PPT</strong> 工作流展示图：<br>
+> 一张用于展示多页生成后的 deck 总览，一张用于展示带主题锁定与画布编辑的编辑工作区。
+
+> [!TIP]
 > 🆕 <strong>2026-03-26 · 工作流展示更新</strong><br>
 > 新增 <strong>Paper2Video</strong>、<strong>Paper2Poster</strong>、<strong>Paper2Citation</strong> 的展示内容。<br>
 > README 已补充压缩视频演示，以及中英文两套工作流预览图。
@@ -153,10 +158,18 @@ Paper2Any 当前包含以下几个子能力：
 <br><sub>✨ 模型架构图生成</sub>
 
 <br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
-<br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-2.png" width="90%"/>
-<br><sub>✨ 技术路线图生成</sub>
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-workbench.png" width="100%"/>
+      <br><sub>✨ 技术路线图工作台：选择图类型、输入来源、模型配置与模板风格</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-output.png" width="100%"/>
+      <br><sub>✨ 生成结果：结构化双栏技术路线图</sub>
+    </td>
+  </tr>
+</table>
 
 <br><br>
 <img src="static/new_readme/paper2figure/experimental-plot.png" width="90%"/>
@@ -177,6 +190,14 @@ Paper2Any 当前包含以下几个子能力：
 <br>
 <img src="static/new_readme/paper2ppt/case-1.png" width="90%"/>
 <br><sub>✨ Paper / Text / Topic → PPT</sub>
+
+<br><br>
+<img src="static/new_readme/paper2ppt/frontend-gallery.png" width="90%"/>
+<br><sub>✨ 可编辑版前端 deck 总览，多页生成结果与后续截图导出链路一目了然</sub>
+
+<br><br>
+<img src="static/new_readme/paper2ppt/frontend-editor.png" width="90%"/>
+<br><sub>✨ 可编辑工作区：支持主题锁定、画布内改字，以及手动视觉检查与修复</sub>
 
 <br><br>
 <img src="static/new_readme/paper2ppt/long-doc.png" width="85%"/>
@@ -215,8 +236,19 @@ Paper2Any 当前包含以下几个子能力：
 <div align="center">
 
 <br>
-<img src="static/new_readme/paper2poster/poster-workflow.png" width="90%"/>
-<br><sub>✨ 论文 PDF 自动整理为学术海报，支持版式参数、Logo 上传与一键导出</sub>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-ppt-result.png" width="100%"/>
+      <br><sub>PNG 海报结果</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-png-result.png" width="100%"/>
+      <br><sub>PPT 海报结果</sub>
+    </td>
+  </tr>
+</table>
+<br><sub>✨ 论文 PDF 自动整理为学术海报，支持版式参数、可编辑海报结果与一键导出</sub>
 
 </div>
 

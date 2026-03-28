@@ -41,6 +41,8 @@ interface UploadStepProps {
   setUseLongPaper: (use: boolean) => void;
   frontendIncludeImages: boolean;
   setFrontendIncludeImages: (enabled: boolean) => void;
+  frontendAutoReviewEnabled: boolean;
+  setFrontendAutoReviewEnabled: (enabled: boolean) => void;
   frontendImageStyle: string;
   setFrontendImageStyle: (style: string) => void;
   progress: number;
@@ -83,6 +85,8 @@ const UploadStep: React.FC<UploadStepProps> = ({
   useLongPaper, setUseLongPaper,
   frontendIncludeImages,
   setFrontendIncludeImages,
+  frontendAutoReviewEnabled,
+  setFrontendAutoReviewEnabled,
   frontendImageStyle,
   setFrontendImageStyle,
   progress, progressStatus,
@@ -228,35 +232,35 @@ const UploadStep: React.FC<UploadStepProps> = ({
         },
       ];
   const modeTexts = uiLang === 'zh'
-    ? {
-        title: 'PPT 生成模式',
-        imageTitle: '图片版 PPT',
-        imageDesc: '沿用现有图像工作流，逐页生成视觉稿并导出。',
-        frontendTitle: '纯前端版 PPT',
-        frontendDesc: '生成 16:9 HTML/CSS 模板，文字可编辑，最终截图导出。',
-        frontendTip: '前端版默认文本优先；若开启图像增强，会优先复用论文图表，否则按页面内容自动补示意图。',
-      }
-    : {
-        title: 'PPT Mode',
-        imageTitle: 'Image PPT',
-        imageDesc: 'Use the current image workflow and export generated visual slides.',
-        frontendTitle: 'Frontend PPT',
-        frontendDesc: 'Generate editable 16:9 HTML/CSS slides and export by screenshots.',
-        frontendTip: 'Frontend mode stays text-editable and can optionally reuse paper figures/tables or generate supporting images.',
-      };
+      ? {
+          title: 'PPT 生成模式',
+          imageTitle: '图片版 PPT',
+          imageDesc: '沿用现有图像工作流，逐页生成视觉稿并导出。',
+          frontendTitle: '可编辑版 PPT',
+          frontendDesc: '生成 16:9 HTML/CSS 模板，文字可编辑，最终截图导出。',
+          frontendTip: '可编辑版默认文本优先；若开启图像增强，会优先复用论文图表，否则按页面内容自动补示意图。',
+        }
+      : {
+          title: 'PPT Mode',
+          imageTitle: 'Image PPT',
+          imageDesc: 'Use the current image workflow and export generated visual slides.',
+          frontendTitle: 'Editable PPT',
+          frontendDesc: 'Generate editable 16:9 HTML/CSS slides and export by screenshots.',
+          frontendTip: 'Editable mode stays text-editable and can optionally reuse paper figures/tables or generate supporting images.',
+        };
   const pageCopy = uiLang === 'zh'
     ? {
         image: {
           kicker: 'Image Deck Workflow',
           title: '图片版 PPT 生成',
           desc: '生成偏视觉稿路线的学术汇报页面，适合组会、答辩和展示型场景。',
-          highlight: '这一页只保留图片版工作流，不再混入纯前端模式切换。',
+          highlight: '这一页只保留图片版工作流，不再混入可编辑版模式切换。',
         },
         frontend: {
-          kicker: 'Frontend Deck Workflow',
-          title: '纯前端版 PPT 生成',
-          desc: '生成 16:9 HTML/CSS 文本页，支持画布内直接改字、首轮视觉检查和截图导出。',
-          highlight: '这一页只做纯前端 deck，不再混入图片版配置。',
+          kicker: 'Editable Deck Workflow',
+          title: '可编辑版 PPT 生成',
+          desc: '生成 16:9 HTML/CSS 可编辑页面，支持画布内直接改字、可选首轮视觉检查和截图导出。',
+          highlight: '这一页只做可编辑版 deck，不再混入图片版配置。',
         },
       }
     : {
@@ -267,10 +271,10 @@ const UploadStep: React.FC<UploadStepProps> = ({
           highlight: 'This page is dedicated to the image workflow only.',
         },
         frontend: {
-          kicker: 'Frontend Deck Workflow',
-          title: 'Frontend-code PPT Generation',
-          desc: 'Generate 16:9 HTML/CSS text slides with inline editing, first-pass visual QA, and screenshot export.',
-          highlight: 'This page is dedicated to the frontend deck workflow only.',
+          kicker: 'Editable Deck Workflow',
+          title: 'Editable PPT Generation',
+          desc: 'Generate 16:9 HTML/CSS text slides with inline editing, optional first-pass visual QA, and screenshot export.',
+          highlight: 'This page is dedicated to the editable deck workflow only.',
         },
       };
   const currentPageCopy = pptMode === 'frontend' ? pageCopy.frontend : pageCopy.image;
@@ -312,7 +316,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
     ? (uiLang === 'zh' ? '推荐主题 / 配色候选' : 'Recommended Palette / Theme Directions')
     : t('upload.config.promptCardsTitle');
   const promptCardsTip = pptMode === 'frontend'
-    ? (uiLang === 'zh' ? '前端版建议直接写颜色、材质和组件气质' : 'For frontend decks, specify palette, material, and component language directly')
+    ? (uiLang === 'zh' ? '可编辑版建议直接写颜色、材质和组件气质' : 'For editable decks, specify palette, material, and component language directly')
     : t('upload.config.promptCardsTip');
   const frontendImageStyleOptions = uiLang === 'zh'
     ? [
@@ -610,7 +614,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
             {(pptMode === 'image' || frontendIncludeImages) && (
             <div>
               <label className="block text-xs text-gray-400 mb-1">
-                {pptMode === 'frontend' ? '前端版生图模型' : t('upload.config.genModel')}
+                {pptMode === 'frontend' ? '可编辑版生图模型' : t('upload.config.genModel')}
               </label>
               <select
                 value={genFigModel}
@@ -659,47 +663,80 @@ const UploadStep: React.FC<UploadStepProps> = ({
           </div>
 
           {pptMode === 'frontend' && (
-            <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-white">图像增强</div>
-                  <div className="mt-1 text-xs leading-5 text-amber-100/80">
-                    开启后优先使用论文解析出的图/表；当前页没有可复用素材时，再按大纲自动生成示意图。
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFrontendIncludeImages(!frontendIncludeImages)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    frontendIncludeImages ? 'bg-amber-500' : 'bg-slate-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      frontendIncludeImages ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              {frontendIncludeImages && (
-                <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <label className="block text-xs text-gray-300 mb-1">图像风格</label>
-                    <select
-                      value={frontendImageStyle}
-                      onChange={(e) => setFrontendImageStyle(e.target.value)}
-                      className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      {frontendImageStyleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+                    <div className="text-sm font-semibold text-white">图像增强</div>
+                    <div className="mt-1 text-xs leading-5 text-amber-100/80">
+                      开启后优先使用论文解析出的图/表；当前页没有可复用素材时，再按大纲自动生成示意图。
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-amber-400/15 bg-black/20 px-3 py-2 text-[11px] leading-5 text-amber-100/85">
-                    开启图像增强后，批量生成阶段按 2 点 / 页计费；文字可继续直接编辑，图片可在画布里点击替换。
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFrontendIncludeImages(!frontendIncludeImages)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      frontendIncludeImages ? 'bg-amber-500' : 'bg-slate-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        frontendIncludeImages ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </div>
-              )}
+                {frontendIncludeImages && (
+                  <div className="mt-4 grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-300 mb-1">图像风格</label>
+                      <select
+                        value={frontendImageStyle}
+                        onChange={(e) => setFrontendImageStyle(e.target.value)}
+                        className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        {frontendImageStyleOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="rounded-xl border border-amber-400/15 bg-black/20 px-3 py-2 text-[11px] leading-5 text-amber-100/85">
+                      开启图像增强后，批量生成阶段按 2 点 / 页计费；文字可继续直接编辑，图片可在画布里点击替换。
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="pr-2">
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold text-white">首轮自动视觉检查</div>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-300">
+                        默认关闭
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-cyan-100/80">
+                      开启后，批量生成完成会对每一页并发做一次视觉检查，并在发现问题时自动尝试修复；等待时间会明显变长。
+                    </div>
+                    <div className="mt-2 text-[11px] leading-5 text-cyan-100/70">
+                      关闭时会直接进入编辑页。需要时再使用编辑页面下方的“视觉检查并修复”按钮逐页处理。
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFrontendAutoReviewEnabled(!frontendAutoReviewEnabled)}
+                    className={`relative mt-0.5 inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      frontendAutoReviewEnabled ? 'bg-cyan-500' : 'bg-slate-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        frontendAutoReviewEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -771,7 +808,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
                 </div>
                 {pptMode === 'frontend' && (
                   <div className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                    纯前端版建议把颜色、材质、留白感和卡片语言写清楚，不要只写“科技风 / 学术风”这类过泛描述。
+                    可编辑版建议把颜色、材质、留白感和卡片语言写清楚，不要只写“科技风 / 学术风”这类过泛描述。
                   </div>
                 )}
                 <div>
@@ -854,7 +891,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
 
           <div className="flex items-start gap-2 text-xs text-gray-500 mt-3 px-1">
             <Info size={14} className="mt-0.5 text-gray-400 flex-shrink-0" />
-            <p>{pptMode === 'frontend' ? '前端版会在下一步生成可编辑字段和 HTML/CSS 代码；若开启图像增强，会同时预留受控图片槽位，最终导出为逐页截图版 PPTX。' : t('upload.config.tip')}</p>
+            <p>{pptMode === 'frontend' ? '可编辑版会在下一步生成可编辑字段和 HTML/CSS 代码；若开启图像增强，会同时预留受控图片槽位；若开启首轮自动视觉检查，会在批量生成后先自动逐页检查，再进入编辑页。' : t('upload.config.tip')}</p>
           </div>
 
           {isUploading && (

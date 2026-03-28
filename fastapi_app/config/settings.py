@@ -137,6 +137,7 @@ class AppSettings(BaseSettings):
     PAPER2PPT_CONTENT_MODEL: str = "gpt-5.1"           # Content generation
     PAPER2PPT_IMAGE_GEN_MODEL: str = "gemini-3-pro-image-preview"  # Image generation
     PAPER2PPT_VLM_MODEL: str = "qwen-vl-ocr-2025-11-20"  # VLM vision understanding
+    PAPER2PPT_VLM_TIMEOUT_SECONDS: int = 45
     PAPER2PPT_CHART_MODEL: str = "gpt-4o"              # Chart generation
     PAPER2PPT_DESC_MODEL: str = "gpt-5.1"              # Figure description
     PAPER2PPT_TECHNICAL_MODEL: str = "claude-haiku-4-5-20251001"  # Technical details

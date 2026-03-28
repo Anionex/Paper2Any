@@ -69,6 +69,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   const [pageCount, setPageCount] = useState(6);
   const [useLongPaper, setUseLongPaper] = useState(false);
   const [frontendIncludeImages, setFrontendIncludeImages] = useState(false);
+  const [frontendAutoReviewEnabled, setFrontendAutoReviewEnabled] = useState(false);
   const [frontendImageStyle, setFrontendImageStyle] = useState('academic_illustration');
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
@@ -253,6 +254,9 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
         if (saved.pageCount) setPageCount(saved.pageCount);
         if (saved.useLongPaper !== undefined) setUseLongPaper(saved.useLongPaper);
         if (saved.frontendIncludeImages !== undefined) setFrontendIncludeImages(Boolean(saved.frontendIncludeImages));
+        if (saved.frontendAutoReviewEnabled !== undefined) {
+          setFrontendAutoReviewEnabled(Boolean(saved.frontendAutoReviewEnabled));
+        }
         if (saved.frontendImageStyle) setFrontendImageStyle(saved.frontendImageStyle);
         if (saved.model) setModel(saved.model);
         if (saved.genFigModel) setGenFigModel(saved.genFigModel);
@@ -292,6 +296,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       pageCount,
       useLongPaper,
       frontendIncludeImages,
+      frontendAutoReviewEnabled,
       frontendImageStyle,
       llmApiUrl,
       apiKey,
@@ -309,7 +314,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     }
   }, [
     pptMode, uploadMode, textContent, styleMode, stylePreset, globalPrompt,
-    pageCount, useLongPaper, frontendIncludeImages, frontendImageStyle, llmApiUrl, apiKey,
+    pageCount, useLongPaper, frontendIncludeImages, frontendAutoReviewEnabled, frontendImageStyle, llmApiUrl, apiKey,
     model, genFigModel, language, user?.id
   ]);
 
@@ -600,10 +605,12 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     if (layoutIssues.length > 0) {
       formData.append('layout_issues', JSON.stringify(layoutIssues));
     }
+    const reviewMimeType = screenshot.type || 'image/jpeg';
+    const reviewExt = reviewMimeType === 'image/png' ? 'png' : 'jpg';
     formData.append(
       'screenshot',
-      new File([screenshot], `review_page_${String(slide.pageNum - 1).padStart(3, '0')}.png`, {
-        type: 'image/png',
+      new File([screenshot], `review_page_${String(slide.pageNum - 1).padStart(3, '0')}.${reviewExt}`, {
+        type: reviewMimeType,
       }),
     );
 
@@ -658,7 +665,10 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     try {
       await sleep(40);
       const localLayoutCheck = inspectSlideLayout(node, 1600, 900);
-      const blob = await captureSlideToPngBlob(node, 1600, 900);
+      const blob = await captureSlideToPngBlob(node, 1280, 720, {
+        mimeType: 'image/jpeg',
+        quality: 0.82,
+      });
       const data = await requestFrontendSlideReview({
         slide: slideSnapshot,
         resultPathValue,
@@ -752,7 +762,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     }
 
     const reviewResults: boolean[] = new Array(slides.length).fill(false);
-    await runWithConcurrency(slides, 3, async (slide, index) => {
+    await runWithConcurrency(slides, 2, async (slide, index) => {
       reviewResults[index] = await autoReviewAndRepairFrontendSlide(index, slide, resultPathValue);
     });
 
@@ -1423,7 +1433,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
-    setGenerateTaskMessage(frontendIncludeImages ? '正在生成纯前端页面代码与配图...' : '正在生成纯前端页面代码...');
+    setGenerateTaskMessage(frontendIncludeImages ? '正在生成可编辑版页面代码与配图...' : '正在生成可编辑版页面代码...');
     setError(null);
 
     const pendingSlides: FrontendSlide[] = outlineData.map((slide, index) => ({
@@ -1467,12 +1477,12 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       });
 
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, '纯前端 PPT 生成失败'));
+        throw new Error(await extractErrorMessage(res, '可编辑版 PPT 生成失败'));
       }
 
       const data = await res.json();
       if (!data.success || !Array.isArray(data.slides) || data.slides.length === 0) {
-        throw new Error(data.error || '纯前端 PPT 生成失败');
+        throw new Error(data.error || '可编辑版 PPT 生成失败');
       }
 
       if (data.result_path) {
@@ -1482,14 +1492,16 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       const normalizedSlides = normalizeFrontendSlides(data.slides);
       setFrontendDeckTheme(normalizedTheme);
       setFrontendSlides(normalizedSlides);
-      await runInitialFrontendReviewPass(normalizedSlides, data.result_path || resultPath || '');
+      if (frontendAutoReviewEnabled) {
+        await runInitialFrontendReviewPass(normalizedSlides, data.result_path || resultPath || '');
+      }
       await consumeQuotaForAction(
         'paper2ppt',
         requiredPoints,
-        `纯前端 PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
+        `可编辑版 PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : '纯前端 PPT 生成失败';
+      const message = err instanceof Error ? err.message : '可编辑版 PPT 生成失败';
       setError(message);
       setFrontendSlides(pendingSlides.map((slide) => ({ ...slide, status: 'pending' })));
     } finally {
@@ -2192,12 +2204,12 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
         body: formData,
       });
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, '纯前端 PPT 导出失败'));
+        throw new Error(await extractErrorMessage(res, '可编辑版 PPT 导出失败'));
       }
 
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error || '纯前端 PPT 导出失败');
+        throw new Error(data.error || '可编辑版 PPT 导出失败');
       }
 
       if (data.ppt_pptx_path) {
@@ -2220,7 +2232,7 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
         outputFilePath.endsWith('.pdf') ? 'paper2ppt_frontend.pdf' : 'paper2ppt_frontend.pptx',
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : '纯前端 PPT 导出失败';
+      const message = err instanceof Error ? err.message : '可编辑版 PPT 导出失败';
       setError(message);
     } finally {
       setFinalTaskMessage('');
@@ -2415,6 +2427,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
               useLongPaper={useLongPaper} setUseLongPaper={setUseLongPaper}
               frontendIncludeImages={frontendIncludeImages}
               setFrontendIncludeImages={setFrontendIncludeImages}
+              frontendAutoReviewEnabled={frontendAutoReviewEnabled}
+              setFrontendAutoReviewEnabled={setFrontendAutoReviewEnabled}
               frontendImageStyle={frontendImageStyle}
               setFrontendImageStyle={setFrontendImageStyle}
               progress={progress} progressStatus={progressStatus}
