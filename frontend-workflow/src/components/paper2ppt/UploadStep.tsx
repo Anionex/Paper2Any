@@ -5,14 +5,18 @@ import { PAPER2PPT_GEN_FIG_MODELS, PAPER2PPT_MODELS, withModelOptions } from '..
 import {
   UploadCloud, Settings2, Loader2, AlertCircle, Sparkles,
   ArrowRight, FileText, Key, Globe, Cpu, Type, Lightbulb,
+  MonitorSmartphone,
   Info, X
 } from 'lucide-react';
 import QRCodeTooltip from '../QRCodeTooltip';
 import ManagedApiNotice from '../ManagedApiNotice';
 import DemoCard from './DemoCard';
-import { UploadMode, StyleMode, StylePreset } from './types';
+import { PptGenerationMode, UploadMode, StyleMode, StylePreset } from './types';
 
 interface UploadStepProps {
+  pptMode: PptGenerationMode;
+  setPptMode: (mode: PptGenerationMode) => void;
+  modeLocked?: boolean;
   uploadMode: UploadMode;
   setUploadMode: (mode: UploadMode) => void;
   textContent: string;
@@ -59,6 +63,8 @@ interface UploadStepProps {
 }
 
 const UploadStep: React.FC<UploadStepProps> = ({
+  pptMode, setPptMode,
+  modeLocked = false,
   uploadMode, setUploadMode,
   textContent, setTextContent,
   selectedFile,
@@ -95,7 +101,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
     'gemini-2.5-flash-image': 'Gemini 2.5 (Flash Image)',
   };
   const uiLang = i18n.language?.startsWith('zh') ? 'zh' : 'en';
-  const stylePromptCards = uiLang === 'zh'
+  const imageStylePromptCards = uiLang === 'zh'
     ? [
         {
           title: '手绘卡通信息图',
@@ -148,19 +154,179 @@ const UploadStep: React.FC<UploadStepProps> = ({
           text: 'Soft illustration style: off-white background, low-saturation palette, gentle shadows.\nLight stickers/illustrations as accents, warm and friendly tone.\nNo harsh contrast, no metallic textures, no cyber neon.',
         },
       ];
+  const frontendStylePromptCards = uiLang === 'zh'
+    ? [
+        {
+          title: '暖白 + 石墨 + 赤陶',
+          text: '请使用暖白或象牙白背景，深石墨文字，赤陶或赭红作为唯一强调色。整体像高质量 keynote 学术汇报，不要青色系，不要霓虹感，不要玻璃发光。',
+          swatch: 'from-[#f4efe6] via-[#d8c3a5] to-[#b85c38]',
+        },
+        {
+          title: '午夜蓝 + 冰灰 + 电蓝',
+          text: '请使用午夜蓝或深海军蓝背景，冰灰文字，电蓝作为少量强调色。整体要克制、冷静、专业，像研究组年度汇报，不要默认青色玻璃卡片。',
+          swatch: 'from-[#0f172a] via-[#334155] to-[#60a5fa]',
+        },
+        {
+          title: '纸感米白 + 墨黑 + 酒红',
+          text: '请做成纸感米白底色，墨黑正文，酒红或暗红作为重点强调。整体像学术讲义与答辩结合的风格，不要赛博蓝绿，不要荧光描边。',
+          swatch: 'from-[#f8f2e7] via-[#d6c6b8] to-[#7f1d1d]',
+        },
+        {
+          title: '森林绿 + 沙金 + 奶油白',
+          text: '请使用森林绿或深橄榄作为主色，沙金做点缀，奶油白做底。整体要像高端研究报告封面延展到全 deck，避免青色与玻璃拟态默认风格。',
+          swatch: 'from-[#1f3d2b] via-[#7c8f4e] to-[#d4b483]',
+        },
+        {
+          title: '黑白灰 + 一点亮橙',
+          text: '请使用黑白灰为主，亮橙只用于极少数重点标签或数字。布局要极简、留白多、组件统一，像极简发布会风格，不要任何青蓝色主导。',
+          swatch: 'from-[#111827] via-[#6b7280] to-[#f97316]',
+        },
+        {
+          title: '深紫红 + 雾粉 + 银灰',
+          text: '请使用深紫红基底，雾粉或银灰作为辅助色。风格要成熟、优雅、有研究报告质感，不要默认青色边框和蓝绿高光。',
+          swatch: 'from-[#3b0d2e] via-[#9d6381] to-[#c9c9d6]',
+        },
+      ]
+    : [
+        {
+          title: 'Warm Ivory + Terracotta',
+          text: 'Use an ivory or warm white background, deep graphite text, and terracotta as the only accent. Make it feel like a refined keynote-style academic talk. No cyan, no neon, no glass glow.',
+          swatch: 'from-[#f4efe6] via-[#d8c3a5] to-[#b85c38]',
+        },
+        {
+          title: 'Midnight Blue + Ice Gray',
+          text: 'Use midnight blue or deep navy as the base, ice-gray text, and electric blue as a sparse accent. Keep it restrained and professional. Avoid the default cyan glass-card look.',
+          swatch: 'from-[#0f172a] via-[#334155] to-[#60a5fa]',
+        },
+        {
+          title: 'Parchment + Burgundy',
+          text: 'Use a parchment-like off-white canvas, ink-black body text, and burgundy as emphasis. The deck should feel like an academic handout merged with a defense presentation. No cyber cyan/teal.',
+          swatch: 'from-[#f8f2e7] via-[#d6c6b8] to-[#7f1d1d]',
+        },
+        {
+          title: 'Forest Green + Sand Gold',
+          text: 'Use forest green or dark olive as the main tone, sand-gold accents, and cream as the base. Make it feel like a premium research report. Avoid cyan and generic glassmorphism.',
+          swatch: 'from-[#1f3d2b] via-[#7c8f4e] to-[#d4b483]',
+        },
+        {
+          title: 'Monochrome + Bright Orange',
+          text: 'Stay mostly black, white, and gray, with bright orange used only for sparse labels or key metrics. Minimal, quiet, and presentation-grade. No cyan-led palette.',
+          swatch: 'from-[#111827] via-[#6b7280] to-[#f97316]',
+        },
+        {
+          title: 'Plum Red + Mist Pink',
+          text: 'Use a dark plum-red base with mist pink and silver-gray as supporting colors. Aim for a mature, elegant research deck. Avoid default cyan borders and aqua highlights.',
+          swatch: 'from-[#3b0d2e] via-[#9d6381] to-[#c9c9d6]',
+        },
+      ];
+  const modeTexts = uiLang === 'zh'
+    ? {
+        title: 'PPT 生成模式',
+        imageTitle: '图片版 PPT',
+        imageDesc: '沿用现有图像工作流，逐页生成视觉稿并导出。',
+        frontendTitle: '纯前端版 PPT',
+        frontendDesc: '生成 16:9 HTML/CSS 模板，文字可编辑，最终截图导出。',
+        frontendTip: '纯前端版不会引用论文原图，而是生成文本优先的前端布局代码。',
+      }
+    : {
+        title: 'PPT Mode',
+        imageTitle: 'Image PPT',
+        imageDesc: 'Use the current image workflow and export generated visual slides.',
+        frontendTitle: 'Frontend PPT',
+        frontendDesc: 'Generate editable 16:9 HTML/CSS slides and export by screenshots.',
+        frontendTip: 'Frontend mode skips paper figures and focuses on editable text-first layouts.',
+      };
+  const pageCopy = uiLang === 'zh'
+    ? {
+        image: {
+          kicker: 'Image Deck Workflow',
+          title: '图片版 PPT 生成',
+          desc: '生成偏视觉稿路线的学术汇报页面，适合组会、答辩和展示型场景。',
+          highlight: '这一页只保留图片版工作流，不再混入纯前端模式切换。',
+        },
+        frontend: {
+          kicker: 'Frontend Deck Workflow',
+          title: '纯前端版 PPT 生成',
+          desc: '生成 16:9 HTML/CSS 文本页，支持画布内直接改字、首轮视觉检查和截图导出。',
+          highlight: '这一页只做纯前端 deck，不再混入图片版配置。',
+        },
+      }
+    : {
+        image: {
+          kicker: 'Image Deck Workflow',
+          title: 'Image-style PPT Generation',
+          desc: 'Generate image-first academic slides for presentation-heavy seminar and defense scenarios.',
+          highlight: 'This page is dedicated to the image workflow only.',
+        },
+        frontend: {
+          kicker: 'Frontend Deck Workflow',
+          title: 'Frontend-code PPT Generation',
+          desc: 'Generate 16:9 HTML/CSS text slides with inline editing, first-pass visual QA, and screenshot export.',
+          highlight: 'This page is dedicated to the frontend deck workflow only.',
+        },
+      };
+  const currentPageCopy = pptMode === 'frontend' ? pageCopy.frontend : pageCopy.image;
+  const promptCards = pptMode === 'frontend' ? frontendStylePromptCards : imageStylePromptCards;
+  const presetOptions = pptMode === 'frontend'
+    ? (
+        uiLang === 'zh'
+          ? [
+              { value: 'modern', label: '暖白赤陶' },
+              { value: 'business', label: '午夜蓝冰灰' },
+              { value: 'academic', label: '纸感酒红' },
+              { value: 'creative', label: '森林绿沙金' },
+            ]
+          : [
+              { value: 'modern', label: 'Ivory + Terracotta' },
+              { value: 'business', label: 'Midnight Blue' },
+              { value: 'academic', label: 'Parchment + Burgundy' },
+              { value: 'creative', label: 'Forest Green' },
+            ]
+      )
+    : [
+        { value: 'modern', label: t('upload.config.presets.modern') },
+        { value: 'business', label: t('upload.config.presets.business') },
+        { value: 'academic', label: t('upload.config.presets.academic') },
+        { value: 'creative', label: t('upload.config.presets.creative') },
+      ];
+  const stylePresetLabel = pptMode === 'frontend'
+    ? (uiLang === 'zh' ? '主题色方向' : 'Palette Direction')
+    : t('upload.config.stylePreset');
+  const promptLabel = pptMode === 'frontend'
+    ? (uiLang === 'zh' ? '前端主题提示词' : 'Frontend Theme Prompt')
+    : t('upload.config.promptLabel');
+  const promptPlaceholder = pptMode === 'frontend'
+    ? (uiLang === 'zh'
+        ? '例如：米白背景，酒红强调，像答辩 keynote；标题克制、卡片边框更细...'
+        : 'Example: ivory canvas, burgundy accents, keynote-like academic tone; restrained titles and thinner card borders...')
+    : t('upload.config.promptPlaceholder');
+  const promptCardsTitle = pptMode === 'frontend'
+    ? (uiLang === 'zh' ? '推荐主题 / 配色候选' : 'Recommended Palette / Theme Directions')
+    : t('upload.config.promptCardsTitle');
+  const promptCardsTip = pptMode === 'frontend'
+    ? (uiLang === 'zh' ? '前端版建议直接写颜色、材质和组件气质' : 'For frontend decks, specify palette, material, and component language directly')
+    : t('upload.config.promptCardsTip');
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-10 text-center">
-        <p className="text-xs uppercase tracking-[0.2em] text-purple-300 mb-3 font-semibold">{t('upload.subtitle')}</p>
+        <p className={`text-xs uppercase tracking-[0.2em] mb-3 font-semibold ${pptMode === 'frontend' ? 'text-amber-300' : 'text-purple-300'}`}>
+          {currentPageCopy.kicker}
+        </p>
         <h1 className="text-4xl md:text-5xl font-bold mb-4">
-          <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 bg-clip-text text-transparent">
-            {t('upload.title')}
+          <span className={`bg-gradient-to-r bg-clip-text text-transparent ${
+            pptMode === 'frontend'
+              ? 'from-amber-300 via-orange-300 to-yellow-200'
+              : 'from-purple-400 via-pink-400 to-rose-400'
+          }`}>
+            {currentPageCopy.title}
           </span>
         </h1>
         <p className="text-base text-gray-300 max-w-2xl mx-auto leading-relaxed">
-          {t('upload.desc')}<br />
-          <span className="text-purple-400">{t('upload.descHighlight')}</span>
+          {currentPageCopy.desc}<br />
+          <span className={pptMode === 'frontend' ? 'text-amber-300' : 'text-purple-400'}>
+            {currentPageCopy.highlight}
+          </span>
         </p>
       </div>
 
@@ -169,6 +335,56 @@ const UploadStep: React.FC<UploadStepProps> = ({
         <div className="glass rounded-xl border border-white/10 p-6 relative overflow-hidden">
           {/* 装饰背景光 */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-50 blur-sm"></div>
+
+          {!modeLocked && (
+            <div className="mb-6">
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <span className="w-1 h-4 rounded-full bg-cyan-500"></span>
+                <h3 className="text-white font-medium text-sm">{modeTexts.title}</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3 p-1.5 bg-black/40 rounded-2xl border border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setPptMode('image')}
+                  className={`text-left rounded-xl px-4 py-4 transition-all ${
+                    pptMode === 'image'
+                      ? 'bg-gradient-to-br from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30 ring-1 ring-white/20'
+                      : 'bg-white/5 text-gray-300 hover:bg-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles size={18} className={pptMode === 'image' ? 'text-white' : 'text-purple-300'} />
+                    <span className="font-semibold text-sm">{modeTexts.imageTitle}</span>
+                  </div>
+                  <p className={`text-xs leading-relaxed ${pptMode === 'image' ? 'text-purple-100' : 'text-gray-400'}`}>
+                    {modeTexts.imageDesc}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPptMode('frontend')}
+                  className={`text-left rounded-xl px-4 py-4 transition-all ${
+                    pptMode === 'frontend'
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30 ring-1 ring-white/20'
+                      : 'bg-white/5 text-gray-300 hover:bg-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <MonitorSmartphone size={18} className={pptMode === 'frontend' ? 'text-white' : 'text-amber-300'} />
+                    <span className="font-semibold text-sm">{modeTexts.frontendTitle}</span>
+                  </div>
+                  <p className={`text-xs leading-relaxed ${pptMode === 'frontend' ? 'text-amber-100' : 'text-gray-400'}`}>
+                    {modeTexts.frontendDesc}
+                  </p>
+                </button>
+              </div>
+              {pptMode === 'frontend' && (
+                <p className="mt-3 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                  {modeTexts.frontendTip}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* 炫酷模式切换 Tabs */}
           <div className="grid grid-cols-3 gap-3 mb-6 p-1.5 bg-black/40 rounded-2xl border border-white/5">
@@ -369,7 +585,8 @@ const UploadStep: React.FC<UploadStepProps> = ({
             </>
           )}
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${pptMode === 'image' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {pptMode === 'image' && (
             <div>
               <label className="block text-xs text-gray-400 mb-1">{t('upload.config.genModel')}</label>
               <select
@@ -386,6 +603,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
                  <p className="text-[10px] text-gray-500 mt-1">此源仅支持 gemini-3-pro</p>
               )}
             </div>
+            )}
             <div>
               <label className="block text-xs text-gray-400 mb-1">{t('upload.config.pageCount')}</label>
               <input 
@@ -419,7 +637,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
 
           <div className="border-t border-white/10 pt-4 mt-2">
             <h4 className="text-xs text-gray-400 mb-2">{t('upload.config.styleTitle')}</h4>
-            
+
             <div className="mb-3">
               <label className="block text-xs text-gray-400 mb-1">{t('upload.config.language')}</label>
               <select 
@@ -432,63 +650,69 @@ const UploadStep: React.FC<UploadStepProps> = ({
               </select>
             </div>
 
-            <div className="flex gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => setStyleMode('prompt')}
-                className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
-                  styleMode === 'prompt'
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm'
-                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
-                }`}
-              >
-                <Sparkles size={14} /> {t('upload.config.styleMode.prompt')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setStyleMode('reference')}
-                className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
-                  styleMode === 'reference'
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm'
-                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
-                }`}
-              >
-                <UploadCloud size={14} /> {t('upload.config.styleMode.reference')}
-              </button>
-            </div>
+            {pptMode === 'image' && (
+              <div className="flex gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setStyleMode('prompt')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                    styleMode === 'prompt'
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm'
+                      : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                  }`}
+                >
+                  <Sparkles size={14} /> {t('upload.config.styleMode.prompt')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStyleMode('reference')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                    styleMode === 'reference'
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm'
+                      : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                  }`}
+                >
+                  <UploadCloud size={14} /> {t('upload.config.styleMode.reference')}
+                </button>
+              </div>
+            )}
 
-            {styleMode === 'prompt' ? (
+            {pptMode === 'frontend' || styleMode === 'prompt' ? (
               <>
                 <div className="mb-3">
-                  <label className="block text-xs text-gray-400 mb-1">{t('upload.config.stylePreset')}</label>
+                  <label className="block text-xs text-gray-400 mb-1">{stylePresetLabel}</label>
                   <select 
                     value={stylePreset} 
                     onChange={e => setStylePreset(e.target.value as typeof stylePreset)} 
                     className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="modern">{t('upload.config.presets.modern')}</option>
-                    <option value="business">{t('upload.config.presets.business')}</option>
-                    <option value="academic">{t('upload.config.presets.academic')}</option>
-                    <option value="creative">{t('upload.config.presets.creative')}</option>
+                    {presetOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">{t('upload.config.promptLabel')}</label>
+                  <label className="block text-xs text-gray-400 mb-1">{promptLabel}</label>
                   <textarea 
                     value={globalPrompt} 
                     onChange={e => setGlobalPrompt(e.target.value)} 
-                    placeholder={t('upload.config.promptPlaceholder')}
+                    placeholder={promptPlaceholder}
                     rows={2} 
                     className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-purple-500 resize-none" 
                   />
                 </div>
+                {pptMode === 'frontend' && (
+                  <div className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                    纯前端版建议把颜色、材质、留白感和卡片语言写清楚，不要只写“科技风 / 学术风”这类过泛描述。
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs text-gray-400">{t('upload.config.promptCardsTitle')}</label>
-                    <span className="text-[10px] text-gray-500">{t('upload.config.promptCardsTip')}</span>
+                    <label className="block text-xs text-gray-400">{promptCardsTitle}</label>
+                    <span className="text-[10px] text-gray-500">{promptCardsTip}</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {stylePromptCards.map((card) => (
+                    {promptCards.map((card) => (
                       <button
                         key={card.title}
                         type="button"
@@ -498,6 +722,9 @@ const UploadStep: React.FC<UploadStepProps> = ({
                         }}
                         className="group text-left rounded-2xl border border-white/15 bg-white/5 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-purple-400/60 hover:bg-white/10"
                       >
+                        {'swatch' in card && (
+                          <div className={`mb-3 h-2.5 rounded-full bg-gradient-to-r ${card.swatch}`} />
+                        )}
                         <div className="text-sm font-semibold text-white mb-1">{card.title}</div>
                         <div className="text-[11px] leading-relaxed text-gray-300 whitespace-pre-line line-clamp-4">
                           {card.text}
@@ -559,7 +786,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
 
           <div className="flex items-start gap-2 text-xs text-gray-500 mt-3 px-1">
             <Info size={14} className="mt-0.5 text-gray-400 flex-shrink-0" />
-            <p>{t('upload.config.tip')}</p>
+            <p>{pptMode === 'frontend' ? '纯前端版会在下一步生成可编辑字段和 HTML/CSS 代码，最终导出为逐页截图版 PPTX。' : t('upload.config.tip')}</p>
           </div>
 
           {isUploading && (

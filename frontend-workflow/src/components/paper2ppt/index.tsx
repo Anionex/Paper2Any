@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { uploadAndSaveFile } from '../../services/fileService';
 import { API_KEY, DEFAULT_LLM_API_URL } from '../../config/api';
@@ -10,6 +10,9 @@ import { getApiSettings, saveApiSettings } from '../../services/apiSettingsServi
 import { useRuntimeBilling } from '../../hooks/useRuntimeBilling';
 
 import {
+  FrontendDeckTheme,
+  FrontendSlide,
+  PptGenerationMode,
   Step,
   SlideOutline,
   GenerateResult,
@@ -26,15 +29,30 @@ import UploadStep from './UploadStep';
 import OutlineStep from './OutlineStep';
 import GenerateStep from './GenerateStep';
 import CompleteStep from './CompleteStep';
+import FrontendGenerateStep from './FrontendGenerateStep';
+import FrontendCompleteStep from './FrontendCompleteStep';
+import FrontendSlidePreview from './FrontendSlidePreview';
+import {
+  buildFrontendCodeRepairPrompt,
+  captureSlideToPngBlob,
+  inspectSlideLayout,
+  validateFrontendSlideCode,
+} from './frontendSlideUtils';
 
 const MANAGED_CREDENTIAL_SCOPE = 'paper2ppt';
 
-const Paper2PptPage = () => {
+export interface Paper2PptPageProps {
+  initialMode?: PptGenerationMode;
+}
+
+const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   const { user, refreshQuota } = useAuthStore();
   const { userApiConfigRequired } = useRuntimeBilling();
+  const modeLocked = Boolean(initialMode);
   
   // Step 状态
   const [currentStep, setCurrentStep] = useState<Step>('upload');
+  const [pptMode, setPptMode] = useState<PptGenerationMode>(initialMode || 'image');
   
   // Step 1: 上传相关状态
   const [uploadMode, setUploadMode] = useState<UploadMode>('file');
@@ -67,7 +85,10 @@ const Paper2PptPage = () => {
   // Step 3: 生成相关状态
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [generateResults, setGenerateResults] = useState<GenerateResult[]>([]);
+  const [frontendSlides, setFrontendSlides] = useState<FrontendSlide[]>([]);
+  const [frontendDeckTheme, setFrontendDeckTheme] = useState<FrontendDeckTheme | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isReviewingFrontendSlide, setIsReviewingFrontendSlide] = useState(false);
   const [slidePrompt, setSlidePrompt] = useState('');
   const [generateTaskMessage, setGenerateTaskMessage] = useState('');
   
@@ -88,6 +109,7 @@ const Paper2PptPage = () => {
   const [genFigModel, setGenFigModel] = useState(DEFAULT_PAPER2PPT_GEN_FIG_MODEL);
   const [language, setLanguage] = useState<'zh' | 'en'>('en');
   const [resultPath, setResultPath] = useState<string | null>(null);
+  const frontendCaptureRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   // GitHub Stars
   const [stars, setStars] = useState<{dataflow: number | null, agent: number | null, dataflex: number | null}>({
@@ -220,6 +242,7 @@ const Paper2PptPage = () => {
       if (raw) {
         const saved = JSON.parse(raw);
         
+        if (saved.pptMode && !initialMode) setPptMode(saved.pptMode);
         if (saved.uploadMode) setUploadMode(saved.uploadMode);
         if (saved.textContent) setTextContent(saved.textContent);
         if (saved.styleMode) setStyleMode(saved.styleMode);
@@ -246,10 +269,17 @@ const Paper2PptPage = () => {
     }
   }, [user?.id, userApiConfigRequired]);
 
+  useEffect(() => {
+    if (initialMode) {
+      setPptMode(initialMode);
+    }
+  }, [initialMode]);
+
   // 将配置写入 localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const data = {
+      pptMode,
       uploadMode,
       textContent,
       styleMode,
@@ -272,7 +302,7 @@ const Paper2PptPage = () => {
       console.error('Failed to persist paper2ppt config', e);
     }
   }, [
-    uploadMode, textContent, styleMode, stylePreset, globalPrompt,
+    pptMode, uploadMode, textContent, styleMode, stylePreset, globalPrompt,
     pageCount, useLongPaper, llmApiUrl, apiKey,
     model, genFigModel, language, user?.id
   ]);
@@ -375,6 +405,350 @@ const Paper2PptPage = () => {
     });
   };
 
+  const normalizeFrontendSlides = (slides: any[]): FrontendSlide[] =>
+    slides.map((slide: any, index: number) => ({
+      slideId: String(slide.slide_id || slide.slideId || index + 1),
+      pageNum: Number(slide.page_num || slide.pageNum || index + 1),
+      title: slide.title || `第 ${index + 1} 页`,
+      htmlTemplate: slide.html_template || slide.htmlTemplate || '',
+      cssCode: slide.css_code || slide.cssCode || '',
+      editableFields: Array.isArray(slide.editable_fields || slide.editableFields)
+        ? (slide.editable_fields || slide.editableFields).map((field: any) => ({
+            key: String(field.key || ''),
+            label: String(field.label || field.key || ''),
+            type: field.type === 'list' || field.type === 'textarea' ? field.type : 'text',
+            value: String(field.value || ''),
+            items: Array.isArray(field.items) ? field.items.map((item: any) => String(item || '')) : [],
+          }))
+        : [],
+      generationNote: slide.generation_note || slide.generationNote || '',
+      status: slide.status === 'processing' || slide.status === 'pending' ? slide.status : 'done',
+      review: {
+        status: 'idle',
+        summary: '',
+        issues: [],
+      },
+    }));
+
+  const normalizeFrontendDeckTheme = (theme: any): FrontendDeckTheme | null => {
+    if (!theme || typeof theme !== 'object') {
+      return null;
+    }
+    const themeLock = typeof theme.theme_lock === 'object' && theme.theme_lock ? theme.theme_lock : {};
+    return {
+      themeName: String(theme.theme_name || theme.themeName || 'locked_deck_theme'),
+      visualMood: String(theme.visual_mood || theme.visualMood || ''),
+      footerText: String(theme.footer_text || theme.footerText || ''),
+      sectionLabelTemplate: String(theme.section_label_template || theme.sectionLabelTemplate || ''),
+      themeLock: {
+        mustKeep: Array.isArray(themeLock.must_keep)
+          ? themeLock.must_keep.map((item: unknown) => String(item || '')).filter(Boolean)
+          : [],
+        preferredLayoutPatterns: Array.isArray(themeLock.preferred_layout_patterns)
+          ? themeLock.preferred_layout_patterns.map((item: unknown) => String(item || '')).filter(Boolean)
+          : [],
+        componentSignature: String(themeLock.component_signature || ''),
+        avoid: Array.isArray(themeLock.avoid)
+          ? themeLock.avoid.map((item: unknown) => String(item || '')).filter(Boolean)
+          : [],
+      },
+    };
+  };
+
+  const serializeFrontendSlide = (slide: FrontendSlide) => ({
+    slide_id: slide.slideId,
+    page_num: slide.pageNum,
+    title: slide.title,
+    html_template: slide.htmlTemplate,
+    css_code: slide.cssCode,
+    editable_fields: slide.editableFields.map((field) => ({
+      key: field.key,
+      label: field.label,
+      type: field.type,
+      value: field.value,
+      items: field.items,
+    })),
+    generation_note: slide.generationNote || '',
+    status: slide.status,
+  });
+
+  const buildFrontendPagecontentPayload = () =>
+    JSON.stringify(
+      outlineData.map((slide) => ({
+        title: slide.title,
+        layout_description: slide.layout_description,
+        key_points: slide.key_points,
+        asset_ref: slide.asset_ref,
+      })),
+    );
+
+  const getEffectiveStylePrompt = (mode: PptGenerationMode = pptMode) =>
+    globalPrompt || getStyleDescription(stylePreset, mode);
+
+  const waitForFrontendCaptureNodes = async (count: number, timeoutMs: number = 6000) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const ready = Array.from({ length: count }).every((_, index) => Boolean(frontendCaptureRefs.current[index]));
+      if (ready) {
+        return true;
+      }
+      await sleep(80);
+    }
+    return false;
+  };
+
+  const requestFrontendSlideGeneration = async ({
+    slideIndex,
+    prompt,
+    resultPathValue,
+    slideSnapshot,
+  }: {
+    slideIndex: number;
+    prompt: string;
+    resultPathValue: string;
+    slideSnapshot: FrontendSlide;
+  }) => {
+    const formData = new FormData();
+    formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+    formData.append('chat_api_url', llmApiUrl.trim());
+    formData.append('api_key', apiKey.trim());
+    formData.append('model', model);
+    formData.append('language', language);
+    formData.append('style', getEffectiveStylePrompt('frontend'));
+    formData.append('email', user?.id || user?.email || '');
+    formData.append('result_path', resultPathValue);
+    formData.append('page_id', String(slideIndex));
+    formData.append('edit_prompt', prompt.trim());
+    formData.append('current_slide', JSON.stringify(serializeFrontendSlide(slideSnapshot)));
+    formData.append('pagecontent', buildFrontendPagecontentPayload());
+
+    const res = await fetch('/api/v1/paper2ppt/frontend/generate', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY },
+      body: formData,
+    });
+    if (!res.ok) {
+      throw new Error(await extractErrorMessage(res, '前端页面重生成失败'));
+    }
+
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.slides) || data.slides.length === 0) {
+      throw new Error(data.error || '前端页面重生成失败');
+    }
+
+    return {
+      updatedSlide: normalizeFrontendSlides(data.slides)[0],
+      nextTheme: normalizeFrontendDeckTheme(data.theme),
+    };
+  };
+
+  const requestFrontendSlideReview = async ({
+    slide,
+    resultPathValue,
+    layoutIssues,
+    screenshot,
+  }: {
+    slide: FrontendSlide;
+    resultPathValue: string;
+    layoutIssues: string[];
+    screenshot: Blob;
+  }) => {
+    const formData = new FormData();
+    formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+    formData.append('chat_api_url', llmApiUrl.trim());
+    formData.append('api_key', apiKey.trim());
+    formData.append('language', language);
+    formData.append('result_path', resultPathValue);
+    formData.append('slide', JSON.stringify(serializeFrontendSlide(slide)));
+    if (layoutIssues.length > 0) {
+      formData.append('layout_issues', JSON.stringify(layoutIssues));
+    }
+    formData.append(
+      'screenshot',
+      new File([screenshot], `review_page_${String(slide.pageNum - 1).padStart(3, '0')}.png`, {
+        type: 'image/png',
+      }),
+    );
+
+    const res = await fetch('/api/v1/paper2ppt/frontend/review', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY },
+      body: formData,
+    });
+    if (!res.ok) {
+      throw new Error(await extractErrorMessage(res, '前端页面视觉检查失败'));
+    }
+    return res.json();
+  };
+
+  const runWithConcurrency = async <T,>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<void>,
+  ) => {
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (cursor < items.length) {
+        const currentIndex = cursor;
+        cursor += 1;
+        await worker(items[currentIndex], currentIndex);
+      }
+    });
+    await Promise.all(runners);
+  };
+
+  const autoReviewAndRepairFrontendSlide = async (
+    slideIndex: number,
+    slideSnapshot: FrontendSlide,
+    resultPathValue: string,
+  ) => {
+    const node = frontendCaptureRefs.current[slideIndex];
+    if (!node) {
+      updateFrontendSlideReview(slideIndex, {
+        status: 'needs_repair',
+        summary: '首轮自动检查跳过：预览节点尚未就绪。',
+        issues: [],
+      });
+      return false;
+    }
+
+    updateFrontendSlideReview(slideIndex, {
+      status: 'repairing',
+      summary: '正在做首轮视觉检查...',
+      issues: [],
+    });
+
+    try {
+      await sleep(40);
+      const localLayoutCheck = inspectSlideLayout(node, 1600, 900);
+      const blob = await captureSlideToPngBlob(node, 1600, 900);
+      const data = await requestFrontendSlideReview({
+        slide: slideSnapshot,
+        resultPathValue,
+        layoutIssues: localLayoutCheck.issues,
+        screenshot: blob,
+      });
+
+      const reviewIssues = Array.isArray(data.issues)
+        ? data.issues.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+        : [];
+      const reviewSummary = typeof data.summary === 'string' && data.summary.trim()
+        ? data.summary.trim()
+        : (data.passed ? '首轮检查通过。' : '检测到需要修复的版式问题。');
+
+      if (data.passed) {
+        updateFrontendSlideReview(slideIndex, {
+          status: 'passed',
+          summary: reviewSummary,
+          issues: reviewIssues,
+        });
+        return true;
+      }
+
+      const repairPrompt = typeof data.repair_prompt === 'string' ? data.repair_prompt.trim() : '';
+      if (!repairPrompt) {
+        updateFrontendSlideReview(slideIndex, {
+          status: 'needs_repair',
+          summary: reviewSummary || '首轮检查发现问题，但没有收到修复指令。',
+          issues: reviewIssues,
+        });
+        return false;
+      }
+
+      updateFrontendSlideReview(slideIndex, {
+        status: 'repairing',
+        summary: '首轮检查发现版式问题，正在自动修正...',
+        issues: reviewIssues,
+      });
+
+      const { updatedSlide, nextTheme } = await requestFrontendSlideGeneration({
+        slideIndex,
+        prompt: repairPrompt,
+        resultPathValue,
+        slideSnapshot,
+      });
+
+      setFrontendSlides((prev) =>
+        prev.map((slide, index) =>
+          index === slideIndex
+            ? {
+                ...updatedSlide,
+                review: {
+                  status: 'passed',
+                  summary: '首轮视觉检查已自动修正当前页。',
+                  issues: [],
+                },
+              }
+            : slide,
+        ),
+      );
+
+      if (nextTheme) {
+        setFrontendDeckTheme(nextTheme);
+      }
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '首轮自动视觉检查失败';
+      updateFrontendSlideReview(slideIndex, {
+        status: 'needs_repair',
+        summary: `首轮自动检查失败：${message}`,
+        issues: [],
+      });
+      return false;
+    }
+  };
+
+  const runInitialFrontendReviewPass = async (
+    slides: FrontendSlide[],
+    resultPathValue: string,
+  ) => {
+    if (slides.length === 0) {
+      return;
+    }
+
+    setGenerateTaskMessage('首轮生成完成，正在并行做视觉检查与自动调整...');
+    await sleep(180);
+    const ready = await waitForFrontendCaptureNodes(slides.length);
+    if (!ready) {
+      setError('前端页面已生成，但自动视觉检查未能拿到全部预览节点，请手动逐页检查。');
+      return;
+    }
+
+    const reviewResults: boolean[] = new Array(slides.length).fill(false);
+    await runWithConcurrency(slides, 3, async (slide, index) => {
+      reviewResults[index] = await autoReviewAndRepairFrontendSlide(index, slide, resultPathValue);
+    });
+
+    const failedCount = reviewResults.filter((item) => !item).length;
+    if (failedCount > 0) {
+      setError(`首轮自动视觉检查已完成，但仍有 ${failedCount} 页需要你手动复查。`);
+    } else {
+      setError(null);
+    }
+  };
+
+  const uploadGeneratedResultFile = async (filePath: string | null | undefined, defaultName: string) => {
+    if (!filePath) return;
+    try {
+      let fetchUrl = filePath;
+      if (window.location.protocol === 'https:' && filePath.startsWith('http:')) {
+        fetchUrl = filePath.replace('http:', 'https:');
+      }
+
+      const fileRes = await fetch(fetchUrl);
+      if (!fileRes.ok) {
+        console.error('[Paper2PptPage] Failed to fetch file for upload:', fileRes.status, fileRes.statusText);
+        return;
+      }
+
+      const fileBlob = await fileRes.blob();
+      const fileName = filePath.split('/').pop() || defaultName;
+      await uploadAndSaveFile(fileBlob, fileName, 'paper2ppt');
+    } catch (e) {
+      console.error('[Paper2PptPage] Failed to upload file:', e);
+    }
+  };
+
   // ============== Step 1: 上传处理 ==============
   const validateDocFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -430,14 +804,24 @@ const Paper2PptPage = () => {
     setReferenceImagePreview(null);
   };
 
-  const getStyleDescription = (preset: string): string => {
-    const styles: Record<string, string> = {
+  const getStyleDescription = (preset: string, mode: PptGenerationMode = pptMode): string => {
+    if (mode === 'frontend') {
+      const frontendStyles: Record<string, string> = {
+        modern: '暖白或象牙白背景，深石墨文字，赤陶强调色，克制的 keynote 学术汇报风，禁止青色玻璃拟态。',
+        business: '午夜蓝或深海军蓝底色，冰灰文字，电蓝小面积强调，专业研究组汇报风，避免默认青绿色主调。',
+        academic: '纸感米白背景，墨黑正文，酒红重点标注，像学术讲义与答辩 deck 的结合，禁止赛博青蓝。',
+        creative: '森林绿或深橄榄主色，沙金点缀，奶油白底，组件统一且有高级研究报告气质，避免默认 cyan accent。',
+      };
+      return frontendStyles[preset] || frontendStyles.modern;
+    }
+
+    const imageStyles: Record<string, string> = {
       modern: '现代简约风格，使用干净的线条和充足的留白',
       business: '商务专业风格，稳重大气，适合企业演示',
       academic: '学术报告风格，清晰的层次结构，适合论文汇报',
       creative: '创意设计风格，活泼生动，色彩丰富',
     };
-    return styles[preset] || styles.modern;
+    return imageStyles[preset] || imageStyles.modern;
   };
 
   const handleUploadAndParse = async () => {
@@ -477,6 +861,13 @@ const Paper2PptPage = () => {
 
     setIsUploading(true);
     setError(null);
+    setGenerateResults([]);
+    setFrontendSlides([]);
+    setFrontendDeckTheme(null);
+    frontendCaptureRefs.current = [];
+    setDownloadUrl(null);
+    setPdfPreviewUrl(null);
+    setResultPath(null);
     setProgress(0);
     setProgressStatus('正在初始化...');
     
@@ -530,7 +921,7 @@ const Paper2PptPage = () => {
       }
       formData.append('model', model);
       formData.append('language', language);
-      formData.append('style', globalPrompt || getStyleDescription(stylePreset));
+      formData.append('style', getEffectiveStylePrompt());
       formData.append('gen_fig_model', genFigModel);
       formData.append('page_count', String(pageCount));
       formData.append('use_long_paper', String(useLongPaper));
@@ -769,8 +1160,239 @@ const Paper2PptPage = () => {
     }
   };
 
+  const updateFrontendFieldValue = (slideIndex: number, fieldKey: string, value: string) => {
+    setFrontendSlides((prev) =>
+      prev.map((slide, idx) =>
+        idx === slideIndex
+          ? {
+              ...slide,
+              generationNote: '当前页内容已手动编辑。',
+              title: fieldKey === 'title' ? value : slide.title,
+              review: {
+                status: 'idle',
+                summary: '',
+                issues: [],
+              },
+              editableFields: slide.editableFields.map((field) =>
+                field.key === fieldKey ? { ...field, value } : field,
+              ),
+            }
+          : slide,
+      ),
+    );
+  };
+
+  const updateFrontendListItem = (slideIndex: number, fieldKey: string, itemIndex: number, value: string) => {
+    setFrontendSlides((prev) =>
+      prev.map((slide, idx) => {
+        if (idx !== slideIndex) return slide;
+        return {
+          ...slide,
+          generationNote: '当前页内容已手动编辑。',
+          review: {
+            status: 'idle',
+            summary: '',
+            issues: [],
+          },
+          editableFields: slide.editableFields.map((field) => {
+            if (field.key !== fieldKey) return field;
+            const nextItems = [...field.items];
+            nextItems[itemIndex] = value;
+            return { ...field, items: nextItems };
+          }),
+        };
+      }),
+    );
+  };
+
+  const addFrontendListItem = (slideIndex: number, fieldKey: string) => {
+    setFrontendSlides((prev) =>
+      prev.map((slide, idx) => {
+        if (idx !== slideIndex) return slide;
+        return {
+          ...slide,
+          generationNote: '当前页内容已手动编辑。',
+          review: {
+            status: 'idle',
+            summary: '',
+            issues: [],
+          },
+          editableFields: slide.editableFields.map((field) =>
+            field.key === fieldKey ? { ...field, items: [...field.items, ''] } : field,
+          ),
+        };
+      }),
+    );
+  };
+
+  const replaceFrontendListItems = (slideIndex: number, fieldKey: string, items: string[]) => {
+    setFrontendSlides((prev) =>
+      prev.map((slide, idx) => {
+        if (idx !== slideIndex) return slide;
+        return {
+          ...slide,
+          generationNote: '当前页内容已手动编辑。',
+          review: {
+            status: 'idle',
+            summary: '',
+            issues: [],
+          },
+          editableFields: slide.editableFields.map((field) =>
+            field.key === fieldKey ? { ...field, items } : field,
+          ),
+        };
+      }),
+    );
+  };
+
+  const removeFrontendListItem = (slideIndex: number, fieldKey: string, itemIndex: number) => {
+    setFrontendSlides((prev) =>
+      prev.map((slide, idx) => {
+        if (idx !== slideIndex) return slide;
+        return {
+          ...slide,
+          generationNote: '当前页内容已手动编辑。',
+          review: {
+            status: 'idle',
+            summary: '',
+            issues: [],
+          },
+          editableFields: slide.editableFields.map((field) =>
+            field.key === fieldKey
+              ? { ...field, items: field.items.filter((_, idx2) => idx2 !== itemIndex) }
+              : field,
+          ),
+        };
+      }),
+    );
+  };
+
+  const applyFrontendCodeEdit = (slideIndex: number, htmlTemplate: string, cssCode: string) => {
+    const currentSlide = frontendSlides[slideIndex];
+    if (!currentSlide) {
+      setError('当前前端页面不存在');
+      return false;
+    }
+
+    const validation = validateFrontendSlideCode(currentSlide, htmlTemplate, cssCode);
+    if (!validation.ok) {
+      setError(validation.issues.join(' '));
+      return false;
+    }
+
+    setError(
+      validation.warnings.length > 0
+        ? `代码已应用，但请留意：${validation.warnings.join(' ')}`
+        : null,
+    );
+    setFrontendSlides((prev) =>
+      prev.map((slide, index) =>
+        index === slideIndex
+          ? {
+              ...slide,
+              htmlTemplate: validation.sanitizedHtml,
+              cssCode: validation.sanitizedCss,
+              generationNote: validation.warnings.length > 0
+                ? `本地代码已应用。${validation.warnings.join(' ')}`
+                : '本地代码已应用。',
+              review: {
+                status: 'idle',
+                summary: '',
+                issues: [],
+              },
+            }
+          : slide,
+      ),
+    );
+    return true;
+  };
+
+  const handleConfirmFrontendOutline = async () => {
+    const requiredPoints = Math.max(1, outlineData.length);
+    if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${requiredPoints} 页前端 PPT`))) {
+      return;
+    }
+
+    setCurrentStep('generate');
+    setCurrentSlideIndex(0);
+    setIsGenerating(true);
+    setGenerateTaskMessage('正在生成纯前端页面代码...');
+    setError(null);
+
+    const pendingSlides: FrontendSlide[] = outlineData.map((slide, index) => ({
+      slideId: slide.id,
+      pageNum: index + 1,
+      title: slide.title,
+      htmlTemplate: '',
+      cssCode: '',
+      editableFields: [],
+      status: 'processing',
+      generationNote: '',
+      review: {
+        status: 'idle',
+        summary: '',
+        issues: [],
+      },
+    }));
+    frontendCaptureRefs.current = [];
+    setFrontendSlides(pendingSlides);
+
+    try {
+      const formData = new FormData();
+      formData.append('credential_scope', MANAGED_CREDENTIAL_SCOPE);
+      formData.append('chat_api_url', llmApiUrl.trim());
+      formData.append('api_key', apiKey.trim());
+      formData.append('model', model);
+      formData.append('language', language);
+      formData.append('style', getEffectiveStylePrompt('frontend'));
+      formData.append('email', user?.id || user?.email || '');
+      formData.append('result_path', resultPath || '');
+      formData.append('pagecontent', buildFrontendPagecontentPayload());
+
+      const res = await fetch('/api/v1/paper2ppt/frontend/generate', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(await extractErrorMessage(res, '纯前端 PPT 生成失败'));
+      }
+
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.slides) || data.slides.length === 0) {
+        throw new Error(data.error || '纯前端 PPT 生成失败');
+      }
+
+      if (data.result_path) {
+        setResultPath(data.result_path);
+      }
+      const normalizedTheme = normalizeFrontendDeckTheme(data.theme);
+      const normalizedSlides = normalizeFrontendSlides(data.slides);
+      setFrontendDeckTheme(normalizedTheme);
+      setFrontendSlides(normalizedSlides);
+      await runInitialFrontendReviewPass(normalizedSlides, data.result_path || resultPath || '');
+      await consumeQuotaForAction(
+        'paper2ppt',
+        requiredPoints,
+        `纯前端 PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '纯前端 PPT 生成失败';
+      setError(message);
+      setFrontendSlides(pendingSlides.map((slide) => ({ ...slide, status: 'pending' })));
+    } finally {
+      setGenerateTaskMessage('');
+      setIsGenerating(false);
+    }
+  };
+
   const handleConfirmOutline = async () => {
     if (isRefiningOutline) return;
+    if (pptMode === 'frontend') {
+      await handleConfirmFrontendOutline();
+      return;
+    }
     const requiredPoints = Math.max(1, outlineData.length);
     if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${requiredPoints} 页 PPT`))) {
       return;
@@ -799,7 +1421,7 @@ const Paper2PptPage = () => {
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
       formData.append('language', language);
-      formData.append('style', globalPrompt || getStyleDescription(stylePreset));
+      formData.append('style', getEffectiveStylePrompt());
       formData.append('aspect_ratio', '16:9');
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', resultPath || '');
@@ -971,8 +1593,305 @@ const Paper2PptPage = () => {
     }
   };
 
+  const updateFrontendSlideReview = (
+    slideIndex: number,
+    review: FrontendSlide['review'],
+  ) => {
+    setFrontendSlides((prev) =>
+      prev.map((slide, index) => (index === slideIndex ? { ...slide, review } : slide)),
+    );
+  };
+
+  const regenerateFrontendSlideWithPrompt = async ({
+    slideIndex,
+    prompt,
+    quotaAction,
+    quotaWarningMessage,
+    progressMessage,
+    clearManualPrompt,
+    slideOverride,
+  }: {
+    slideIndex: number;
+    prompt: string;
+    quotaAction: string;
+    quotaWarningMessage: string;
+    progressMessage: string;
+    clearManualPrompt?: boolean;
+    slideOverride?: FrontendSlide;
+  }) => {
+    if (!resultPath) {
+      setError('缺少 result_path，请重新上传文件');
+      return false;
+    }
+    if (!prompt.trim()) {
+      setError('请输入重新生成的提示词');
+      return false;
+    }
+    if (!(await ensureQuotaForAction(1, quotaAction))) {
+      return false;
+    }
+
+    const slideSnapshot = slideOverride || frontendSlides[slideIndex];
+    if (!slideSnapshot) {
+      setError('当前前端页面不存在');
+      return false;
+    }
+
+    setIsGenerating(true);
+    setGenerateTaskMessage(progressMessage);
+    setError(null);
+
+    setFrontendSlides((prev) =>
+      prev.map((slide, index) =>
+        index === slideIndex
+          ? {
+              ...slide,
+              status: 'processing',
+              review: slide.review
+                ? {
+                    ...slide.review,
+                    status: slide.review.status === 'idle' ? 'idle' : 'repairing',
+                  }
+                : slide.review,
+            }
+          : slide,
+      ),
+    );
+
+    try {
+      const { updatedSlide, nextTheme } = await requestFrontendSlideGeneration({
+        slideIndex,
+        prompt,
+        resultPathValue: resultPath,
+        slideSnapshot,
+      });
+      setFrontendSlides((prev) =>
+        prev.map((slide, index) =>
+          index === slideIndex
+            ? {
+                ...updatedSlide,
+                review: {
+                  status: 'idle',
+                  summary: '',
+                  issues: [],
+                },
+              }
+            : slide,
+        ),
+      );
+      if (nextTheme) {
+        setFrontendDeckTheme(nextTheme);
+      }
+      if (clearManualPrompt && slideIndex === currentSlideIndex) {
+        setSlidePrompt('');
+      }
+      await consumeQuotaForAction(
+        'paper2ppt',
+        1,
+        quotaWarningMessage,
+      );
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '前端页面重生成失败';
+      setError(message);
+      setFrontendSlides((prev) =>
+        prev.map((slide, index) =>
+          index === slideIndex
+            ? {
+                ...slide,
+                status: 'done',
+                review: slide.review && slide.review.status === 'repairing'
+                  ? { ...slide.review, status: 'needs_repair' }
+                  : slide.review,
+              }
+            : slide,
+        ),
+      );
+      return false;
+    } finally {
+      setGenerateTaskMessage('');
+      setIsGenerating(false);
+    }
+  };
+
   // ============== Step 3: 重新生成单页 ==============
+  const handleRegenerateFrontendSlide = async () => {
+    if (!slidePrompt.trim()) {
+      setError('请输入重新生成的提示词');
+      return;
+    }
+    await regenerateFrontendSlideWithPrompt({
+      slideIndex: currentSlideIndex,
+      prompt: slidePrompt.trim(),
+      quotaAction: '重新生成当前前端页面',
+      quotaWarningMessage: '前端页面已重新生成，但 1 点扣费记录失败，请刷新余额确认。',
+      progressMessage: '正在重新生成当前前端页面...',
+      clearManualPrompt: true,
+    });
+  };
+
+  const handleDebugFrontendCodeEdit = async (htmlTemplate: string, cssCode: string) => {
+    const targetIndex = currentSlideIndex;
+    const currentSlide = frontendSlides[targetIndex];
+    if (!currentSlide) {
+      setError('当前前端页面不存在');
+      return;
+    }
+
+    setError(null);
+    const validation = validateFrontendSlideCode(currentSlide, htmlTemplate, cssCode);
+    const draftSlide: FrontendSlide = {
+      ...currentSlide,
+      htmlTemplate: validation.sanitizedHtml,
+      cssCode: validation.sanitizedCss,
+    };
+
+    updateFrontendSlideReview(targetIndex, {
+      status: 'repairing',
+      summary: '正在检查并修正当前代码...',
+      issues: [...validation.issues, ...validation.warnings],
+    });
+
+    if (validation.ok) {
+      const applied = applyFrontendCodeEdit(targetIndex, htmlTemplate, cssCode);
+      if (applied) {
+        updateFrontendSlideReview(targetIndex, {
+          status: 'passed',
+          summary: '当前代码已通过本地校验并成功应用。',
+          issues: validation.warnings,
+        });
+      }
+      return;
+    }
+
+    const repaired = await regenerateFrontendSlideWithPrompt({
+      slideIndex: targetIndex,
+      prompt: buildFrontendCodeRepairPrompt(draftSlide, validation),
+      quotaAction: 'AI 调试当前前端代码',
+      quotaWarningMessage: 'AI 已调试当前代码，但 1 点扣费记录失败，请刷新余额确认。',
+      progressMessage: '本地校验发现代码问题，正在调用 AI 修正...',
+      slideOverride: draftSlide,
+    });
+
+    if (repaired) {
+      updateFrontendSlideReview(targetIndex, {
+        status: 'passed',
+        summary: 'AI 已根据代码问题完成修正。',
+        issues: [],
+      });
+    } else {
+      updateFrontendSlideReview(targetIndex, {
+        status: 'needs_repair',
+        summary: 'AI 调试未成功，请继续修改代码或重新生成当前页。',
+        issues: validation.issues,
+      });
+    }
+  };
+
+  const handleReviewFrontendSlide = async () => {
+    if (!resultPath) {
+      setError('缺少 result_path，请重新上传文件');
+      return;
+    }
+
+    const targetIndex = currentSlideIndex;
+    const currentSlide = frontendSlides[targetIndex];
+    const node = frontendCaptureRefs.current[targetIndex];
+
+    if (!currentSlide) {
+      setError('当前前端页面不存在');
+      return;
+    }
+    if (!node) {
+      setError('当前页面尚未渲染完成，请稍后重试');
+      return;
+    }
+
+    setIsReviewingFrontendSlide(true);
+    setError(null);
+    updateFrontendSlideReview(targetIndex, {
+      status: 'repairing',
+      summary: '正在检查当前页面的视觉版式...',
+      issues: [],
+    });
+
+    try {
+      await sleep(40);
+      const localLayoutCheck = inspectSlideLayout(node, 1600, 900);
+      const blob = await captureSlideToPngBlob(node, 1600, 900);
+      const data = await requestFrontendSlideReview({
+        slide: currentSlide,
+        resultPathValue: resultPath,
+        layoutIssues: localLayoutCheck.issues,
+        screenshot: blob,
+      });
+      const reviewIssues = Array.isArray(data.issues)
+        ? data.issues.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+        : [];
+      const reviewSummary = typeof data.summary === 'string' && data.summary.trim()
+        ? data.summary.trim()
+        : (data.passed ? '未发现明显视觉问题。' : '检测到需要修复的版式问题。');
+
+      if (data.passed) {
+        updateFrontendSlideReview(targetIndex, {
+          status: 'passed',
+          summary: reviewSummary,
+          issues: reviewIssues,
+        });
+        return;
+      }
+
+      updateFrontendSlideReview(targetIndex, {
+        status: 'needs_repair',
+        summary: reviewSummary,
+        issues: reviewIssues,
+      });
+
+      const repairPrompt = typeof data.repair_prompt === 'string' ? data.repair_prompt.trim() : '';
+      if (!repairPrompt) {
+        setError('视觉检查发现问题，但未返回可执行的修复指令');
+        return;
+      }
+
+      const repaired = await regenerateFrontendSlideWithPrompt({
+        slideIndex: targetIndex,
+        prompt: repairPrompt,
+        quotaAction: '视觉检查后修复当前前端页面',
+        quotaWarningMessage: '视觉检查已触发自动修复，但 1 点扣费记录失败，请刷新余额确认。',
+        progressMessage: '视觉检查发现问题，正在自动修复当前页面...',
+      });
+
+      if (repaired) {
+        updateFrontendSlideReview(targetIndex, {
+          status: 'passed',
+          summary: '视觉检查已完成，并根据问题自动修复当前页面。',
+          issues: [],
+        });
+      } else {
+        updateFrontendSlideReview(targetIndex, {
+          status: 'needs_repair',
+          summary: '视觉检查发现问题，但自动修复失败，请根据提示词继续调整。',
+          issues: reviewIssues,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '前端页面视觉检查失败';
+      setError(message);
+      updateFrontendSlideReview(targetIndex, {
+        status: 'needs_repair',
+        summary: '视觉检查失败，请稍后重试。',
+        issues: [],
+      });
+    } finally {
+      setIsReviewingFrontendSlide(false);
+    }
+  };
+
   const handleRegenerateSlide = async () => {
+    if (pptMode === 'frontend') {
+      await handleRegenerateFrontendSlide();
+      return;
+    }
     if (!resultPath) {
       setError('缺少 result_path，请重新上传文件');
       return;
@@ -1005,7 +1924,7 @@ const Paper2PptPage = () => {
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
       formData.append('language', language);
-      formData.append('style', globalPrompt || getStyleDescription(stylePreset));
+      formData.append('style', getEffectiveStylePrompt());
       formData.append('aspect_ratio', '16:9');
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', resultPath);
@@ -1111,7 +2030,98 @@ const Paper2PptPage = () => {
   };
 
   // ============== Step 4: 完成处理 ==============
+  const handleGenerateFrontendFinal = async () => {
+    if (!resultPath) {
+      setError('缺少 result_path');
+      return;
+    }
+    if (frontendSlides.length === 0) {
+      setError('当前没有可导出的前端页面');
+      return;
+    }
+
+    setIsGeneratingFinal(true);
+    setFinalTaskMessage('正在准备前端页面截图...');
+    setError(null);
+
+    try {
+      const screenshotFiles: File[] = [];
+      for (let index = 0; index < frontendSlides.length; index += 1) {
+        const node = frontendCaptureRefs.current[index];
+        if (!node) {
+          throw new Error(`第 ${index + 1} 页尚未渲染完成，请稍后重试`);
+        }
+        setFinalTaskMessage(`正在渲染第 ${index + 1}/${frontendSlides.length} 页截图...`);
+        await sleep(40);
+        const blob = await captureSlideToPngBlob(node, 1600, 900);
+        if (!blob) {
+          throw new Error(`第 ${index + 1} 页截图失败`);
+        }
+        screenshotFiles.push(
+          new File([blob], `page_${String(index).padStart(3, '0')}.png`, {
+            type: 'image/png',
+          }),
+        );
+      }
+
+      const formData = new FormData();
+      formData.append('result_path', resultPath);
+      formData.append(
+        'slides',
+        JSON.stringify(frontendSlides.map((slide) => serializeFrontendSlide(slide))),
+      );
+      screenshotFiles.forEach((file) => {
+        formData.append('screenshots', file);
+      });
+
+      setFinalTaskMessage('正在打包 PPTX / PDF...');
+      const res = await fetch('/api/v1/paper2ppt/frontend/export', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error(await extractErrorMessage(res, '纯前端 PPT 导出失败'));
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || '纯前端 PPT 导出失败');
+      }
+
+      if (data.ppt_pptx_path) {
+        setDownloadUrl(data.ppt_pptx_path);
+      }
+      if (data.ppt_pdf_path) {
+        setPdfPreviewUrl(data.ppt_pdf_path);
+      }
+
+      const outputFilePath =
+        data.ppt_pptx_path ||
+        data.ppt_pdf_path ||
+        data.all_output_files?.find((url: string) => url.endsWith('.pptx') || url.endsWith('.pdf'));
+      if (!outputFilePath) {
+        throw new Error('导出失败：未找到最终文件');
+      }
+
+      await uploadGeneratedResultFile(
+        outputFilePath,
+        outputFilePath.endsWith('.pdf') ? 'paper2ppt_frontend.pdf' : 'paper2ppt_frontend.pptx',
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '纯前端 PPT 导出失败';
+      setError(message);
+    } finally {
+      setFinalTaskMessage('');
+      setIsGeneratingFinal(false);
+    }
+  };
+
   const handleGenerateFinal = async () => {
+    if (pptMode === 'frontend') {
+      await handleGenerateFrontendFinal();
+      return;
+    }
     if (!resultPath) {
       setError('缺少 result_path');
       return;
@@ -1129,7 +2139,7 @@ const Paper2PptPage = () => {
       formData.append('api_key', apiKey.trim());
       formData.append('model', model);
       formData.append('language', language);
-      formData.append('style', globalPrompt || getStyleDescription(stylePreset));
+      formData.append('style', getEffectiveStylePrompt());
       formData.append('aspect_ratio', '16:9');
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', resultPath);
@@ -1207,28 +2217,7 @@ const Paper2PptPage = () => {
         defaultName = 'paper2ppt_result.pdf';
       }
 
-      if (filePath) {
-        try {
-          // Fix Mixed Content issue
-          let fetchUrl = filePath;
-          if (window.location.protocol === 'https:' && filePath.startsWith('http:')) {
-            fetchUrl = filePath.replace('http:', 'https:');
-          }
-
-          const fileRes = await fetch(fetchUrl);
-          if (fileRes.ok) {
-            const fileBlob = await fileRes.blob();
-            const fileName = filePath.split('/').pop() || defaultName;
-            console.log('[Paper2PptPage] Uploading file to storage:', fileName);
-            await uploadAndSaveFile(fileBlob, fileName, 'paper2ppt');
-            console.log('[Paper2PptPage] File uploaded successfully');
-          } else {
-             console.error('[Paper2PptPage] Failed to fetch file for upload:', fileRes.status, fileRes.statusText);
-          }
-        } catch (e) {
-          console.error('[Paper2PptPage] Failed to upload file:', e);
-        }
-      }
+      await uploadGeneratedResultFile(filePath, defaultName);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
@@ -1275,6 +2264,8 @@ const Paper2PptPage = () => {
     setSelectedFile(null);
     setOutlineData([]);
     setGenerateResults([]);
+    setFrontendSlides([]);
+    setFrontendDeckTheme(null);
     setDownloadUrl(null);
     setPdfPreviewUrl(null);
     setResultPath(null);
@@ -1283,6 +2274,8 @@ const Paper2PptPage = () => {
     setProgressStatus('');
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
+    setIsReviewingFrontendSlide(false);
+    frontendCaptureRefs.current = [];
   };
 
   return (
@@ -1295,6 +2288,9 @@ const Paper2PptPage = () => {
           
           {currentStep === 'upload' && (
             <UploadStep
+              pptMode={pptMode}
+              setPptMode={setPptMode}
+              modeLocked={modeLocked}
               uploadMode={uploadMode} setUploadMode={setUploadMode}
               textContent={textContent} setTextContent={setTextContent}
               selectedFile={selectedFile}
@@ -1348,44 +2344,113 @@ const Paper2PptPage = () => {
       )}
           
           {currentStep === 'generate' && (
-            <GenerateStep
-              outlineData={outlineData}
-              currentSlideIndex={currentSlideIndex}
-              setCurrentSlideIndex={setCurrentSlideIndex}
-              generateResults={generateResults}
-              isGenerating={isGenerating}
-              taskMessage={generateTaskMessage}
-              slidePrompt={slidePrompt}
-              setSlidePrompt={setSlidePrompt}
-              handleRegenerateSlide={handleRegenerateSlide}
-              handleConfirmSlide={handleConfirmSlide}
-              setCurrentStep={setCurrentStep}
-              error={error}
-              handleRevertToVersion={handleRevertToVersion}
-            />
+            pptMode === 'frontend' ? (
+              <FrontendGenerateStep
+                outlineData={outlineData}
+                frontendSlides={frontendSlides}
+                deckTheme={frontendDeckTheme}
+                currentSlideIndex={currentSlideIndex}
+                setCurrentSlideIndex={setCurrentSlideIndex}
+                isGenerating={isGenerating}
+                taskMessage={generateTaskMessage}
+                slidePrompt={slidePrompt}
+                setSlidePrompt={setSlidePrompt}
+                handleRegenerateSlide={handleRegenerateSlide}
+                handleReviewSlide={handleReviewFrontendSlide}
+                applyCodeEdit={(htmlTemplate, cssCode) =>
+                  applyFrontendCodeEdit(currentSlideIndex, htmlTemplate, cssCode)
+                }
+                handleDebugCodeEdit={handleDebugFrontendCodeEdit}
+                handleConfirmSlide={handleConfirmSlide}
+                setCurrentStep={setCurrentStep}
+                error={error}
+                isReviewing={isReviewingFrontendSlide}
+                updateFieldValue={updateFrontendFieldValue}
+                updateListItem={updateFrontendListItem}
+                replaceListItems={replaceFrontendListItems}
+                addListItem={addFrontendListItem}
+                removeListItem={removeFrontendListItem}
+              />
+            ) : (
+              <GenerateStep
+                outlineData={outlineData}
+                currentSlideIndex={currentSlideIndex}
+                setCurrentSlideIndex={setCurrentSlideIndex}
+                generateResults={generateResults}
+                isGenerating={isGenerating}
+                taskMessage={generateTaskMessage}
+                slidePrompt={slidePrompt}
+                setSlidePrompt={setSlidePrompt}
+                handleRegenerateSlide={handleRegenerateSlide}
+                handleConfirmSlide={handleConfirmSlide}
+                setCurrentStep={setCurrentStep}
+                error={error}
+                handleRevertToVersion={handleRevertToVersion}
+              />
+            )
           )}
           
           {currentStep === 'complete' && (
-            <CompleteStep
-              outlineData={outlineData}
-              generateResults={generateResults}
-              downloadUrl={downloadUrl}
-              pdfPreviewUrl={pdfPreviewUrl}
-              isGeneratingFinal={isGeneratingFinal}
-              taskMessage={finalTaskMessage}
-              handleGenerateFinal={handleGenerateFinal}
-              handleDownloadPptx={handleDownloadPptx}
-              handleDownloadPdf={handleDownloadPdf}
-              handleReset={handleReset}
-              error={error}
-              handleCopyShareText={handleCopyShareText}
-              copySuccess={copySuccess}
-              stars={stars}
-              showFreeApiPromo={userApiConfigRequired}
-            />
+            pptMode === 'frontend' ? (
+              <FrontendCompleteStep
+                slides={frontendSlides}
+                downloadUrl={downloadUrl}
+                pdfPreviewUrl={pdfPreviewUrl}
+                isGeneratingFinal={isGeneratingFinal}
+                taskMessage={finalTaskMessage}
+                handleGenerateFinal={handleGenerateFinal}
+                handleDownloadPptx={handleDownloadPptx}
+                handleDownloadPdf={handleDownloadPdf}
+                handleReset={handleReset}
+                error={error}
+              />
+            ) : (
+              <CompleteStep
+                outlineData={outlineData}
+                generateResults={generateResults}
+                downloadUrl={downloadUrl}
+                pdfPreviewUrl={pdfPreviewUrl}
+                isGeneratingFinal={isGeneratingFinal}
+                taskMessage={finalTaskMessage}
+                handleGenerateFinal={handleGenerateFinal}
+                handleDownloadPptx={handleDownloadPptx}
+                handleDownloadPdf={handleDownloadPdf}
+                handleReset={handleReset}
+                error={error}
+                handleCopyShareText={handleCopyShareText}
+                copySuccess={copySuccess}
+                stars={stars}
+                showFreeApiPromo={userApiConfigRequired}
+              />
+            )
           )}
         </div>
       </div>
+
+      {pptMode === 'frontend' && frontendSlides.length > 0 && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: '-20000px',
+            top: 0,
+            width: '1600px',
+            pointerEvents: 'none',
+          }}
+        >
+          {frontendSlides.map((slide, index) => (
+            <FrontendSlidePreview
+              key={`${slide.slideId}-capture`}
+              slide={slide}
+              mode="capture"
+              className="mb-4"
+              captureRef={(node) => {
+                frontendCaptureRefs.current[index] = node;
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       <style>{`
         @keyframes shimmer {

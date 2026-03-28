@@ -237,6 +237,39 @@ class OutlineRefineRequest(BaseModel):
     pagecontent: str
 
 
+class FrontendPPTGenerationRequest(BaseModel):
+    """Generate editable frontend slides for paper2ppt."""
+    chat_api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    credential_scope: Optional[str] = None
+    email: Optional[str] = None
+    model: str = settings.PAPER2PPT_CONTENT_MODEL
+    language: str = "zh"
+    style: str = ""
+    result_path: str
+    pagecontent: str
+    page_id: Optional[int] = None
+    edit_prompt: Optional[str] = None
+    current_slide: Optional[str] = None
+
+
+class FrontendPPTExportRequest(BaseModel):
+    """Export frontend slides into screenshot-based PPTX/PDF."""
+    result_path: str
+    slides: str
+
+
+class FrontendPPTReviewRequest(BaseModel):
+    """Review a rendered frontend slide screenshot and return repair advice."""
+    result_path: str
+    slide: str
+    chat_api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    credential_scope: Optional[str] = None
+    language: str = "zh"
+    layout_issues: Optional[str] = None
+
+
 # ===================== KB Deep Research 相关 =====================
 
 class DeepResearchRequest(BaseModel):

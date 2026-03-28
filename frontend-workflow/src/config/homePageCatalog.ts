@@ -3,6 +3,8 @@ export type HomeNavigablePage =
   | 'paper2figure-model-drawio'
   | 'paper2drawio-ai'
   | 'paper2ppt'
+  | 'paper2ppt-image'
+  | 'paper2ppt-frontend'
   | 'paper2video'
   | 'paper2poster'
   | 'paper2citation'
@@ -67,16 +69,24 @@ export const featuredHomeCards: HomeFeatureCard[] = [
     },
   },
   {
-    page: 'paper2ppt',
-    titleKey: 'app.home.cards.paper2ppt.title',
-    descriptionKey: 'app.home.cards.paper2ppt.description',
-    badgeKey: 'app.home.cards.paper2ppt.badge',
+    page: 'paper2ppt-image',
+    titleKey: 'app.home.cards.paper2pptImage.title',
+    descriptionKey: 'app.home.cards.paper2pptImage.description',
+    badgeKey: 'app.home.cards.paper2pptImage.badge',
     icon: 'presentation',
     accent: 'from-fuchsia-500/80 via-pink-400/70 to-rose-300/70',
     preview: {
       kind: 'image',
       src: '/home-previews/paper2ppt.png',
     },
+  },
+  {
+    page: 'paper2ppt-frontend',
+    titleKey: 'app.home.cards.paper2pptFrontend.title',
+    descriptionKey: 'app.home.cards.paper2pptFrontend.description',
+    badgeKey: 'app.home.cards.paper2pptFrontend.badge',
+    icon: 'presentation',
+    accent: 'from-amber-500/80 via-orange-400/70 to-yellow-300/70',
   },
   {
     page: 'paper2video',
@@ -133,6 +143,26 @@ export const homeFeatureSections: HomeFeatureSection[] = [
           kind: 'image',
           src: '/home-previews/paper2poster-cover.png',
         },
+      },
+      {
+        page: 'paper2ppt-image',
+        titleKey: 'app.home.cards.paper2pptImage.title',
+        descriptionKey: 'app.home.cards.paper2pptImage.description',
+        badgeKey: 'app.home.cards.paper2pptImage.badge',
+        icon: 'presentation',
+        accent: 'from-fuchsia-500/75 via-pink-400/65 to-rose-300/60',
+        preview: {
+          kind: 'image',
+          src: '/home-previews/paper2ppt.png',
+        },
+      },
+      {
+        page: 'paper2ppt-frontend',
+        titleKey: 'app.home.cards.paper2pptFrontend.title',
+        descriptionKey: 'app.home.cards.paper2pptFrontend.description',
+        badgeKey: 'app.home.cards.paper2pptFrontend.badge',
+        icon: 'presentation',
+        accent: 'from-amber-500/75 via-orange-400/65 to-yellow-300/60',
       },
     ],
   },

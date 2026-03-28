@@ -30,6 +30,8 @@ const pageIds = [
   'paper2figure-model-drawio',
   'paper2drawio-ai',
   'paper2ppt',
+  'paper2ppt-image',
+  'paper2ppt-frontend',
   'paper2video',
   'paper2poster',
   'paper2citation',
@@ -53,6 +55,8 @@ const pagePaths: Record<ActivePage, string> = {
   'paper2figure-model-drawio': '/paper2figure/model-drawio',
   'paper2drawio-ai': '/paper2drawio-ai',
   'paper2ppt': '/paper2ppt',
+  'paper2ppt-image': '/paper2ppt/image',
+  'paper2ppt-frontend': '/paper2ppt/frontend',
   'paper2video': '/paper2video',
   'paper2poster': '/paper2poster',
   'paper2citation': '/paper2citation',
@@ -227,7 +231,10 @@ function App() {
           {activePage === 'paper2figure-tech-exp' && <Paper2GraphTechExpPage />}
           {activePage === 'paper2figure-model-drawio' && <Paper2GraphDrawioPage />}
           {activePage === 'paper2drawio-ai' && <Paper2DrawioAiPage />}
-          {activePage === 'paper2ppt' && <Paper2PptPage />}
+          {(activePage === 'paper2ppt' || activePage === 'paper2ppt-image') && (
+            <Paper2PptPage initialMode="image" />
+          )}
+          {activePage === 'paper2ppt-frontend' && <Paper2PptPage initialMode="frontend" />}
           {activePage === 'paper2video' && <Paper2VideoPage />}
           {activePage === 'paper2poster' && <Paper2PosterPage />}
           {activePage === 'paper2citation' && <Paper2CitationPage />}

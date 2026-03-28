@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, FileImage, FileSearch, FileStack, FolderKanban, GitBranch, LayoutTemplate, MessageSquare, Network, Presentation, Sparkles, Video } from 'lucide-react';
+import { ArrowRight, BookOpen, FileImage, FileSearch, FileStack, FileText, FolderKanban, GitBranch, LayoutTemplate, MessageSquare, Network, Presentation, Sparkles, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { featuredHomeCards, homeFeatureSections, HomeFeatureCard, HomeNavigablePage } from '../config/homePageCatalog';
 
@@ -208,11 +208,19 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => onNavigate('paper2ppt')}
+                    onClick={() => onNavigate('paper2ppt-image')}
                     className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-5 py-3 text-sm font-semibold text-white/85 transition-all duration-300 hover:border-white/20 hover:bg-white/10"
                   >
                     <Presentation size={16} />
                     <span>{t('app.home.secondaryCta')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('paper2ppt-frontend')}
+                    className="inline-flex items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-5 py-3 text-sm font-semibold text-white/85 transition-all duration-300 hover:border-amber-300/35 hover:bg-amber-300/15"
+                  >
+                    <FileText size={16} />
+                    <span>{t('app.home.frontendCta')}</span>
                   </button>
                 </div>
               </div>

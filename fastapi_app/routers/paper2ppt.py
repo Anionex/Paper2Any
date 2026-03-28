@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 
 from fastapi_app.schemas import (
     ErrorResponse,
+    FrontendPPTExportRequest,
+    FrontendPPTGenerationRequest,
+    FrontendPPTReviewRequest,
     FullPipelineRequest,
     OutlineRefineRequest,
     PageContentRequest,
@@ -30,6 +33,12 @@ def get_task_service() -> Paper2PPTTaskService:
     from fastapi_app.services.paper2ppt_task_service import Paper2PPTTaskService
 
     return Paper2PPTTaskService()
+
+
+def get_frontend_service() -> Paper2PPTFrontendService:
+    from fastapi_app.services.paper2ppt_frontend_service import Paper2PPTFrontendService
+
+    return Paper2PPTFrontendService()
 
 
 @router.post(
@@ -248,6 +257,88 @@ async def paper2ppt_outline_refine(
     )
     data = await service.refine_outline(req=req, request=request)
     return data
+
+
+@router.post(
+    "/paper2ppt/frontend/generate",
+    response_model=Dict[str, Any],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def paper2ppt_frontend_generate(
+    request: Request,
+    result_path: str = Form(...),
+    pagecontent: str = Form(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    credential_scope: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    model: str = Form("gpt-5.1"),
+    language: str = Form("zh"),
+    style: str = Form(""),
+    page_id: Optional[int] = Form(None),
+    edit_prompt: Optional[str] = Form(None),
+    current_slide: Optional[str] = Form(None),
+    service: Paper2PPTFrontendService = Depends(get_frontend_service),
+):
+    req = FrontendPPTGenerationRequest(
+        result_path=result_path,
+        pagecontent=pagecontent,
+        chat_api_url=chat_api_url,
+        api_key=api_key,
+        credential_scope=credential_scope,
+        email=email,
+        model=model,
+        language=language,
+        style=style,
+        page_id=page_id,
+        edit_prompt=edit_prompt,
+        current_slide=current_slide,
+    )
+    return await service.generate_slides(req=req, request=request)
+
+
+@router.post(
+    "/paper2ppt/frontend/export",
+    response_model=Dict[str, Any],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def paper2ppt_frontend_export(
+    request: Request,
+    result_path: str = Form(...),
+    slides: str = Form(...),
+    screenshots: list[UploadFile] = File(...),
+    service: Paper2PPTFrontendService = Depends(get_frontend_service),
+):
+    req = FrontendPPTExportRequest(result_path=result_path, slides=slides)
+    return await service.export_slides(req=req, screenshots=screenshots, request=request)
+
+
+@router.post(
+    "/paper2ppt/frontend/review",
+    response_model=Dict[str, Any],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def paper2ppt_frontend_review(
+    result_path: str = Form(...),
+    slide: str = Form(...),
+    screenshot: UploadFile = File(...),
+    chat_api_url: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    credential_scope: Optional[str] = Form(None),
+    language: str = Form("zh"),
+    layout_issues: Optional[str] = Form(None),
+    service: Paper2PPTFrontendService = Depends(get_frontend_service),
+):
+    req = FrontendPPTReviewRequest(
+        result_path=result_path,
+        slide=slide,
+        chat_api_url=chat_api_url,
+        api_key=api_key,
+        credential_scope=credential_scope,
+        language=language,
+        layout_issues=layout_issues,
+    )
+    return await service.review_slide(req=req, screenshot=screenshot)
 
 
 @router.get(
