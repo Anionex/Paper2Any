@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 # 启动时加载 fastapi_app/.env 到环境变量，使 os.getenv("COSYVOICE_KEY") 等能读到
@@ -11,10 +13,25 @@ try:
 except ImportError:
     pass
 
+
+def _configure_runtime_tempdir() -> None:
+    project_root = Path(__file__).resolve().parent.parent
+    runtime_tmp = Path(
+        os.getenv("PAPER2ANY_RUNTIME_TMPDIR", str(project_root / "outputs" / "system" / "tmp"))
+    ).expanduser().resolve()
+    runtime_tmp.mkdir(parents=True, exist_ok=True)
+    for key in ("TMPDIR", "TEMP", "TMP"):
+        os.environ[key] = str(runtime_tmp)
+    tempfile.tempdir = str(runtime_tmp)
+
+
+_configure_runtime_tempdir()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from fastapi_app.routers import account
 from fastapi_app.routers import paper2video
 from fastapi_app.routers import paper2any, paper2citation, paper2ppt, paper2poster
 from fastapi_app.routers import pdf2ppt, image2ppt, kb, kb_embedding, files
@@ -57,6 +74,7 @@ def create_app() -> FastAPI:
     # 路由挂载
     # Paper2Graph / System
     app.include_router(paper2any.router, prefix="/api/v1", tags=["paper2any"])
+    app.include_router(account.router, prefix="/api/v1", tags=["account"])
     # Paper2PPT
     app.include_router(paper2ppt.router, prefix="/api/v1", tags=["paper2ppt"])
     # Paper2Citation

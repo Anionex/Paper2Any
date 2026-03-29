@@ -47,9 +47,12 @@ export function PointsDisplay() {
 
   // Check for "unlimited" quota (returned when Supabase is not configured)
   const isUnlimited = quota.remaining > 1000000;
+  const title = isUnlimited
+    ? (quota.billingMode === 'paid' ? '当前为付费模式，平台不扣点' : '无限次数')
+    : '剩余次数';
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white/5 border-white/10" title={isUnlimited ? "无限次数" : "剩余次数"}>
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white/5 border-white/10" title={title}>
       <Coins size={16} className="text-yellow-400" />
       <span className="text-sm text-gray-300">
         {isUnlimited ? "∞" : `${quota.remaining} 次`}

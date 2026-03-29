@@ -24,6 +24,7 @@ interface CompleteStepProps {
     agent: number | null;
     dataflex: number | null;
   };
+  showFreeApiPromo: boolean;
 }
 
 const CompleteStep: React.FC<CompleteStepProps> = ({
@@ -40,7 +41,8 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
   error,
   handleCopyShareText,
   copySuccess,
-  stars
+  stars,
+  showFreeApiPromo,
 }) => {
   const doneCount = generateResults.filter(r => r.status === 'done').length;
 
@@ -109,8 +111,8 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
       )}
 
       {/* 分享与交流群区域 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 text-left">
-        {/* 获取免费 Key */}
+      <div className={`grid grid-cols-1 gap-4 mt-8 text-left ${showFreeApiPromo ? 'md:grid-cols-2' : ''}`}>
+        {showFreeApiPromo && (
         <div className="glass rounded-xl border border-white/10 p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors">
           <div className="w-12 h-12 rounded-full bg-yellow-500/20 text-yellow-300 flex items-center justify-center mb-3">
             <Star size={24} />
@@ -173,6 +175,7 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
              </div>
           </div>
         </div>
+        )}
 
         {/* 交流群 */}
         <div className="glass rounded-xl border border-white/10 p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors">

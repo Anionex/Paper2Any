@@ -13,6 +13,7 @@ paper2figure 工作流适配器。
 """
 
 import json
+import os
 import time
 import urllib.parse
 import uuid
@@ -131,6 +132,40 @@ def _get_state_attr(state: Any, key: str, default: str = "") -> str:
     return str(getattr(state, key, default) or default)
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _has_valid_paper2figure_output(
+    *,
+    ppt_filename: str,
+    drawio_filename: str,
+    svg_filename: str,
+    svg_image_filename: str,
+    svg_bw_filename: str,
+    svg_bw_image_filename: str,
+    svg_color_filename: str,
+    svg_color_image_filename: str,
+    all_output_files: list[str],
+) -> bool:
+    return any(
+        [
+            ppt_filename,
+            drawio_filename,
+            svg_filename,
+            svg_image_filename,
+            svg_bw_filename,
+            svg_bw_image_filename,
+            svg_color_filename,
+            svg_color_image_filename,
+            *all_output_files,
+        ]
+    )
+
+
 # ---------------------------------------------------------------------------
 # 主入口
 # ---------------------------------------------------------------------------
@@ -190,6 +225,15 @@ async def run_paper2figure_wf_api(req: Paper2FigureRequest, result_path: Path | 
 
     state.result_path = str(result_root)
     state.mask_detail_level = 2
+    if (
+        wf_name == "pdf2ppt_qwenvl"
+        and req.graph_type == "model_arch"
+        and req.input_type == "FIGURE"
+        and not req.edit_prompt
+        and _env_flag("PAPER2FIGURE_TO_PPT_FORCE_AI_EDIT", default=True)
+    ):
+        state.use_ai_edit = True
+        log.info("[paper2figure] enabled AI inpainting for model_arch FIGURE -> PPT")
     log.info(f"[paper2figure] workflow={wf_name}, result_path={result_root}")
 
     # ------------------------------------------------------------------
@@ -213,12 +257,16 @@ async def run_paper2figure_wf_api(req: Paper2FigureRequest, result_path: Path | 
 
     # 保存完整 state 到 tmps/ 供调试
     save_final_state_json(to_serializable(final_state), out_dir=tmps_dir / ts)
-    log.info(f"[paper2figure] 完成，ppt_path={final_state['ppt_path']}")
+    log.info(f"[paper2figure] 完成，ppt_path={_get_state_attr(final_state, 'ppt_path')}")
 
     # ------------------------------------------------------------------
     # 5. 收集输出文件，构造响应
     # ------------------------------------------------------------------
     ppt_filename = _get_state_attr(final_state, "ppt_path")
+    drawio_filename = (
+        _get_state_attr(final_state, "output_xml_path")
+        or _get_state_attr(final_state, "drawio_output_path")
+    )
 
     # SVG 相关路径仅 tech_route 会有值，其他类型返回空字符串
     svg_filename        = _get_state_attr(final_state, "svg_file_path")
@@ -239,9 +287,44 @@ async def run_paper2figure_wf_api(req: Paper2FigureRequest, result_path: Path | 
     except Exception as e:
         log.warning(f"[paper2figure] 收集输出文件列表失败: {e}")
 
+    if not _has_valid_paper2figure_output(
+        ppt_filename=ppt_filename,
+        drawio_filename=drawio_filename,
+        svg_filename=svg_filename,
+        svg_image_filename=svg_image_filename,
+        svg_bw_filename=svg_bw_filename,
+        svg_bw_image_filename=svg_bw_image_filename,
+        svg_color_filename=svg_color_filename,
+        svg_color_image_filename=svg_color_image_filename,
+        all_output_files=all_output_files,
+    ):
+        error = "生成失败：后端未产出有效文件，请检查后端日志。"
+        log.error(
+            "[paper2figure] %s workflow=%s graph_type=%s input_type=%s result_path=%s",
+            error,
+            wf_name,
+            req.graph_type,
+            req.input_type,
+            state.result_path,
+        )
+        return Paper2FigureResponse(
+            success=False,
+            error=error,
+            ppt_filename=ppt_filename,
+            drawio_filename=drawio_filename,
+            svg_filename=svg_filename,
+            svg_image_filename=svg_image_filename,
+            svg_bw_filename=svg_bw_filename,
+            svg_bw_image_filename=svg_bw_image_filename,
+            svg_color_filename=svg_color_filename,
+            svg_color_image_filename=svg_color_image_filename,
+            all_output_files=all_output_files,
+        )
+
     return Paper2FigureResponse(
         success=True,
         ppt_filename=ppt_filename,
+        drawio_filename=drawio_filename,
         svg_filename=svg_filename,
         svg_image_filename=svg_image_filename,
         svg_bw_filename=svg_bw_filename,

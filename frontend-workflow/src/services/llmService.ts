@@ -1,4 +1,15 @@
 import { API_KEY } from '../config/api';
+import { fetchRuntimeConfig, getRuntimeConfigSync } from './runtimeConfigService';
+
+const DEFAULT_VERIFY_TIMEOUT_MS = 30000;
+
+function getVerifyTimeoutMs(): number {
+  const raw = Number(import.meta.env.VITE_LLM_VERIFY_TIMEOUT_MS ?? DEFAULT_VERIFY_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return DEFAULT_VERIFY_TIMEOUT_MS;
+  }
+  return raw;
+}
 
 /**
  * Verify LLM connection by sending a simple "Hi" message.
@@ -13,6 +24,14 @@ export async function verifyLlmConnection(
   apiKey: string,
   model: string = 'deepseek-v3.2'
 ): Promise<boolean> {
+  const runtimeConfig = getRuntimeConfigSync();
+  if (!runtimeConfig.user_api_config_required) {
+    await fetchRuntimeConfig().catch(() => undefined);
+    if (!getRuntimeConfigSync().user_api_config_required) {
+      return true;
+    }
+  }
+
   // Normalize URL
   let baseUrl = apiUrl.trim();
   if (baseUrl.endsWith('/')) {
@@ -25,7 +44,8 @@ export async function verifyLlmConnection(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+    const timeoutMs = getVerifyTimeoutMs();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const res = await fetch(verifyUrl, {
       method: 'POST',
@@ -71,7 +91,7 @@ export async function verifyLlmConnection(
   } catch (err) {
     if (err instanceof Error) {
         if (err.name === 'AbortError') {
-            throw new Error('连接超时，请检查网络或 API URL');
+            throw new Error(`连接超时，请检查网络、API URL，或把校验超时调大到 ${getVerifyTimeoutMs()}ms 以上`);
         }
         throw err;
     }

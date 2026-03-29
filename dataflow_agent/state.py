@@ -122,8 +122,9 @@ class Paper2VideoRequest(MainRequest):
     # 数字人模型：echomimic（本地）或 liveportrait（云，默认）
     talking_model: str = "liveportrait"
     # 用户上传的cursor图片
-    # fixme: 这里的绝对路径需要修改一下
-    cursor_path: str = "/data/users/ligang/Paper2Any/dataflow_agent/toolkits/p2vtool/red.png"
+    cursor_path: str = field(
+        default_factory=lambda: str((PROJDIR / "dataflow_agent" / "toolkits" / "p2vtool" / "red.png").resolve())
+    )
     
 
 # ==================== Paper2Video 生成 State ======================

@@ -11,6 +11,7 @@ import {
 import { checkQuota, recordUsage } from '../../services/quotaService';
 import { verifyLlmConnection } from '../../services/llmService';
 import { getApiSettings, saveApiSettings } from '../../services/apiSettingsService';
+import { useRuntimeBilling } from '../../hooks/useRuntimeBilling';
 
 import {
   UploadMode,
@@ -84,6 +85,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 }) => {
   const { t } = useTranslation('paper2graph');
   const { user, refreshQuota } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
   
   // State from original file
   const [uploadMode, setUploadMode] = useState<UploadMode>('file');
@@ -290,7 +292,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
     } catch (e) {
       console.error('Failed to restore paper2figure config', e);
     }
-  }, [allowedGraphTypes, defaultGraphType, user?.id]);
+  }, [allowedGraphTypes, defaultGraphType, user?.id, userApiConfigRequired]);
 
   // 将配置写入 localStorage
   useEffect(() => {
@@ -322,7 +324,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
   const handleConvertToDrawio = useCallback(async () => {
     if (!previewImgUrl || drawioLoading) return;
-    if (!llmApiUrl.trim() || !apiKey.trim()) {
+    if (userApiConfigRequired && (!llmApiUrl.trim() || !apiKey.trim())) {
       setDrawioError(t('errors.missingApiConfig'));
       return;
     }
@@ -351,8 +353,10 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
       const formData = new FormData();
       formData.append('image_file', file);
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('gen_fig_model', DEFAULT_IMAGE2DRAWIO_GEN_FIG_MODEL);
       formData.append('vlm_model', DEFAULT_IMAGE2DRAWIO_VLM_MODEL);
       formData.append('email', user?.id || user?.email || '');
@@ -548,15 +552,17 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
         return;
       }
 
-      if (!llmApiUrl.trim() || !apiKey.trim()) {
+      if (userApiConfigRequired && (!llmApiUrl.trim() || !apiKey.trim())) {
         setError(t('errors.missingApiConfig'));
         return;
       }
 
       const formData = new FormData();
       formData.append('img_gen_model_name', model);
-      formData.append('chat_api_url', llmApiUrl.trim());
-      formData.append('api_key', apiKey.trim());
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', llmApiUrl.trim());
+        formData.append('api_key', apiKey.trim());
+      }
       formData.append('input_type', uploadMode);
       formData.append('email', user?.id || user?.email || '');
       formData.append('graph_type', graphType);
@@ -701,7 +707,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
       return;
     }
 
-    if (!llmApiUrl.trim() || !apiKey.trim()) {
+    if (userApiConfigRequired && (!llmApiUrl.trim() || !apiKey.trim())) {
       setError(t('errors.missingApiConfig'));
       return;
     }
@@ -710,8 +716,10 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
     
     const formData = new FormData();
     formData.append('img_gen_model_name', model);
-    formData.append('chat_api_url', llmApiUrl.trim());
-    formData.append('api_key', apiKey.trim());
+    if (userApiConfigRequired) {
+      formData.append('chat_api_url', llmApiUrl.trim());
+      formData.append('api_key', apiKey.trim());
+    }
     formData.append('input_type', uploadMode);
     formData.append('email', user?.email || '');
     formData.append('graph_type', graphType);
@@ -805,7 +813,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
         // 校验关键文件路径是否有效，防止后端返回 success 但实际未生成文件
         const hasSvg = !!(data.svg_image_filename || data.svg_bw_image_filename || data.svg_color_image_filename);
         if (!hasSvg && !data.ppt_filename) {
-          throw new Error(data.error || '生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
+          throw new Error(data.error || '生成失败：后端未返回有效文件，请查看后端日志后重试');
         }
 
         setPptPath(data.ppt_filename);
@@ -881,7 +889,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
 
         const blob = await res.blob();
         if (!blob || blob.size === 0) {
-          throw new Error('生成失败：未能获取到有效的文件，请检查 API Key 余额后重试');
+          throw new Error('生成失败：后端未返回有效文件，请查看后端日志后重试');
         }
         const url = URL.createObjectURL(blob);
         setDownloadUrl(url);
@@ -993,6 +1001,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
               isValidating={isValidating}
               error={error}
               successMessage={successMessage}
+              showApiConfig={userApiConfigRequired}
             />
           </div>
 
@@ -1023,6 +1032,7 @@ const Paper2FigurePage: React.FC<Paper2FigurePageProps> = ({
               setDrawioXml('');
               setDrawioError(null);
             }}
+            userApiConfigRequired={userApiConfigRequired}
           />
 
           {enableDrawio && drawioError && (

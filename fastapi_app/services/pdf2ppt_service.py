@@ -5,8 +5,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import fitz
 from fastapi import File, UploadFile, HTTPException
 from fastapi_app.schemas import Paper2PPTRequest
+from fastapi_app.services.managed_api_service import resolve_llm_credentials
 from fastapi_app.workflow_adapters.wa_pdf2ppt import run_pdf2ppt_wf_api
 from dataflow_agent.utils import get_project_root
 from dataflow_agent.logger import get_logger
@@ -26,6 +28,14 @@ BASE_OUTPUT_DIR = (PROJECT_ROOT / "outputs").resolve()
 class PDF2PPTService:
     def __init__(self):
         pass
+
+    def _count_pdf_pages(self, pdf_path: Path) -> int:
+        try:
+            with fitz.open(pdf_path) as document:
+                return max(1, len(document))
+        except Exception as exc:
+            log.warning(f"[pdf2ppt] failed to count PDF pages for {pdf_path}: {exc}")
+            return 1
 
     def _create_run_dir(self, email: Optional[str], task_type: str) -> Path:
         """
@@ -51,13 +61,18 @@ class PDF2PPTService:
         language: str,
         style: str,
         page_count: int,
-    ) -> Path:
+    ) -> tuple[Path, int]:
         """
         执行 pdf2ppt 的业务逻辑，返回生成的 PPTX 文件路径
         """
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            chat_api_url,
+            api_key,
+            scope="pdf2ppt",
+        )
         # 0.5 如果启用 AI 增强，必须校验 API 配置
         if use_ai_edit:
-            if not chat_api_url or not api_key:
+            if not resolved_chat_api_url or not resolved_api_key:
                 raise HTTPException(
                     status_code=400, 
                     detail="When use_ai_edit is True, chat_api_url and api_key are required"
@@ -78,6 +93,7 @@ class PDF2PPTService:
         content_bytes = await pdf_file.read()
         input_path.write_bytes(content_bytes)
         abs_pdf_path = input_path.resolve()
+        actual_page_count = self._count_pdf_pages(abs_pdf_path)
 
         log.info(f"[pdf2ppt] received file saved to {abs_pdf_path}")
 
@@ -85,8 +101,8 @@ class PDF2PPTService:
         wf_req = Paper2PPTRequest(
             input_type="PDF",
             input_content=str(abs_pdf_path),
-            chat_api_url=chat_api_url or "",
-            api_key=api_key or "",
+            chat_api_url=resolved_chat_api_url or "",
+            api_key=resolved_api_key or "",
             model=model,
             gen_fig_model=gen_fig_model,
             language=language,
@@ -113,4 +129,4 @@ class PDF2PPTService:
 
         log.info(f"[pdf2ppt] returning PPT file: {ppt_path}")
         
-        return ppt_path
+        return ppt_path, actual_page_count

@@ -59,6 +59,16 @@ English | [中文](README_CN.md)
 ## 🔥 News
 
 > [!TIP]
+> 🆕 <strong>2026-03-28 · Editable PPT Showcase Refresh</strong><br>
+> Added two new <strong>editable PPT</strong> showcase screenshots for the frontend-deck workflow:<br>
+> a generated multi-slide gallery view and the canvas editing workspace with deck theme lock.
+
+> [!TIP]
+> 🆕 <strong>2026-03-26 · Workflow Showcase Update</strong><br>
+> Added showcase coverage for <strong>Paper2Video</strong>, <strong>Paper2Poster</strong>, and <strong>Paper2Citation</strong>.<br>
+> The README now includes a compressed video demo plus refreshed English/Chinese workflow previews.
+
+> [!TIP]
 > 🆕 <strong>2026-02-02 · Paper2Rebuttal</strong><br>
 > Added rebuttal drafting support with structured response guidance and image-aware revision prompts.
 
@@ -103,6 +113,8 @@ Paper2Any currently includes the following sub-capabilities:
 - **🖼️ Image2PPT - Image to Slides**: Convert images or screenshots into structured slides.
 - **🎨 PPTPolish - Smart Beautification**: AI-based layout optimization and style transfer.
 - **🎬 Paper2Video**: Generate video scripts and narration assets.
+- **🖼️ Paper2Poster - Academic Poster**: Turn paper PDFs into poster-ready layouts with configurable sections, logos, and export assets.
+- **🔎 Paper2Citation - Citation Explorer**: Track citing authors, institutions, and notable downstream works from author names or DOI/paper URLs.
 - **📝 Paper2Technical**: Produce technical reports and method summaries.
 - **📚 Knowledge Base (KB)**: Ingest/embedding, semantic search, and KB-driven PPT/podcast/mindmap generation.
 
@@ -155,10 +167,18 @@ Paper2Any currently includes the following sub-capabilities:
 <br><sub>✨ Model Architecture Diagram Generation</sub>
 
 <br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
-<br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-3.png" width="80%"/>
-<br><sub>✨ Technical Roadmap Generation</sub>
+<table>
+  <tr>
+    <td width="56%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-workbench.png" width="100%"/>
+      <br><sub>✨ Technical roadmap workbench: choose route type, input source, model config, and visual template</sub>
+    </td>
+    <td width="44%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-output.png" width="100%"/>
+      <br><sub>✨ Generated technical roadmap figure with structured dual-column layout</sub>
+    </td>
+  </tr>
+</table>
 
 <br><br>
 <img src="static/new_readme/paper2figure/experimental-plot.png" width="90%"/>
@@ -181,6 +201,14 @@ Paper2Any currently includes the following sub-capabilities:
 <br><sub>✨ Paper / Text / Topic → PPT</sub>
 
 <br><br>
+<img src="static/new_readme/paper2ppt/frontend-gallery.png" width="90%"/>
+<br><sub>✨ Editable frontend deck overview with generated multi-page gallery and screenshot-ready export flow</sub>
+
+<br><br>
+<img src="static/new_readme/paper2ppt/frontend-editor.png" width="90%"/>
+<br><sub>✨ Canvas editing workspace with deck theme lock, inline text editing, and manual visual QA / repair</sub>
+
+<br><br>
 <img src="static/new_readme/paper2ppt/long-doc.png" width="85%"/>
 <br><sub>✨ Long Document Support (40+ Slides)</sub>
 
@@ -195,6 +223,53 @@ Paper2Any currently includes the following sub-capabilities:
 <br><br>
 <img src="static/new_readme/paper2ppt/version-history.png" width="90%"/>
 <br><sub>✨ Version History Management</sub>
+
+</div>
+
+---
+
+### 🎬 Paper2Video: PPT to Narrated Video
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2video/demo.gif" width="90%"/>
+<br><sub>✨ PPT / PDF to narrated video with script confirmation, Aliyun TTS voices, and downloadable output</sub>
+
+</div>
+
+---
+
+### 🖼️ Paper2Poster: Paper to Poster
+
+<div align="center">
+
+<br>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-ppt-result.png" width="100%"/>
+      <br><sub>PNG poster result</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-png-result.png" width="100%"/>
+      <br><sub>PPT poster result</sub>
+    </td>
+  </tr>
+</table>
+<br><sub>✨ Paper PDF to academic poster with configurable layout, editable poster output, and one-click export</sub>
+
+</div>
+
+---
+
+### 🔎 Paper2Citation: Citation Explorer
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2citation/citation-explorer.png" width="90%"/>
+<br><sub>✨ Search authors or papers to inspect citation candidates, institutions, and downstream citation context</sub>
 
 </div>
 

@@ -1,4 +1,5 @@
 export type Step = 'upload' | 'outline' | 'generate' | 'complete';
+export type PptGenerationMode = 'image' | 'frontend';
 
 export interface SlideOutline {
   id: string;
@@ -26,6 +27,63 @@ export interface GenerateResult {
   userPrompt?: string;
   versionHistory: ImageVersion[];
   currentVersionIndex: number;
+}
+
+export type FrontendFieldType = 'text' | 'textarea' | 'list';
+
+export interface FrontendSlideReview {
+  status: 'idle' | 'passed' | 'needs_repair' | 'repairing';
+  summary: string;
+  issues: string[];
+}
+
+export interface FrontendEditableField {
+  key: string;
+  label: string;
+  type: FrontendFieldType;
+  value: string;
+  items: string[];
+}
+
+export type FrontendVisualAssetSource = 'generated' | 'paper_asset' | 'upload';
+
+export interface FrontendVisualAsset {
+  key: string;
+  label: string;
+  src: string;
+  alt: string;
+  sourceType: FrontendVisualAssetSource;
+  storagePath?: string;
+  prompt?: string;
+  style?: string;
+}
+
+export interface FrontendSlide {
+  slideId: string;
+  pageNum: number;
+  title: string;
+  htmlTemplate: string;
+  cssCode: string;
+  editableFields: FrontendEditableField[];
+  visualAssets: FrontendVisualAsset[];
+  generationNote?: string;
+  status: 'pending' | 'processing' | 'done';
+  review?: FrontendSlideReview;
+}
+
+export interface FrontendThemeLock {
+  mustKeep: string[];
+  preferredLayoutPatterns: string[];
+  componentSignature: string;
+  avoid: string[];
+}
+
+export interface FrontendDeckTheme {
+  themeName: string;
+  visualMood: string;
+  footerText: string;
+  sectionLabelTemplate: string;
+  themeLock: FrontendThemeLock;
 }
 
 export type Paper2PPTTaskStatus = 'queued' | 'running' | 'done' | 'failed';

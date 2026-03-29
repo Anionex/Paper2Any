@@ -14,6 +14,7 @@ from fastapi_app.schemas import Paper2FigureRequest, VerifyLlmRequest, VerifyLlm
 from fastapi_app.workflow_adapters import run_paper2figure_wf_api
 from fastapi_app.utils import _to_outputs_url
 from fastapi_app.config.settings import settings
+from fastapi_app.services.managed_api_service import resolve_llm_credentials
 from dataflow_agent.utils import get_project_root
 from dataflow_agent.logger import get_logger
 
@@ -42,14 +43,19 @@ class Paper2AnyService:
         """
         Verify LLM connection by sending a simple 'Hi' message.
         """
-        api_url = req.api_url.rstrip("/")
+        resolved_api_url, resolved_api_key = resolve_llm_credentials(
+            req.api_url,
+            req.api_key,
+            scope="paper2any",
+        )
+        api_url = resolved_api_url.rstrip("/")
         if api_url.endswith("/chat/completions"):
             target_url = api_url
         else:
             target_url = f"{api_url}/chat/completions"
 
         headers = {"Content-Type": "application/json"}
-        api_key = (req.api_key or "").strip()
+        api_key = resolved_api_key
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         else:
@@ -58,22 +64,45 @@ class Paper2AnyService:
         payload = {
             "model": req.model,
             "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 1024
+            "max_tokens": settings.LLM_VERIFY_MAX_TOKENS,
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # This machine may have local proxy env vars (HTTP_PROXY / HTTPS_PROXY)
+            # that are not always reachable from backend service processes.
+            # LLM verification should test direct connectivity to the user-provided API URL.
+            timeout_seconds = max(1, int(settings.LLM_VERIFY_TIMEOUT_SECONDS))
+            connect_timeout = min(10.0, float(timeout_seconds))
+            timeout = httpx.Timeout(
+                timeout=float(timeout_seconds),
+                connect=connect_timeout,
+            )
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                 resp = await client.post(target_url, json=payload, headers=headers)
-                
+
                 if resp.status_code != 200:
-                    error_msg = f"API Error {resp.status_code}: {resp.text[:200]}"
+                    body = (resp.text or "").strip()
+                    error_msg = f"API Error {resp.status_code}"
+                    if body:
+                        error_msg = f"{error_msg}: {body[:200]}"
                     return VerifyLlmResponse(success=False, error=error_msg)
-                
+
                 return VerifyLlmResponse(success=True)
-                
+
+        except httpx.TimeoutException as e:
+            log.error(f"LLM Verification timeout [{type(e).__name__}] url={target_url} model={req.model}: {e!r}")
+            return VerifyLlmResponse(
+                success=False,
+                error=f"{type(e).__name__}: request timed out after {settings.LLM_VERIFY_TIMEOUT_SECONDS}s",
+            )
+        except httpx.HTTPError as e:
+            detail = str(e).strip() or repr(e)
+            log.error(f"LLM Verification failed [{type(e).__name__}] url={target_url} model={req.model}: {detail}")
+            return VerifyLlmResponse(success=False, error=f"{type(e).__name__}: {detail}")
         except Exception as e:
-            log.error(f"LLM Verification failed: {e}")
-            return VerifyLlmResponse(success=False, error=str(e))
+            detail = str(e).strip() or repr(e)
+            log.error(f"LLM Verification failed [{type(e).__name__}] url={target_url} model={req.model}: {detail}")
+            return VerifyLlmResponse(success=False, error=f"{type(e).__name__}: {detail}")
 
     async def list_history_files(self, email: str, request: Request) -> Dict[str, Any]:
         """
@@ -169,6 +198,11 @@ class Paper2AnyService:
         """
         执行 paper2figure 生成，返回生成的 PPTX 文件绝对路径。
         """
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            chat_api_url,
+            api_key,
+            scope="paper2any",
+        )
         # 1. 基础参数校验
         self._validate_input(input_type, file, file_kind, text)
 
@@ -196,9 +230,9 @@ class Paper2AnyService:
         # 4. 构造 Request
         p2f_req = Paper2FigureRequest(
             language=language,
-            chat_api_url=chat_api_url,
-            chat_api_key=api_key,
-            api_key=api_key,
+            chat_api_url=resolved_chat_api_url,
+            chat_api_key=resolved_api_key,
+            api_key=resolved_api_key,
             model="gpt-4o",
             gen_fig_model=img_gen_model_name,
             input_type=real_input_type,
@@ -255,6 +289,11 @@ class Paper2AnyService:
         """
         执行 paper2figure 生成，返回 JSON 响应数据（包含 URL）。
         """
+        resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+            chat_api_url,
+            api_key,
+            scope="paper2any",
+        )
         # 1. 基础参数校验
         self._validate_input(input_type, file, file_kind, text)
 
@@ -291,9 +330,9 @@ class Paper2AnyService:
         # 4. 构造 Request
         p2f_req = Paper2FigureRequest(
             language=language,
-            chat_api_url=chat_api_url,
-            chat_api_key=api_key,
-            api_key=api_key,
+            chat_api_url=resolved_chat_api_url,
+            chat_api_key=resolved_api_key,
+            api_key=resolved_api_key,
             model="gpt-4o",
             gen_fig_model=img_gen_model_name,
             input_type=real_input_type,
@@ -405,6 +444,7 @@ class Paper2AnyService:
 
         return {
             "success": p2f_resp.success,
+            "error": p2f_resp.error,
             "ppt_filename": safe_ppt,
             "drawio_filename": drawio_url,
             "svg_filename": safe_svg,
@@ -453,10 +493,15 @@ class Paper2AnyService:
 
         # 4. 执行 workflow
         async with task_semaphore:
+            resolved_chat_api_url, resolved_api_key = resolve_llm_credentials(
+                chat_api_url,
+                api_key,
+                scope="paper2any",
+            )
             req = FeaturePaper2VideoRequest(
                 model=model_name,
-                chat_api_url=chat_api_url,
-                api_key=api_key,
+                chat_api_url=resolved_chat_api_url,
+                api_key=resolved_api_key,
                 pdf_path=str(abs_input_path),
                 img_path="",
                 language=language,

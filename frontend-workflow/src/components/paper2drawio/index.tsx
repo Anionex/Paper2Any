@@ -15,6 +15,8 @@ import { getApiSettings, saveApiSettings } from '../../services/apiSettingsServi
 import { verifyLlmConnection } from '../../services/llmService';
 import Banner from './Banner';
 import QRCodeTooltip from '../QRCodeTooltip';
+import ManagedApiNotice from '../ManagedApiNotice';
+import { useRuntimeBilling } from '../../hooks/useRuntimeBilling';
 
 const DRAWIO_ORIGINS = new Set(['https://embed.diagrams.net', 'https://app.diagrams.net']);
 const STORAGE_KEY = 'paper2drawio_settings';
@@ -46,6 +48,7 @@ export default function Paper2DrawioPage({
 }: Paper2DrawioPageProps) {
   const { t } = useTranslation('paper2drawio');
   const { user } = useAuthStore();
+  const { userApiConfigRequired } = useRuntimeBilling();
 
   // 状态
   const [generationMode, setGenerationMode] = useState<'ai' | 'paper2drawio'>(initialMode);
@@ -220,7 +223,7 @@ export default function Paper2DrawioPage({
     } catch (e) {
       console.error('Failed to restore paper2drawio config', e);
     }
-  }, [user?.id]);
+  }, [user?.id, userApiConfigRequired]);
 
   // 将配置写入 localStorage
   useEffect(() => {
@@ -302,8 +305,10 @@ export default function Paper2DrawioPage({
       if (generationMode === 'paper2drawio') {
         const formData = new FormData();
         formData.append('img_gen_model_name', p2dImageModel);
-        formData.append('chat_api_url', apiUrl);
-        formData.append('api_key', apiKey);
+        if (userApiConfigRequired) {
+          formData.append('chat_api_url', apiUrl);
+          formData.append('api_key', apiKey);
+        }
         formData.append('input_type', uploadMode);
         formData.append('graph_type', 'model_arch');
         formData.append('style', p2dStyle);
@@ -352,8 +357,10 @@ export default function Paper2DrawioPage({
       }
 
       const formData = new FormData();
-      formData.append('chat_api_url', apiUrl);
-      formData.append('api_key', apiKey);
+      if (userApiConfigRequired) {
+        formData.append('chat_api_url', apiUrl);
+        formData.append('api_key', apiKey);
+      }
       const modelToSend = enableModelRace ? withModelOptions(PAPER2DRAWIO_MODELS, model).join(',') : model;
       formData.append('model', modelToSend);
       formData.append('input_type', uploadMode === 'file' ? 'PDF' : 'TEXT');
@@ -361,6 +368,7 @@ export default function Paper2DrawioPage({
       formData.append('diagram_style', diagramStyle);
       formData.append('language', drawioLanguage);
       formData.append('enable_vlm_validation', enableVlmValidation ? 'true' : 'false');
+      formData.append('email', user?.id || user?.email || '');
 
       if (uploadMode === 'text') {
         formData.append('text_content', textContent);
@@ -860,45 +868,51 @@ export default function Paper2DrawioPage({
                 {t('apiConfig')}
               </h3>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs text-slate-400">{t('apiUrl')}</label>
-                  <QRCodeTooltip>
-                    <a
-                      href={getPurchaseUrl(apiUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="whitespace-nowrap text-[10px] text-sky-300 hover:text-sky-200 hover:underline px-1"
-                    >
-                      {t('buyLink')}
-                    </a>
-                  </QRCodeTooltip>
-                </div>
-                {generationMode === 'paper2drawio' ? (
-                  <select
-                    value={apiUrl}
-                    onChange={e => setApiUrl(e.target.value)}
-                    className={inputClass}
-                  >
-                    {API_URL_OPTIONS.map((url: string) => (
-                      <option key={url} value={url} className="bg-slate-900">{url}</option>
-                    ))}
-                  </select>
+                {userApiConfigRequired ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs text-slate-400">{t('apiUrl')}</label>
+                      <QRCodeTooltip>
+                        <a
+                          href={getPurchaseUrl(apiUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="whitespace-nowrap text-[10px] text-sky-300 hover:text-sky-200 hover:underline px-1"
+                        >
+                          {t('buyLink')}
+                        </a>
+                      </QRCodeTooltip>
+                    </div>
+                    {generationMode === 'paper2drawio' ? (
+                      <select
+                        value={apiUrl}
+                        onChange={e => setApiUrl(e.target.value)}
+                        className={inputClass}
+                      >
+                        {API_URL_OPTIONS.map((url: string) => (
+                          <option key={url} value={url} className="bg-slate-900">{url}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder={t('apiUrl')}
+                        value={apiUrl}
+                        onChange={e => setApiUrl(e.target.value)}
+                        className={inputClass}
+                      />
+                    )}
+                    <input
+                      type="password"
+                      placeholder={t('apiKey')}
+                      value={apiKey}
+                      onChange={e => setApiKey(e.target.value)}
+                      className={inputClass}
+                    />
+                  </>
                 ) : (
-                  <input
-                    type="text"
-                    placeholder={t('apiUrl')}
-                    value={apiUrl}
-                    onChange={e => setApiUrl(e.target.value)}
-                    className={inputClass}
-                  />
+                  <ManagedApiNotice />
                 )}
-                <input
-                  type="password"
-                  placeholder={t('apiKey')}
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  className={inputClass}
-                />
                 <select
                   value={model}
                   onChange={e => setModel(e.target.value)}

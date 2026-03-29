@@ -29,6 +29,7 @@ interface PreviewSectionProps {
   onConvertToDrawio?: () => void;
   drawioLabel?: string;
   onReset?: () => void;
+  userApiConfigRequired: boolean;
 }
 
 const PreviewSection: React.FC<PreviewSectionProps> = ({
@@ -55,6 +56,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
   onConvertToDrawio,
   drawioLabel,
   onReset,
+  userApiConfigRequired,
 }) => {
   const [imgError, setImgError] = React.useState(false);
 
@@ -139,8 +141,12 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
                   
                   const formData = new FormData();
                   formData.append('img_gen_model_name', model);
-                  formData.append('chat_api_url', llmApiUrl.trim());
-                  formData.append('api_key', apiKey.trim());
+                  if (userApiConfigRequired) {
+                    if (userApiConfigRequired) {
+                      formData.append('chat_api_url', llmApiUrl.trim());
+                      formData.append('api_key', apiKey.trim());
+                    }
+                  }
                   formData.append('input_type', 'FIGURE'); // 使用 FIGURE 模式触发
                   formData.append('email', email);
                   formData.append('graph_type', 'model_arch');

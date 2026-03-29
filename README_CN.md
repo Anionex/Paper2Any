@@ -59,6 +59,16 @@
 ## 🔥 News
 
 > [!TIP]
+> 🆕 <strong>2026-03-28 · 可编辑版 PPT 展示更新</strong><br>
+> 新增两张 <strong>可编辑版 PPT</strong> 工作流展示图：<br>
+> 一张用于展示多页生成后的 deck 总览，一张用于展示带主题锁定与画布编辑的编辑工作区。
+
+> [!TIP]
+> 🆕 <strong>2026-03-26 · 工作流展示更新</strong><br>
+> 新增 <strong>Paper2Video</strong>、<strong>Paper2Poster</strong>、<strong>Paper2Citation</strong> 的展示内容。<br>
+> README 已补充压缩视频演示，以及中英文两套工作流预览图。
+
+> [!TIP]
 > 🆕 <strong>2026-02-02 · Paper2Rebuttal 更新</strong><br>
 > 新增反驳意见草拟与修改建议，支持结构化回复与图文要点对齐。
 
@@ -95,6 +105,8 @@ Paper2Any 当前包含以下几个子能力：
 - **🖼️ Image2PPT - 图片转 PPT**：将图片或截图快速转换为结构化幻灯片。
 - **🎨 PPTPolish 智能美化**：基于 AI 的排版优化与风格迁移。
 - **🎬 Paper2Video**：生成讲解视频脚本与配音素材。
+- **🖼️ Paper2Poster - 论文转海报**：将论文 PDF 自动整理为学术海报，支持版式参数、Logo 注入与导出。
+- **🔎 Paper2Citation - 论文引用追踪**：按作者姓名或 DOI / 论文链接追踪引用作者、机构与代表性引用论文。
 - **📚 知识库（KB）**：文件入库/向量化、语义检索，以及 KB 驱动的 PPT/播客/思维导图生成。
 
 ---
@@ -146,10 +158,18 @@ Paper2Any 当前包含以下几个子能力：
 <br><sub>✨ 模型架构图生成</sub>
 
 <br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-1.png" width="90%"/>
-<br><br>
-<img src="static/new_readme/paper2figure/technical-roadmap-2.png" width="90%"/>
-<br><sub>✨ 技术路线图生成</sub>
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-workbench.png" width="100%"/>
+      <br><sub>✨ 技术路线图工作台：选择图类型、输入来源、模型配置与模板风格</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="static/new_readme/paper2figure/technical-roadmap-output.png" width="100%"/>
+      <br><sub>✨ 生成结果：结构化双栏技术路线图</sub>
+    </td>
+  </tr>
+</table>
 
 <br><br>
 <img src="static/new_readme/paper2figure/experimental-plot.png" width="90%"/>
@@ -172,6 +192,14 @@ Paper2Any 当前包含以下几个子能力：
 <br><sub>✨ Paper / Text / Topic → PPT</sub>
 
 <br><br>
+<img src="static/new_readme/paper2ppt/frontend-gallery.png" width="90%"/>
+<br><sub>✨ 可编辑版前端 deck 总览，多页生成结果与后续截图导出链路一目了然</sub>
+
+<br><br>
+<img src="static/new_readme/paper2ppt/frontend-editor.png" width="90%"/>
+<br><sub>✨ 可编辑工作区：支持主题锁定、画布内改字，以及手动视觉检查与修复</sub>
+
+<br><br>
 <img src="static/new_readme/paper2ppt/long-doc.png" width="85%"/>
 <br><sub>✨ 超长文档支持 (40+ 页 PPT)</sub>
 
@@ -186,6 +214,53 @@ Paper2Any 当前包含以下几个子能力：
 <br><br>
 <img src="static/new_readme/paper2ppt/version-history.png" width="90%"/>
 <br><sub>✨ 历史版本管理</sub>
+
+</div>
+
+---
+
+### 🎬 Paper2Video：PPT 转视频
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2video/demo.gif" width="90%"/>
+<br><sub>✨ PPT / PDF 一键生成讲解视频，支持脚本确认、阿里语音与最终视频导出</sub>
+
+</div>
+
+---
+
+### 🖼️ Paper2Poster：论文转海报
+
+<div align="center">
+
+<br>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-ppt-result.png" width="100%"/>
+      <br><sub>PNG 海报结果</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="static/new_readme/paper2poster/paper2poster-png-result.png" width="100%"/>
+      <br><sub>PPT 海报结果</sub>
+    </td>
+  </tr>
+</table>
+<br><sub>✨ 论文 PDF 自动整理为学术海报，支持版式参数、可编辑海报结果与一键导出</sub>
+
+</div>
+
+---
+
+### 🔎 Paper2Citation：论文引用追踪
+
+<div align="center">
+
+<br>
+<img src="static/new_readme/paper2citation/citation-explorer.png" width="90%"/>
+<br><sub>✨ 输入作者名或论文 DOI / 链接，查看候选作者、引用线索与机构信息</sub>
 
 </div>
 
