@@ -280,28 +280,26 @@ const UploadStep: React.FC<UploadStepProps> = ({
       };
   const currentPageCopy = pptMode === 'frontend' ? pageCopy.frontend : pageCopy.image;
   const promptCards = pptMode === 'frontend' ? frontendStylePromptCards : imageStylePromptCards;
-  const presetOptions = pptMode === 'frontend'
-    ? (
-        uiLang === 'zh'
-          ? [
-              { value: 'modern', label: '暖白赤陶' },
-              { value: 'business', label: '午夜蓝冰灰' },
-              { value: 'academic', label: '纸感酒红' },
-              { value: 'creative', label: '森林绿沙金' },
-            ]
-          : [
-              { value: 'modern', label: 'Ivory + Terracotta' },
-              { value: 'business', label: 'Midnight Blue' },
-              { value: 'academic', label: 'Parchment + Burgundy' },
-              { value: 'creative', label: 'Forest Green' },
-            ]
-      )
-    : [
-        { value: 'modern', label: t('upload.config.presets.modern') },
-        { value: 'business', label: t('upload.config.presets.business') },
-        { value: 'academic', label: t('upload.config.presets.academic') },
-        { value: 'creative', label: t('upload.config.presets.creative') },
-      ];
+  const presetKeys = Object.keys(STYLE_PRESET_META) as StylePreset[];
+  const frontendPresetLabels: Record<StylePreset, string> = uiLang === 'zh'
+    ? {
+        modern: '暖白赤陶',
+        business: '午夜蓝冰灰',
+        academic: '纸感酒红',
+        creative: '森林绿沙金',
+      }
+    : {
+        modern: 'Ivory + Terracotta',
+        business: 'Midnight Blue',
+        academic: 'Parchment + Burgundy',
+        creative: 'Forest Green',
+      };
+  const presetOptions = presetKeys.map((preset) => ({
+    value: preset,
+    label: pptMode === 'frontend'
+      ? frontendPresetLabels[preset]
+      : t(`upload.config.presets.${preset}`),
+  }));
   const stylePresetLabel = pptMode === 'frontend'
     ? (uiLang === 'zh' ? '主题色方向' : 'Palette Direction')
     : t('upload.config.stylePreset');
