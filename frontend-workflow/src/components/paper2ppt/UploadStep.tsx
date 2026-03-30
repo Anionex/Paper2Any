@@ -804,7 +804,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
                             {option.label}
                           </button>
                           {meta && (
-                            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-56 -translate-x-1/2 overflow-hidden rounded-2xl border border-white/15 bg-black/90 shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block">
+                            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-56 -translate-x-1/2 overflow-hidden rounded-2xl border border-white/15 bg-black/90 shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block group-focus-within:block">
                               <div className="aspect-[16/9] bg-black/40">
                                 <img
                                   src={meta.preview}
