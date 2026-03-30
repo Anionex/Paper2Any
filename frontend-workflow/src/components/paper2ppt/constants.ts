@@ -10,15 +10,15 @@ export const STYLE_PRESETS: Record<string, string> = {
 
 export const STYLE_PRESET_META = {
   modern: {
-    preview: '/paper2ppt/ouput_1.png',
+    preview: '/paper2ppt/modern-preview.webp',
   },
   business: {
-    preview: '/paper2ppt/ouput_2.png',
+    preview: '/paper2ppt/business-preview.webp',
   },
   academic: {
-    preview: '/paper2ppt/ouput_3.png',
+    preview: '/paper2ppt/academic-preview.webp',
   },
   creative: {
-    preview: '/paper2ppt/ouput_4.png',
+    preview: '/paper2ppt/creative-preview.webp',
   },
 } as const;

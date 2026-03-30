@@ -976,25 +976,25 @@ const UploadStep: React.FC<UploadStepProps> = ({
             title={t('upload.demo.card1.title')}
             desc={t('upload.demo.card1.desc')}
             inputImg="/paper2ppt/input_1.png"
-            outputImg="/paper2ppt/ouput_1.png"
+            outputImg="/paper2ppt/modern-preview.webp"
           />
           <DemoCard
             title={t('upload.demo.card2.title')}
             desc={t('upload.demo.card2.desc')}
             inputImg="/paper2ppt/input_3.png"
-            outputImg="/paper2ppt/ouput_3.png"
+            outputImg="/paper2ppt/academic-preview.webp"
           />
           <DemoCard
             title={t('upload.demo.card3.title')}
             desc={t('upload.demo.card3.desc')}
             inputImg="/paper2ppt/input_2.png"
-            outputImg="/paper2ppt/ouput_2.png"
+            outputImg="/paper2ppt/business-preview.webp"
           />
           <DemoCard
             title={t('upload.demo.card4.title')}
             desc={t('upload.demo.card4.desc')}
             inputImg="/paper2ppt/input_4.png"
-            outputImg="/paper2ppt/ouput_4.png"
+            outputImg="/paper2ppt/creative-preview.webp"
           />
         </div>
       </div>
