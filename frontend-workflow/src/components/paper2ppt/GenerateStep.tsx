@@ -208,9 +208,21 @@ const GenerateStep: React.FC<GenerateStepProps> = ({
             {isGenerating ? (
               <div className="text-center">
                 <Loader2 size={40} className="text-purple-400 animate-spin mx-auto mb-3" />
-                <p className="text-base text-purple-300">{generateResults.every(r => r.status === 'processing') ? '正在批量生成所有页面...' : '正在重新生成当前页...'}</p>
+                <p className="text-base text-purple-300">{(() => {
+                  const processingCount = generateResults.filter(r => r.status === 'processing').length;
+                  const doneCount = generateResults.filter(r => r.status === 'done').length;
+                  if (processingCount === generateResults.length) return '正在批量生成所有页面...';
+                  if (processingCount > 1) return `正在重新生成 ${processingCount} 个变更页面...`;
+                  return '正在重新生成当前页...';
+                })()}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {taskMessage || (generateResults.every(r => r.status === 'processing') ? `共 ${outlineData.length} 页，请稍候` : 'AI 正在根据您的提示重新创建')}
+                  {taskMessage || (() => {
+                    const processingCount = generateResults.filter(r => r.status === 'processing').length;
+                    const doneCount = generateResults.filter(r => r.status === 'done').length;
+                    if (processingCount === generateResults.length) return `共 ${outlineData.length} 页，请稍候`;
+                    if (processingCount > 1) return `复用 ${doneCount} 页未修改内容，共 ${outlineData.length} 页`;
+                    return 'AI 正在根据您的提示重新创建';
+                  })()}
                 </p>
               </div>
             ) : currentResult?.afterImage ? (
