@@ -612,39 +612,68 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
             return out_item
 
         # --- Execution Flow ---
-        
+
         results_map = {}
-        
+        skip_set = set(getattr(state, "skip_pages", None) or [])
+
+        # 辅助函数：跳过未修改的页面，复用已有图片
+        def _try_skip_page(idx: int) -> bool:
+            if idx not in skip_set:
+                return False
+            existing_path = str((img_dir / f"page_{idx:03d}.png").resolve())
+            if os.path.exists(existing_path):
+                log.info(f"[paper2ppt_consistent] Skipping page {idx} (unchanged), reusing {existing_path}")
+                results_map[idx] = {
+                    "page_idx": idx,
+                    "generated_img_path": existing_path,
+                    "mode": "skipped_unchanged",
+                }
+                return True
+            log.warning(f"[paper2ppt_consistent] Page {idx} in skip_pages but image not found, will regenerate")
+            return False
+
+        if skip_set:
+            log.info(f"[paper2ppt_consistent] Incremental mode: skip_pages={sorted(skip_set)}")
+
         # 场景 A: 用户提供了参考图 (ref_img) -> 全量并行
         if user_ref_img:
             log.info(f"[paper2ppt_consistent] User ref_img provided. Processing all {len(page_items)} pages in parallel...")
             tasks = []
+            task_indices = []
             for idx in range(len(page_items)):
+                if _try_skip_page(idx):
+                    continue
                 tasks.append(_process_single_page(idx, page_items[idx], ref_img_path=user_ref_img))
-            
-            t_start = time.time()
-            all_results = await asyncio.gather(*tasks, return_exceptions=True)
-            log.info(f"[paper2ppt_consistent] All pages done in {time.time()-t_start:.2f}s")
-            
-            for i, res in enumerate(all_results):
-                if isinstance(res, Exception):
-                    log.error(f"[paper2ppt_consistent] Page {i} exception: {res}")
-                    results_map[i] = {"page_idx": i, "generated_img_path": None, "mode": "exception", "error": str(res)}
-                else:
-                    results_map[i] = res
+                task_indices.append(idx)
+
+            if tasks:
+                t_start = time.time()
+                all_results = await asyncio.gather(*tasks, return_exceptions=True)
+                log.info(f"[paper2ppt_consistent] {len(tasks)} pages done in {time.time()-t_start:.2f}s (skipped {len(page_items)-len(tasks)})")
+
+                for i, res in enumerate(all_results):
+                    real_idx = task_indices[i]
+                    if isinstance(res, Exception):
+                        log.error(f"[paper2ppt_consistent] Page {real_idx} exception: {res}")
+                        results_map[real_idx] = {"page_idx": real_idx, "generated_img_path": None, "mode": "exception", "error": str(res)}
+                    else:
+                        results_map[real_idx] = res
 
         # 场景 B: 无参考图 -> 生成第0页作为 Anchor，再并行后续
         else:
-            # 1. Process Page 0
-            log.info("[paper2ppt_consistent] Generating Page 0 as Style Anchor...")
-            t0_start = time.time()
-            res0 = await _process_single_page(0, page_items[0], ref_img_path=None)
-            log.info(f"[paper2ppt_consistent] Page 0 done in {time.time()-t0_start:.2f}s. Result: {res0.get('mode')}")
-            
-            results_map[0] = res0
-            
-            # 获取 Anchor Image
-            anchor_img_path = res0.get("generated_img_path")
+            # 1. Process Page 0 (or reuse if skipped)
+            anchor_img_path = None
+            if _try_skip_page(0):
+                anchor_img_path = results_map[0].get("generated_img_path")
+                log.info(f"[paper2ppt_consistent] Page 0 skipped, using as anchor: {anchor_img_path}")
+            else:
+                log.info("[paper2ppt_consistent] Generating Page 0 as Style Anchor...")
+                t0_start = time.time()
+                res0 = await _process_single_page(0, page_items[0], ref_img_path=None)
+                log.info(f"[paper2ppt_consistent] Page 0 done in {time.time()-t0_start:.2f}s. Result: {res0.get('mode')}")
+                results_map[0] = res0
+                anchor_img_path = res0.get("generated_img_path")
+
             if not anchor_img_path or not os.path.exists(anchor_img_path):
                 log.warning("[paper2ppt_consistent] Page 0 generation failed! Subsequent pages will be generated independently.")
                 anchor_img_path = None
@@ -654,26 +683,31 @@ def create_paper2ppt_parallel_consistent_graph() -> GenericGraphBuilder:  # noqa
             # 2. Process remaining pages in parallel
             if len(page_items) > 1:
                 tasks = []
+                task_indices = []
                 for idx in range(1, len(page_items)):
+                    if _try_skip_page(idx):
+                        continue
                     tasks.append(_process_single_page(idx, page_items[idx], ref_img_path=anchor_img_path))
-                
-                log.info(f"[paper2ppt_consistent] Generating remaining {len(tasks)} pages concurrently...")
-                t_rest_start = time.time()
-                rest_results = await asyncio.gather(*tasks, return_exceptions=True)
-                log.info(f"[paper2ppt_consistent] Remaining pages done in {time.time()-t_rest_start:.2f}s")
-                
-                for i, res in enumerate(rest_results):
-                    real_idx = i + 1
-                    if isinstance(res, Exception):
-                        log.error(f"[paper2ppt_consistent] Page {real_idx} exception: {res}")
-                        results_map[real_idx] = {
-                            "page_idx": real_idx,
-                            "generated_img_path": None,
-                            "mode": "exception",
-                            "error": str(res)
-                        }
-                    else:
-                        results_map[real_idx] = res
+                    task_indices.append(idx)
+
+                if tasks:
+                    log.info(f"[paper2ppt_consistent] Generating {len(tasks)} changed pages concurrently (skipped {len(page_items)-1-len(tasks)})...")
+                    t_rest_start = time.time()
+                    rest_results = await asyncio.gather(*tasks, return_exceptions=True)
+                    log.info(f"[paper2ppt_consistent] Changed pages done in {time.time()-t_rest_start:.2f}s")
+
+                    for i, res in enumerate(rest_results):
+                        real_idx = task_indices[i]
+                        if isinstance(res, Exception):
+                            log.error(f"[paper2ppt_consistent] Page {real_idx} exception: {res}")
+                            results_map[real_idx] = {
+                                "page_idx": real_idx,
+                                "generated_img_path": None,
+                                "mode": "exception",
+                                "error": str(res)
+                            }
+                        else:
+                            results_map[real_idx] = res
         
         # 3. Assemble final list
         new_pagecontent = []

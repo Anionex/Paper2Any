@@ -301,6 +301,7 @@ async def run_paper2ppt_wf_api(
     edit_page_prompt: str | None = None,
     regenerate_from_outline: bool = False,
     auto_fill_generated_pages: bool = True,
+    skip_pages: list[int] | None = None,
 ) -> Paper2PPTResponse:
     """
     只执行 paper2ppt 工作流。通常用于：
@@ -327,6 +328,10 @@ async def run_paper2ppt_wf_api(
         result_path=base_dir,
         override_pagecontent=pagecontent,
     )
+
+    # 增量生成：设置要跳过的页码
+    if skip_pages:
+        state.skip_pages = list(skip_pages)
 
     # 映射 get_down -> workflow state.gen_down
     if get_down is not None:

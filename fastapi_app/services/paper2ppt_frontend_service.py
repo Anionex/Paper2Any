@@ -120,6 +120,33 @@ class Paper2PPTFrontendService:
                 "parallel_generation": True,
             }
 
+        # 增量生成：解析 skip_slides 并复用已有 spec
+        skip_set: set[int] = set()
+        if req.skip_slides:
+            try:
+                parsed = json.loads(req.skip_slides)
+                if isinstance(parsed, list):
+                    skip_set = {int(x) for x in parsed if isinstance(x, (int, str)) and str(x).isdigit()}
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+        reused_slides: list[dict] = []
+        if skip_set:
+            log.info(f"[frontend] Incremental mode: skip_slides={sorted(skip_set)}")
+            for idx in sorted(skip_set):
+                spec_path = slides_dir / f"page_{idx:03d}.json"
+                if spec_path.exists():
+                    try:
+                        content = await asyncio.to_thread(spec_path.read_text, encoding="utf-8")
+                        reused_slides.append(json.loads(content))
+                        log.info(f"[frontend] Reusing existing spec for slide {idx}")
+                    except Exception as e:
+                        log.warning(f"[frontend] Failed to load spec for slide {idx}: {e}, will regenerate")
+                        skip_set.discard(idx)
+                else:
+                    log.warning(f"[frontend] Spec not found for slide {idx}, will regenerate")
+                    skip_set.discard(idx)
+
         tasks = [
             self._generate_single_slide(
                 base_dir=base_dir,
@@ -139,9 +166,11 @@ class Paper2PPTFrontendService:
                 theme=deck_theme,
             )
             for index in range(len(pagecontent))
+            if index not in skip_set
         ]
-        slides = await asyncio.gather(*tasks)
-        ordered_slides = sorted(slides, key=lambda item: int(item.get("page_num", 0)))
+        generated_slides = await asyncio.gather(*tasks)
+        all_slides = list(generated_slides) + reused_slides
+        ordered_slides = sorted(all_slides, key=lambda item: int(item.get("page_num", 0)))
 
         for slide in ordered_slides:
             self._write_slide_spec(slides_dir, slide)
