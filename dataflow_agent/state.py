@@ -389,6 +389,8 @@ class Paper2FigureState(MainState):
     render_dpi: Optional[int] = None
     # 批量生成出来的页面图片路径（0-based 对齐 pagecontent）
     generated_pages: List[str] = field(default_factory=list)
+    # 增量生成：跳过的页码列表（0-based），这些页复用已有图片
+    skip_pages: List[int] = field(default_factory=list)
     table_img_path: str = ""
 
     # pagecontent: 既可为结构化 slide 描述，也可为 [{"ppt_img_path": "..."}] 的图片列表

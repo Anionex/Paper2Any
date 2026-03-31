@@ -95,6 +95,7 @@ paper2ppt 业务 Service 层
 """
 
 import copy
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -316,6 +317,16 @@ class Paper2PPTService:
         )
         regenerate_from_outline_bool = str(req.regenerate_from_outline).lower() in ("true", "1", "yes")
 
+        # 解析 skip_pages
+        skip_pages_list: list[int] | None = None
+        if req.skip_pages:
+            try:
+                skip_pages_list = json.loads(req.skip_pages)
+                if not isinstance(skip_pages_list, list):
+                    skip_pages_list = None
+            except (json.JSONDecodeError, TypeError):
+                skip_pages_list = None
+
         # 校验编辑/生成模式
         if get_down_bool:
             if req.page_id is None:
@@ -356,6 +367,7 @@ class Paper2PPTService:
             edit_page_num=req.page_id,
             edit_page_prompt=req.edit_prompt,
             regenerate_from_outline=regenerate_from_outline_bool,
+            skip_pages=skip_pages_list,
         )
 
         resp_dict = resp_model.model_dump()
