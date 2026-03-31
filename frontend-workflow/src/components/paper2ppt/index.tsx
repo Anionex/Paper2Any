@@ -1433,8 +1433,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     const skipSlides = hasExistingSlides ? unchangedIndices : [];
     const pagesToGenerate = outlineData.length - skipSlides.length;
 
-    const requiredPoints = Math.max(1, pagesToGenerate * getFrontendGenerationCostPerPage());
-    if (!(await ensureQuotaForAction(requiredPoints, `批量生成前端 PPT（${pagesToGenerate} 页，预计 ${requiredPoints} 点）`))) {
+    const requiredPoints = pagesToGenerate * getFrontendGenerationCostPerPage();
+    if (requiredPoints > 0 && !(await ensureQuotaForAction(requiredPoints, `批量生成前端 PPT（${pagesToGenerate} 页，预计 ${requiredPoints} 点）`))) {
       return;
     }
 
@@ -1528,11 +1528,13 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       if (frontendAutoReviewEnabled) {
         await runInitialFrontendReviewPass(mergedSlides, data.result_path || resultPath || '');
       }
-      await consumeQuotaForAction(
-        'paper2ppt',
-        requiredPoints,
-        `可编辑版 PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
-      );
+      if (requiredPoints > 0) {
+        await consumeQuotaForAction(
+          'paper2ppt',
+          requiredPoints,
+          `可编辑版 PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : '可编辑版 PPT 生成失败';
       setError(message);
@@ -1583,8 +1585,8 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     const skipPages = hasExistingResults ? unchangedIndices : [];
     const pagesToGenerate = outlineData.length - skipPages.length;
 
-    const requiredPoints = Math.max(1, pagesToGenerate);
-    if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${pagesToGenerate} 页 PPT`))) {
+    const requiredPoints = pagesToGenerate;
+    if (requiredPoints > 0 && !(await ensureQuotaForAction(requiredPoints, `批量生成 ${pagesToGenerate} 页 PPT`))) {
       return;
     }
     setCurrentStep('generate');
@@ -1691,11 +1693,13 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       setGenerateResults(updatedResults);
       // 保存快照，用于下次增量生成比较
       setConfirmedOutlineSnapshot(outlineData.map(s => ({ ...s })));
-      await consumeQuotaForAction(
-        'paper2ppt',
-        requiredPoints,
-        `PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
-      );
+      if (requiredPoints > 0) {
+        await consumeQuotaForAction(
+          'paper2ppt',
+          requiredPoints,
+          `PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
+        );
+      }
 
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
