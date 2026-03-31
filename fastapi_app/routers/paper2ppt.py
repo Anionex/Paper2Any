@@ -289,6 +289,7 @@ async def paper2ppt_frontend_generate(
     page_id: Optional[int] = Form(None),
     edit_prompt: Optional[str] = Form(None),
     current_slide: Optional[str] = Form(None),
+    skip_slides: Optional[str] = Form(None),
     service: Paper2PPTFrontendService = Depends(get_frontend_service),
 ):
     req = FrontendPPTGenerationRequest(
@@ -307,6 +308,7 @@ async def paper2ppt_frontend_generate(
         page_id=page_id,
         edit_prompt=edit_prompt,
         current_slide=current_slide,
+        skip_slides=skip_slides,
     )
     return await service.generate_slides(req=req, request=request)
 

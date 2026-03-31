@@ -84,7 +84,9 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   }>({ title: '', layout_description: '', key_points: [] });
   const [outlineFeedback, setOutlineFeedback] = useState('');
   const [isRefiningOutline, setIsRefiningOutline] = useState(false);
-  
+  // 增量生成：记录上次确认生成时的大纲快照，用于检测哪些页面被修改
+  const [confirmedOutlineSnapshot, setConfirmedOutlineSnapshot] = useState<SlideOutline[]>([]);
+
   // Step 3: 生成相关状态
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [generateResults, setGenerateResults] = useState<GenerateResult[]>([]);
@@ -1425,33 +1427,51 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   };
 
   const handleConfirmFrontendOutline = async () => {
-    const requiredPoints = Math.max(1, outlineData.length * getFrontendGenerationCostPerPage());
-    if (!(await ensureQuotaForAction(requiredPoints, `批量生成前端 PPT（${outlineData.length} 页，预计 ${requiredPoints} 点）`))) {
+    // 增量生成：检测未修改的页面
+    const unchangedIndices = getUnchangedPageIndices(outlineData, confirmedOutlineSnapshot);
+    const hasExistingSlides = frontendSlides.some(s => s.status === 'done' && s.htmlTemplate);
+    const skipSlides = hasExistingSlides ? unchangedIndices : [];
+    const pagesToGenerate = outlineData.length - skipSlides.length;
+
+    const requiredPoints = Math.max(1, pagesToGenerate * getFrontendGenerationCostPerPage());
+    if (!(await ensureQuotaForAction(requiredPoints, `批量生成前端 PPT（${pagesToGenerate} 页，预计 ${requiredPoints} 点）`))) {
       return;
     }
 
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
-    setGenerateTaskMessage(frontendIncludeImages ? '正在生成可编辑版页面代码与配图...' : '正在生成可编辑版页面代码...');
     setError(null);
 
-    const pendingSlides: FrontendSlide[] = outlineData.map((slide, index) => ({
-      slideId: slide.id,
-      pageNum: index + 1,
-      title: slide.title,
-      htmlTemplate: '',
-      cssCode: '',
-      editableFields: [],
-      visualAssets: [],
-      status: 'processing',
-      generationNote: '',
-      review: {
-        status: 'idle',
-        summary: '',
-        issues: [],
-      },
-    }));
+    if (skipSlides.length > 0) {
+      setGenerateTaskMessage(`复用 ${skipSlides.length} 页未修改内容，重新生成 ${pagesToGenerate} 页...`);
+    } else {
+      setGenerateTaskMessage(frontendIncludeImages ? '正在生成可编辑版页面代码与配图...' : '正在生成可编辑版页面代码...');
+    }
+
+    // 未修改的页面直接复用已有 frontendSlides 数据
+    const skipSet = new Set(skipSlides);
+    const pendingSlides: FrontendSlide[] = outlineData.map((slide, index) => {
+      if (skipSet.has(index) && index < frontendSlides.length && frontendSlides[index].status === 'done') {
+        return { ...frontendSlides[index] };
+      }
+      return {
+        slideId: slide.id,
+        pageNum: index + 1,
+        title: slide.title,
+        htmlTemplate: '',
+        cssCode: '',
+        editableFields: [],
+        visualAssets: [],
+        status: 'processing' as const,
+        generationNote: '',
+        review: {
+          status: 'idle' as const,
+          summary: '',
+          issues: [],
+        },
+      };
+    });
     frontendCaptureRefs.current = [];
     setFrontendSlides(pendingSlides);
 
@@ -1469,6 +1489,10 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       formData.append('image_style', frontendImageStyle);
       formData.append('image_model', genFigModel);
       formData.append('pagecontent', buildFrontendPagecontentPayload());
+
+      if (skipSlides.length > 0) {
+        formData.append('skip_slides', JSON.stringify(skipSlides));
+      }
 
       const res = await fetch('/api/v1/paper2ppt/frontend/generate', {
         method: 'POST',
@@ -1490,10 +1514,19 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       }
       const normalizedTheme = normalizeFrontendDeckTheme(data.theme);
       const normalizedSlides = normalizeFrontendSlides(data.slides);
+      // 合并：对于跳过的页面保留之前的 slide 数据
+      const mergedSlides = pendingSlides.map((pending, index) => {
+        if (skipSet.has(index) && pending.status === 'done') {
+          return pending;
+        }
+        return normalizedSlides.find(s => s.pageNum === index + 1) || pending;
+      });
       setFrontendDeckTheme(normalizedTheme);
-      setFrontendSlides(normalizedSlides);
+      setFrontendSlides(mergedSlides);
+      // 保存快照
+      setConfirmedOutlineSnapshot(outlineData.map(s => ({ ...s })));
       if (frontendAutoReviewEnabled) {
-        await runInitialFrontendReviewPass(normalizedSlides, data.result_path || resultPath || '');
+        await runInitialFrontendReviewPass(mergedSlides, data.result_path || resultPath || '');
       }
       await consumeQuotaForAction(
         'paper2ppt',
@@ -1503,11 +1536,37 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : '可编辑版 PPT 生成失败';
       setError(message);
-      setFrontendSlides(pendingSlides.map((slide) => ({ ...slide, status: 'pending' })));
+      setFrontendSlides(pendingSlides.map(s => s.status === 'done' ? s : { ...s, status: 'pending' as const }));
     } finally {
       setGenerateTaskMessage('');
       setIsGenerating(false);
     }
+  };
+
+  /**
+   * 比较当前大纲与快照，返回未修改页面的索引列表（0-based）。
+   * 用于增量生成：这些页面可以跳过重新生成。
+   */
+  const getUnchangedPageIndices = (
+    current: SlideOutline[],
+    snapshot: SlideOutline[],
+  ): number[] => {
+    if (snapshot.length === 0 || current.length !== snapshot.length) return [];
+    const unchanged: number[] = [];
+    for (let i = 0; i < current.length; i++) {
+      const c = current[i];
+      const s = snapshot[i];
+      if (
+        c.id === s.id &&
+        c.title === s.title &&
+        c.layout_description === s.layout_description &&
+        c.asset_ref === s.asset_ref &&
+        JSON.stringify(c.key_points) === JSON.stringify(s.key_points)
+      ) {
+        unchanged.push(i);
+      }
+    }
+    return unchanged;
   };
 
   const handleConfirmOutline = async () => {
@@ -1516,26 +1575,45 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       await handleConfirmFrontendOutline();
       return;
     }
-    const requiredPoints = Math.max(1, outlineData.length);
-    if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${requiredPoints} 页 PPT`))) {
+
+    // 增量生成：检测哪些页面未修改，可以跳过
+    const unchangedIndices = getUnchangedPageIndices(outlineData, confirmedOutlineSnapshot);
+    const hasExistingResults = generateResults.some(r => r.status === 'done' && r.afterImage);
+    const skipPages = hasExistingResults ? unchangedIndices : [];
+    const pagesToGenerate = outlineData.length - skipPages.length;
+
+    const requiredPoints = Math.max(1, pagesToGenerate);
+    if (!(await ensureQuotaForAction(requiredPoints, `批量生成 ${pagesToGenerate} 页 PPT`))) {
       return;
     }
     setCurrentStep('generate');
     setCurrentSlideIndex(0);
     setIsGenerating(true);
-    setGenerateTaskMessage('');
     setError(null);
-    
-    const results: GenerateResult[] = outlineData.map((slide) => ({
-      slideId: slide.id,
-      beforeImage: '',
-      afterImage: '',
-      status: 'processing' as const,
-      versionHistory: [],
-      currentVersionIndex: -1,
-    }));
+
+    if (skipPages.length > 0) {
+      setGenerateTaskMessage(`复用 ${skipPages.length} 页未修改内容，重新生成 ${pagesToGenerate} 页...`);
+    } else {
+      setGenerateTaskMessage('');
+    }
+
+    // 构建初始 results：未修改的页面直接复用已有结果，其余标记为 processing
+    const skipSet = new Set(skipPages);
+    const results: GenerateResult[] = outlineData.map((slide, index) => {
+      if (skipSet.has(index) && index < generateResults.length && generateResults[index].status === 'done') {
+        return { ...generateResults[index] };
+      }
+      return {
+        slideId: slide.id,
+        beforeImage: '',
+        afterImage: '',
+        status: 'processing' as const,
+        versionHistory: [],
+        currentVersionIndex: -1,
+      };
+    });
     setGenerateResults(results);
-    
+
     try {
       const formData = new FormData();
       formData.append('img_gen_model_name', genFigModel);
@@ -1549,6 +1627,10 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       formData.append('email', user?.id || user?.email || '');
       formData.append('result_path', resultPath || '');
       formData.append('get_down', 'false');
+
+      if (skipPages.length > 0) {
+        formData.append('skip_pages', JSON.stringify(skipPages));
+      }
 
       // 如果用户选的是参考图模式，附加参考图，保留用户显式输入的风格提示词
       if (styleMode === 'reference' && referenceImage) {
@@ -1565,7 +1647,11 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       formData.append('pagecontent', JSON.stringify(pagecontent));
 
       const task = await submitPaper2PptTask(formData);
-      setGenerateTaskMessage(task.message || '批量生成任务已提交');
+      if (skipPages.length > 0) {
+        setGenerateTaskMessage(`复用 ${skipPages.length} 页，正在生成 ${pagesToGenerate} 页...`);
+      } else {
+        setGenerateTaskMessage(task.message || '批量生成任务已提交');
+      }
 
       const data = await pollPaper2PptTask(task.task_id, (status) => {
         setGenerateTaskMessage(status.message || '正在生成页面');
@@ -1576,38 +1662,44 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       }
 
       const updatedResults = results.map((result, index) => {
+        // 已跳过的页面保持原有结果
+        if (skipSet.has(index) && result.status === 'done' && result.afterImage) {
+          return result;
+        }
         const pageNumStr = String(index).padStart(3, '0');
         let afterImage = '';
-        
+
         if (data.all_output_files && Array.isArray(data.all_output_files)) {
-          const pageImg = data.all_output_files.find((url: string) => 
+          const pageImg = data.all_output_files.find((url: string) =>
             url.includes(`ppt_pages/page_${pageNumStr}.png`)
           );
           if (pageImg) {
             afterImage = pageImg;
           }
         }
-        
+
         return {
           ...result,
           afterImage,
           status: 'done' as const,
         };
       });
-      
+
       preloadGeneratedImages(data.all_output_files);
-      
+
       setGenerateResults(updatedResults);
+      // 保存快照，用于下次增量生成比较
+      setConfirmedOutlineSnapshot(outlineData.map(s => ({ ...s })));
       await consumeQuotaForAction(
         'paper2ppt',
         requiredPoints,
         `PPT 页面已生成，但 ${requiredPoints} 点扣费记录失败，请刷新余额确认。`,
       );
-      
+
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
       setError(message);
-      setGenerateResults(results.map(r => ({ ...r, status: 'pending' as const })));
+      setGenerateResults(results.map(r => r.status === 'done' ? r : { ...r, status: 'pending' as const }));
     } finally {
       setGenerateTaskMessage('');
       setIsGenerating(false);

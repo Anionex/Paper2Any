@@ -254,6 +254,8 @@ class FrontendPPTGenerationRequest(BaseModel):
     page_id: Optional[int] = None
     edit_prompt: Optional[str] = None
     current_slide: Optional[str] = None
+    # 增量生成：跳过的页码列表（JSON 格式，0-based），复用已有 slide spec
+    skip_slides: Optional[str] = None
 
 
 class FrontendPPTExportRequest(BaseModel):
