@@ -321,10 +321,10 @@ class Paper2PPTService:
         skip_pages_list: list[int] | None = None
         if req.skip_pages:
             try:
-                skip_pages_list = json.loads(req.skip_pages)
-                if not isinstance(skip_pages_list, list):
-                    skip_pages_list = None
-            except (json.JSONDecodeError, TypeError):
+                parsed = json.loads(req.skip_pages)
+                if isinstance(parsed, list):
+                    skip_pages_list = [int(x) for x in parsed if isinstance(x, (int, str)) and str(x).isdigit()]
+            except (json.JSONDecodeError, TypeError, ValueError):
                 skip_pages_list = None
 
         # 校验编辑/生成模式

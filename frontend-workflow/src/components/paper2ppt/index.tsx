@@ -1551,9 +1551,10 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     current: SlideOutline[],
     snapshot: SlideOutline[],
   ): number[] => {
-    if (snapshot.length === 0 || current.length !== snapshot.length) return [];
+    if (snapshot.length === 0) return [];
     const unchanged: number[] = [];
-    for (let i = 0; i < current.length; i++) {
+    const minLength = Math.min(current.length, snapshot.length);
+    for (let i = 0; i < minLength; i++) {
       const c = current[i];
       const s = snapshot[i];
       if (

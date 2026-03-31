@@ -126,8 +126,8 @@ class Paper2PPTFrontendService:
             try:
                 parsed = json.loads(req.skip_slides)
                 if isinstance(parsed, list):
-                    skip_set = set(parsed)
-            except (json.JSONDecodeError, TypeError):
+                    skip_set = {int(x) for x in parsed if isinstance(x, (int, str)) and str(x).isdigit()}
+            except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
         reused_slides: list[dict] = []
@@ -137,7 +137,8 @@ class Paper2PPTFrontendService:
                 spec_path = slides_dir / f"page_{idx:03d}.json"
                 if spec_path.exists():
                     try:
-                        reused_slides.append(json.loads(spec_path.read_text(encoding="utf-8")))
+                        content = await asyncio.to_thread(spec_path.read_text, encoding="utf-8")
+                        reused_slides.append(json.loads(content))
                         log.info(f"[frontend] Reusing existing spec for slide {idx}")
                     except Exception as e:
                         log.warning(f"[frontend] Failed to load spec for slide {idx}: {e}, will regenerate")
