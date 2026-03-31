@@ -2214,6 +2214,14 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
         status: 'done',
       };
       setGenerateResults([...updatedResults]);
+      // 同步快照：inline 编辑重生成后，更新对应页的快照，避免返回大纲时重复生成
+      setConfirmedOutlineSnapshot(prev => {
+        const updated = [...prev];
+        if (currentSlideIndex < outlineData.length) {
+          updated[currentSlideIndex] = { ...outlineData[currentSlideIndex] };
+        }
+        return updated;
+      });
       await fetchVersionHistory(currentSlideIndex);
     } catch (err) {
       const message = err instanceof Error ? err.message : '服务器繁忙，请稍后再试';
