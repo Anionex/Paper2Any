@@ -44,6 +44,62 @@ class Template2PPTService:
         (run_dir / "work").mkdir(parents=True, exist_ok=True)
         return run_dir
 
+
+    def _create_template_dir(self, email: Optional[str], template_name: str | None = None) -> Path:
+        code = (email or "default").strip() or "default"
+        raw_name = (template_name or "uploaded-template").strip() or "uploaded-template"
+        safe_name = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in raw_name).strip("-")
+        safe_name = safe_name or "uploaded-template"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        template_dir = get_outputs_root() / code / "template2ppt_templates" / f"{timestamp}-{safe_name}"
+        template_dir.mkdir(parents=True, exist_ok=True)
+        return template_dir
+
+    async def save_uploaded_template(
+        self,
+        *,
+        template_file: Any,
+        email: Optional[str] = None,
+        template_name: str | None = None,
+        induct: bool = False,
+        request: Request | None = None,
+    ) -> dict[str, Any]:
+        filename = Path(getattr(template_file, "filename", "") or "template.pptx").name
+        if not filename.lower().endswith(".pptx"):
+            raise HTTPException(status_code=400, detail="template_file must be a .pptx file")
+
+        template_dir = self._create_template_dir(email, template_name or Path(filename).stem)
+        source_pptx = template_dir / "source.pptx"
+        content = await template_file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="template_file is empty")
+        source_pptx.write_bytes(content)
+
+        induction_status = "skipped"
+        induction_error = ""
+        if induct:
+            self._ensure_template2ppt_importable()
+            try:
+                from template2ppt.workflow import induct_template
+
+                await induct_template(str(template_dir))
+                induction_status = "success"
+            except Exception as exc:
+                log.exception("[template2ppt] template induction failed")
+                induction_status = "failed"
+                induction_error = str(exc)
+
+        return {
+            "success": True,
+            "template": str(template_dir),
+            "template_dir": str(template_dir),
+            "template_url": _to_outputs_url(str(source_pptx), request),
+            "source_pptx": str(source_pptx),
+            "induction_status": induction_status,
+            "induction_error": induction_error,
+            "ready": (template_dir / "slide_induction.json").exists(),
+        }
+
     def _ensure_template2ppt_importable(self) -> None:
         repo_root = (os.getenv("TEMPLATE2PPT_REPO_ROOT") or "").strip()
         if repo_root:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from fastapi_app.schemas import (
     Template2PPTGenerateRequest,
@@ -34,4 +36,22 @@ async def generate_template2ppt_from_pagecontent(
 ) -> Template2PPTGenerateResponse:
     """Generate a template2ppt deck from Paper2PPT pagecontent."""
     return await service.generate_from_pagecontent(req=req, request=request)
+
+@router.post("/template2ppt/upload-template")
+async def upload_template2ppt_template(
+    request: Request,
+    template_file: UploadFile = File(...),
+    template_name: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    induct: bool = Form(False),
+    service: Template2PPTService = Depends(get_service),
+) -> dict:
+    """Upload a PPTX template folder for later template2ppt generation."""
+    return await service.save_uploaded_template(
+        template_file=template_file,
+        email=email,
+        template_name=template_name,
+        induct=induct,
+        request=request,
+    )
 
