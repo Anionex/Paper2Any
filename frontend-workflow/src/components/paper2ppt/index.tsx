@@ -2483,7 +2483,10 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
       throw new Error(data.induction_error || '模板归纳失败');
     }
     setTemplateName(data.template_dir);
-    setTemplateTaskMessage(data.ready ? '模板已准备好，正在生成 PPTX...' : '模板已上传，正在生成 PPTX...');
+    if (!data.ready) {
+      throw new Error('模板已上传但尚未完成归纳，请勾选“上传后立即归纳模板”后重试，或填写已有模板目录。');
+    }
+    setTemplateTaskMessage('模板已准备好，正在生成 PPTX...');
     return String(data.template_dir);
   };
 

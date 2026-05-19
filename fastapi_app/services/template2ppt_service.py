@@ -348,6 +348,15 @@ class Template2PPTService:
             output_pptx = output_pptx.with_suffix(".pptx")
 
         template = self._resolve_template(req.template)
+        template_path = Path(template)
+        if template_path.is_dir() and not (template_path / "slide_induction.json").exists():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "template directory is missing slide_induction.json. "
+                    "Run template induction first or upload with induct=true."
+                ),
+            )
         workdir = run_dir / "work"
         try:
             if req.mode == "editor_spec":

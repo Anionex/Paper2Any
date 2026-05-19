@@ -116,3 +116,36 @@ def test_save_uploaded_template_without_induction(monkeypatch, tmp_path):
     assert result["ready"] is False
     assert template_dir.name.endswith("Demo-Template")
     assert (template_dir / "source.pptx").read_bytes() == b"fake pptx bytes"
+
+def test_generate_rejects_uninducted_template_dir(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+    from fastapi_app.schemas import Template2PPTGenerateRequest
+
+    service = Template2PPTService()
+    template_dir = tmp_path / "template"
+    template_dir.mkdir()
+    (template_dir / "source.pptx").write_bytes(b"fake")
+    monkeypatch.setattr(service, "_ensure_template2ppt_importable", lambda: None)
+
+    req = Template2PPTGenerateRequest(
+        mode="layout_spec",
+        template=str(template_dir),
+        content_spec={
+            "language": "zh",
+            "slides": [
+                {
+                    "slide_description": "Demo",
+                    "slide_content": "# Demo",
+                    "images": [],
+                }
+            ],
+        },
+    )
+
+    try:
+        __import__("asyncio").run(service.generate(req, request=None))
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "slide_induction.json" in str(exc.detail)
+    else:
+        raise AssertionError("Expected HTTPException for uninducted template directory")
