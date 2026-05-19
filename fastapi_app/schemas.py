@@ -661,3 +661,43 @@ class Paper2PPTResponse(BaseModel):
     result_path: str = ""
     all_output_files: List[str] = []
     error: str = ""
+
+# ===================== template2ppt 相关 =====================
+
+class Template2PPTGenerateRequest(BaseModel):
+    """Generate a PPTX via the external template2ppt runtime."""
+
+    mode: Literal["layout_spec", "editor_spec"] = "layout_spec"
+    template: str
+    content_spec: Dict[str, Any]
+    email: Optional[str] = None
+    output_filename: str = "template2ppt-output.pptx"
+    save_history: bool = True
+
+
+class Template2PPTPageContentRequest(BaseModel):
+    """Generate a template2ppt deck directly from Paper2PPT pagecontent."""
+
+    template: str
+    pagecontent: Any
+    result_path: Optional[str] = None
+    language: str = "zh"
+    metadata: Dict[str, str] = {}
+    email: Optional[str] = None
+    output_filename: str = "template2ppt-output.pptx"
+    save_history: bool = True
+
+
+class Template2PPTGenerateResponse(BaseModel):
+    success: bool = True
+    ppt_pptx_path: str = ""
+    result_path: str = ""
+    all_output_files: List[str] = []
+    workdir: str = ""
+    template_dir: str = ""
+    history_json: str = ""
+    html_dir: str = ""
+    trace_dir: str = ""
+    input_spec_path: str = ""
+    error: str = ""
+

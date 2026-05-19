@@ -108,6 +108,12 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [finalTaskMessage, setFinalTaskMessage] = useState('');
+  const [templateName, setTemplateName] = useState('shangye_jihua');
+  const [templateUploadFile, setTemplateUploadFile] = useState<File | null>(null);
+  const [shouldInductTemplate, setShouldInductTemplate] = useState(true);
+  const [isGeneratingTemplatePptx, setIsGeneratingTemplatePptx] = useState(false);
+  const [templateTaskMessage, setTemplateTaskMessage] = useState('');
+  const [templateDownloadUrl, setTemplateDownloadUrl] = useState<string | null>(null);
 
   // 通用状态
   const [error, setError] = useState<string | null>(null);
@@ -2443,6 +2449,112 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     }
   };
 
+
+  const buildTemplate2PptPagecontent = () => outlineData.map((slide) => ({
+    title: slide.title,
+    layout_description: slide.layout_description,
+    key_points: slide.key_points,
+    asset_ref: slide.asset_ref,
+    generated_img_path: slide.generated_img_path,
+  }));
+
+  const uploadTemplateIfNeeded = async () => {
+    if (!templateUploadFile) {
+      return templateName.trim();
+    }
+    const formData = new FormData();
+    formData.append('template_file', templateUploadFile);
+    formData.append('template_name', templateName.trim() || templateUploadFile.name.replace(/\.pptx$/i, ''));
+    formData.append('email', user?.id || user?.email || '');
+    formData.append('induct', shouldInductTemplate ? 'true' : 'false');
+    setTemplateTaskMessage(shouldInductTemplate ? '正在上传并归纳模板...' : '正在上传模板...');
+    const res = await backendFetch('/api/v1/template2ppt/upload-template', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, '模板上传失败'));
+    }
+    const data = await res.json();
+    if (!data?.template_dir) {
+      throw new Error('模板上传失败：后端未返回模板目录');
+    }
+    if (shouldInductTemplate && data.induction_status === 'failed') {
+      throw new Error(data.induction_error || '模板归纳失败');
+    }
+    setTemplateName(data.template_dir);
+    if (!data.ready) {
+      throw new Error('模板已上传但尚未完成归纳，请勾选“上传后立即归纳模板”后重试，或填写已有模板目录。');
+    }
+    setTemplateTaskMessage('模板已准备好，正在生成 PPTX...');
+    return String(data.template_dir);
+  };
+
+  const handleGenerateTemplatePptx = async () => {
+    if (!resultPath) {
+      setError('缺少 result_path');
+      return;
+    }
+    if (!outlineData.length) {
+      setError('缺少 pagecontent');
+      return;
+    }
+    const selectedTemplate = templateName.trim();
+    if (!selectedTemplate && !templateUploadFile) {
+      setError('请填写模板名称或上传模板 PPTX');
+      return;
+    }
+
+    setError(null);
+    setTemplateDownloadUrl(null);
+    setIsGeneratingTemplatePptx(true);
+    setTemplateTaskMessage('正在准备模板化导出...');
+    try {
+      const resolvedTemplate = await uploadTemplateIfNeeded();
+      const formData = new FormData();
+      formData.append('template', resolvedTemplate);
+      formData.append('pagecontent', JSON.stringify(buildTemplate2PptPagecontent()));
+      formData.append('result_path', resultPath);
+      formData.append('language', language);
+      formData.append('email', user?.id || user?.email || '');
+      formData.append('output_filename', 'template2ppt_result.pptx');
+      setTemplateTaskMessage('正在按模板生成 PPTX...');
+
+      const res = await backendFetch('/api/v1/paper2ppt/template2ppt/generate', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, '模板化 PPTX 生成失败'));
+      }
+      const data = await res.json();
+      const pptxUrl = data.ppt_pptx_path || data.all_output_files?.find((url: string) => url.endsWith('.pptx'));
+      if (!pptxUrl) {
+        throw new Error('模板化 PPTX 生成失败：未返回可下载文件');
+      }
+      setTemplateDownloadUrl(pptxUrl);
+      setDownloadUrl(pptxUrl);
+      setTemplateTaskMessage('模板化 PPTX 已生成');
+      await uploadGeneratedResultFile(pptxUrl, 'template2ppt_result.pptx');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '模板化 PPTX 生成失败';
+      setError(message);
+      setTemplateTaskMessage('');
+    } finally {
+      setIsGeneratingTemplatePptx(false);
+    }
+  };
+
+  const handleDownloadTemplatePptx = () => {
+    if (!templateDownloadUrl) return;
+    const a = document.createElement('a');
+    a.href = templateDownloadUrl;
+    a.download = 'template2ppt_result.pptx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   const handleGenerateFinal = async () => {
     if (pptMode === 'frontend') {
       await handleGenerateFrontendFinal();
@@ -2590,6 +2702,11 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
     setProgressStatus('');
     setGenerateTaskMessage('');
     setFinalTaskMessage('');
+    setTemplateTaskMessage('');
+    setTemplateDownloadUrl(null);
+    setTemplateUploadFile(null);
+    setShouldInductTemplate(true);
+    setIsGeneratingTemplatePptx(false);
     setIsReviewingFrontendSlide(false);
     if (downloadUrl?.startsWith('blob:')) {
       URL.revokeObjectURL(downloadUrl);
@@ -2742,6 +2859,17 @@ const Paper2PptPage: React.FC<Paper2PptPageProps> = ({ initialMode }) => {
                 isGeneratingFinal={isGeneratingFinal}
                 taskMessage={finalTaskMessage}
                 handleGenerateFinal={handleGenerateFinal}
+                handleGenerateTemplatePptx={handleGenerateTemplatePptx}
+                handleTemplateFileChange={setTemplateUploadFile}
+                templateName={templateName}
+                setTemplateName={setTemplateName}
+                templateUploadFile={templateUploadFile}
+                shouldInductTemplate={shouldInductTemplate}
+                setShouldInductTemplate={setShouldInductTemplate}
+                isGeneratingTemplatePptx={isGeneratingTemplatePptx}
+                templateTaskMessage={templateTaskMessage}
+                templateDownloadUrl={templateDownloadUrl}
+                handleDownloadTemplatePptx={handleDownloadTemplatePptx}
                 handleDownloadPptx={handleDownloadPptx}
                 handleDownloadPdf={handleDownloadPdf}
                 handleReset={handleReset}

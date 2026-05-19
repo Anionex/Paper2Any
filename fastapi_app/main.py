@@ -41,6 +41,7 @@ from fastapi_app.routers import image_playground
 from fastapi_app.routers import mindmap
 from fastapi_app.routers import paper2drawio
 from fastapi_app.routers import paper2rebuttal
+from fastapi_app.routers import template2ppt
 from fastapi_app.middleware.api_key import APIKeyMiddleware
 from dataflow_agent.utils import get_project_root
 from dataflow_agent.logger import get_logger
@@ -117,6 +118,8 @@ def create_app() -> FastAPI:
     app.include_router(paper2drawio.router, prefix="/api/v1", tags=["paper2drawio"])
     # Paper2Rebuttal
     app.include_router(paper2rebuttal.router, prefix="/api/v1", tags=["paper2rebuttal"])
+    # Template2PPT
+    app.include_router(template2ppt.router, prefix="/api/v1", tags=["template2ppt"])
 
     # 挂载静态文件目录（用于提供生成的 PPTX/SVG/PNG 文件）
     project_root = get_project_root()

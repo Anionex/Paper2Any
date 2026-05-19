@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   CheckCircle2, Sparkles, Loader2, Download, RotateCcw,
-  Star, MessageSquare, Copy, Github, AlertCircle
+  Star, MessageSquare, Copy, Github, AlertCircle, Upload, FileType
 } from 'lucide-react';
 import { SlideOutline, GenerateResult } from './types';
 
@@ -13,6 +13,17 @@ interface CompleteStepProps {
   isGeneratingFinal: boolean;
   taskMessage?: string;
   handleGenerateFinal: () => void;
+  handleGenerateTemplatePptx: () => void;
+  handleTemplateFileChange: (file: File | null) => void;
+  templateName: string;
+  setTemplateName: (value: string) => void;
+  templateUploadFile: File | null;
+  shouldInductTemplate: boolean;
+  setShouldInductTemplate: (value: boolean) => void;
+  isGeneratingTemplatePptx: boolean;
+  templateTaskMessage?: string;
+  templateDownloadUrl: string | null;
+  handleDownloadTemplatePptx: () => void;
   handleDownloadPptx: () => void;
   handleDownloadPdf: () => void;
   handleReset: () => void;
@@ -35,6 +46,17 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
   isGeneratingFinal,
   taskMessage,
   handleGenerateFinal,
+  handleGenerateTemplatePptx,
+  handleTemplateFileChange,
+  templateName,
+  setTemplateName,
+  templateUploadFile,
+  shouldInductTemplate,
+  setShouldInductTemplate,
+  isGeneratingTemplatePptx,
+  templateTaskMessage,
+  templateDownloadUrl,
+  handleDownloadTemplatePptx,
   handleDownloadPptx,
   handleDownloadPdf,
   handleReset,
@@ -69,6 +91,65 @@ const CompleteStep: React.FC<CompleteStepProps> = ({
             </div>
           ))}
         </div>
+      </div>
+
+
+      <div className="glass rounded-xl border border-cyan-400/20 p-5 mb-6 text-left">
+        <div className="flex items-center gap-2 mb-4">
+          <FileType size={18} className="text-cyan-300" />
+          <h3 className="text-white font-semibold">模板化 PPTX 导出</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+          <label className="block">
+            <span className="block text-xs text-gray-400 mb-1">模板名称或后端模板目录</span>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="shangye_jihua 或 /outputs/.../template2ppt_templates/..."
+              className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/15 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-cyan-500"
+            />
+          </label>
+          <button
+            onClick={handleGenerateTemplatePptx}
+            disabled={isGeneratingFinal || isGeneratingTemplatePptx || !outlineData.length}
+            className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {isGeneratingTemplatePptx ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            模板化生成
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-center">
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-white/15 bg-white/5 text-sm text-gray-300 cursor-pointer hover:border-cyan-400">
+            <Upload size={15} className="text-cyan-300" />
+            <span className="truncate">{templateUploadFile ? templateUploadFile.name : '上传新的 .pptx 模板'}</span>
+            <input
+              type="file"
+              accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+              className="hidden"
+              onChange={(event) => handleTemplateFileChange(event.target.files?.[0] || null)}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-400">
+            <input
+              type="checkbox"
+              checked={shouldInductTemplate}
+              onChange={(event) => setShouldInductTemplate(event.target.checked)}
+              className="h-4 w-4 accent-cyan-500"
+            />
+            上传后立即归纳模板
+          </label>
+        </div>
+        {(templateTaskMessage || templateDownloadUrl) && (
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3 text-sm">
+            {templateTaskMessage && <span className="text-cyan-200">{templateTaskMessage}</span>}
+            {templateDownloadUrl && (
+              <button onClick={handleDownloadTemplatePptx} className="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-100 font-medium flex items-center gap-2 w-fit">
+                <Download size={16} /> 下载模板化 PPTX
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {!(downloadUrl || pdfPreviewUrl) ? (
