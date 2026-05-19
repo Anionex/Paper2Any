@@ -675,6 +675,19 @@ class Template2PPTGenerateRequest(BaseModel):
     save_history: bool = True
 
 
+class Template2PPTPageContentRequest(BaseModel):
+    """Generate a template2ppt deck directly from Paper2PPT pagecontent."""
+
+    template: str
+    pagecontent: Any
+    result_path: Optional[str] = None
+    language: str = "zh"
+    metadata: Dict[str, str] = {}
+    email: Optional[str] = None
+    output_filename: str = "template2ppt-output.pptx"
+    save_history: bool = True
+
+
 class Template2PPTGenerateResponse(BaseModel):
     success: bool = True
     ppt_pptx_path: str = ""

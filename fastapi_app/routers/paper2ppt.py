@@ -19,6 +19,8 @@ from fastapi_app.schemas import (
     OutlineRefineRequest,
     PageContentRequest,
     PPTGenerationRequest,
+    Template2PPTPageContentRequest,
+    Template2PPTGenerateResponse,
 )
 from fastapi_app.services.managed_api_service import resolve_model_name
 from dataflow_agent.utils.version_manager import ImageVersionManager
@@ -40,6 +42,12 @@ def get_task_service() -> Paper2PPTTaskService:
     from fastapi_app.services.paper2ppt_task_service import Paper2PPTTaskService
 
     return Paper2PPTTaskService()
+
+
+def get_template2ppt_service() -> Template2PPTService:
+    from fastapi_app.services.template2ppt_service import Template2PPTService
+
+    return Template2PPTService()
 
 
 def get_frontend_service() -> Paper2PPTFrontendService:
@@ -346,6 +354,47 @@ async def paper2ppt_pagecontent_json(
         request=request,
     )
     return data
+
+
+@router.post(
+    "/paper2ppt/template2ppt/generate",
+    response_model=Template2PPTGenerateResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def paper2ppt_template2ppt_generate(
+    request: Request,
+    template: str = Form(...),
+    pagecontent: str = Form(...),
+    result_path: Optional[str] = Form(None),
+    language: str = Form("zh"),
+    metadata: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    output_filename: str = Form("template2ppt-output.pptx"),
+    save_history: bool = Form(True),
+    service: Template2PPTService = Depends(get_template2ppt_service),
+):
+    """Export existing Paper2PPT pagecontent through the template2ppt renderer."""
+    metadata_payload: Dict[str, str] = {}
+    if metadata:
+        try:
+            raw_metadata = json.loads(metadata)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="metadata must be valid JSON") from exc
+        if not isinstance(raw_metadata, dict):
+            raise HTTPException(status_code=400, detail="metadata must be a JSON object")
+        metadata_payload = {str(key): str(value) for key, value in raw_metadata.items()}
+
+    req = Template2PPTPageContentRequest(
+        template=template,
+        pagecontent=pagecontent,
+        result_path=result_path,
+        language=language,
+        metadata=metadata_payload,
+        email=email,
+        output_filename=output_filename,
+        save_history=save_history,
+    )
+    return await service.generate_from_pagecontent(req=req, request=request)
 
 
 @router.post(

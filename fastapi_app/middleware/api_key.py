@@ -97,6 +97,8 @@ _RATE_LIMIT_RULES: dict[str, RateLimitRule] = {
     "/api/v1/paper2ppt/frontend/generate": RateLimitRule(limit=16, window_seconds=300, bucket="paper2ppt-frontend-generate"),
     "/api/v1/paper2ppt/frontend/review": RateLimitRule(limit=24, window_seconds=300, bucket="paper2ppt-frontend-review"),
     "/api/v1/template2ppt/generate": RateLimitRule(limit=12, window_seconds=300, bucket="template2ppt-generate"),
+    "/api/v1/template2ppt/generate-from-pagecontent": RateLimitRule(limit=12, window_seconds=300, bucket="template2ppt-pagecontent"),
+    "/api/v1/paper2ppt/template2ppt/generate": RateLimitRule(limit=12, window_seconds=300, bucket="paper2ppt-template2ppt"),
     "/api/v1/kb/chat": RateLimitRule(limit=30, window_seconds=300, bucket="kb-chat"),
     "/api/v1/kb/search": RateLimitRule(limit=40, window_seconds=300, bucket="kb-search"),
     "/api/v1/kb/generate-ppt": RateLimitRule(limit=12, window_seconds=300, bucket="kb-ppt"),
